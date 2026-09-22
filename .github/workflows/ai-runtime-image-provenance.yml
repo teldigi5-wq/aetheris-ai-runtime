@@ -1,0 +1,144 @@
+name: AI Runtime Image Provenance
+
+on:
+  push:
+    branches: [ main, feature/initial-runtime-extraction ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+env:
+  IMAGE_NAME: aetheris-ai-runtime
+
+jobs:
+  image-provenance:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+
+      - name: Verify checkout revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$GITHUB_SHA"
+          echo "Exact destination revision: $actual"
+
+      - name: Build exact-revision runtime image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${IMAGE_NAME}:${GITHUB_SHA}"
+          docker build \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "io.aetheris.evidence-class=HOSTED_RUNTIME_ARTIFACT" \
+            -t "$image" \
+            orchestrator-service
+
+      - name: Verify image identity and provenance labels
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${IMAGE_NAME}:${GITHUB_SHA}"
+          image_id="$(docker image inspect "$image" --format '{{.Id}}')"
+          revision="$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+          source="$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')"
+          evidence_class="$(docker image inspect "$image" --format '{{index .Config.Labels "io.aetheris.evidence-class"}}')"
+          test -n "$image_id"
+          test "$revision" = "$GITHUB_SHA"
+          test "$source" = "https://github.com/${GITHUB_REPOSITORY}"
+          test "$evidence_class" = "HOSTED_RUNTIME_ARTIFACT"
+          printf '%s\n' "$image_id" > runtime-image-id.txt
+
+      - name: Export and round-trip runtime image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${IMAGE_NAME}:${GITHUB_SHA}"
+          archive="${IMAGE_NAME}-${GITHUB_SHA}.tar.gz"
+          original_id="$(cat runtime-image-id.txt)"
+          docker save "$image" | gzip -n > "$archive"
+          sha256sum "$archive" > "${archive}.sha256"
+          docker image rm "$image"
+          gzip -dc "$archive" | docker load
+          loaded_id="$(docker image inspect "$image" --format '{{.Id}}')"
+          loaded_revision="$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+          test "$loaded_id" = "$original_id"
+          test "$loaded_revision" = "$GITHUB_SHA"
+
+      - name: Write hosted runtime artifact evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          sha = os.environ['GITHUB_SHA']
+          repo = os.environ['GITHUB_REPOSITORY']
+          name = os.environ['IMAGE_NAME']
+          archive = Path(f'{name}-{sha}.tar.gz')
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          image_id = Path('runtime-image-id.txt').read_text(encoding='utf-8').strip()
+          canonical_main = os.environ.get('GITHUB_EVENT_NAME') == 'push' and os.environ.get('GITHUB_REF') == 'refs/heads/main'
+          release_tag = f'runtime-{sha}'
+          report = {
+              'schema_version': 1,
+              'status': 'PASS',
+              'evidence_class': 'HOSTED_RUNTIME_ARTIFACT',
+              'repository': repo,
+              'revision': sha,
+              'image_tag': f'{name}:{sha}',
+              'image_id': image_id,
+              'archive': archive.name,
+              'archive_sha256': digest,
+              'release_tag': release_tag,
+              'release_publication_expected': canonical_main,
+              'registry_publication_claim': False,
+              'production_deployment_claim': False,
+              'physical_pc_validation': False,
+              'truth_boundary': 'Hosted GitHub Actions runtime image build and archive round-trip proof. This does not claim container-registry publication, production deployment, or physical owner-PC validation.'
+          }
+          Path('runtime-image-provenance.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF: ${{ github.ref }}
+
+      - name: Upload exact-revision hosted evidence
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: ai-runtime-image-${{ github.sha }}
+          path: |
+            aetheris-ai-runtime-${{ github.sha }}.tar.gz
+            aetheris-ai-runtime-${{ github.sha }}.tar.gz.sha256
+            runtime-image-id.txt
+            runtime-image-provenance.json
+          if-no-files-found: error
+
+      - name: Publish canonical exact-revision release asset
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="runtime-${GITHUB_SHA}"
+          archive="${IMAGE_NAME}-${GITHUB_SHA}.tar.gz"
+          gh release create "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Aetheris AI Runtime ${GITHUB_SHA}" \
+            --notes "Hosted exact-revision AI runtime image artifact for ${GITHUB_REPOSITORY}@${GITHUB_SHA}. This is a GitHub Release asset, not a container-registry publication or production deployment." \
+            --prerelease \
+            "$archive" \
+            "${archive}.sha256" \
+            runtime-image-id.txt \
+            runtime-image-provenance.json
