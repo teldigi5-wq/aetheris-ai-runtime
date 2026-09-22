@@ -1,0 +1,15 @@
+package io.aetheris.orchestrator.stage31;
+
+public enum IssueCategory {
+    CI_FAILURE,
+    TEST_FAILURE,
+    DOCUMENTATION_GAP,
+    DEPENDENCY_DRIFT,
+    DEPLOYMENT_UNHEALTHY,
+    LOW_DISK,
+    RESOURCE_PRESSURE,
+    SERVICE_FAILURE,
+    QUOTA_EXHAUSTION,
+    WORKSPACE_DRIFT,
+    PHYSICAL_VALIDATION_PENDING
+}

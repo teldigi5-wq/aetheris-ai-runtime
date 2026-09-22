@@ -1,0 +1,1 @@
+package io.aetheris.orchestrator.stage9;import org.springframework.data.jpa.repository.JpaRepository;import java.util.*;public interface WorkerCapabilityRepository extends JpaRepository<WorkerCapabilityEntity,String>{List<WorkerCapabilityEntity> findTop200ByOrderByUpdatedAtDesc();}

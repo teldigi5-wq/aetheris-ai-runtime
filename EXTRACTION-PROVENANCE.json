@@ -1,0 +1,17 @@
+{
+  "history_included": false,
+  "payload_bytes": 2510621,
+  "payload_file_count": 887,
+  "schema_version": 1,
+  "source_archive_sha256": "df2f1eaa176072ec59c0dcc9061812ab8e2d77977c8a9722ee0ef58ab8d2b389",
+  "source_repository": "teldigi5-wq/aetheris-platform",
+  "source_sha": "16e1bbc2b357e36c2a484e0ff66bb81a329c1c99",
+  "status": "IMPORTED_PAYLOAD_PENDING_WORKFLOW_TRANSFER",
+  "truth_boundary": "Hosted content-transfer evidence only; four workflow files are verified in the complete export but must be committed separately because the Actions token cannot modify workflow files.",
+  "workflow_transfer_pending": [
+    ".github/workflows/ai-runtime-build.yml",
+    ".github/workflows/ai-runtime-codeql.yml",
+    ".github/workflows/ai-runtime-foundation-bootstrap.yml",
+    ".github/workflows/ai-runtime-foundation-hardening.yml"
+  ]
+}

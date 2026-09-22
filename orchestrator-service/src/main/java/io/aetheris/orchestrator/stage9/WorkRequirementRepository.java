@@ -1,0 +1,1 @@
+package io.aetheris.orchestrator.stage9;import org.springframework.data.jpa.repository.JpaRepository;import java.util.UUID;public interface WorkRequirementRepository extends JpaRepository<WorkRequirementEntity,UUID>{}

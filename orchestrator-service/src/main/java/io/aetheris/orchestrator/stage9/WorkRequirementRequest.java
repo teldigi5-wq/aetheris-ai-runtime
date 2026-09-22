@@ -1,0 +1,1 @@
+package io.aetheris.orchestrator.stage9;import java.util.Set;public record WorkRequirementRequest(Set<String> capabilities,String lane){public WorkRequirementRequest{capabilities=capabilities==null?Set.of():Set.copyOf(capabilities);}}

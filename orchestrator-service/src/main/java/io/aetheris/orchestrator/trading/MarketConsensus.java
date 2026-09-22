@@ -1,0 +1,1 @@
+package io.aetheris.orchestrator.trading;import java.util.List;public record MarketConsensus(MarketDataSnapshot snapshot,List<String> sources,double medianPrice,double maxPriceDivergencePct,long clockSkewSeconds){public MarketConsensus{sources=sources==null?List.of():List.copyOf(sources);}}
