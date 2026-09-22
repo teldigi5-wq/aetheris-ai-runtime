@@ -22,6 +22,7 @@ env:
 
 jobs:
   extract:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
     steps:
       - name: Check out destination branch
@@ -69,7 +70,7 @@ jobs:
           print('Certified export metadata: PASS')
           PY
 
-      - name: Import manifest-authorized payload
+      - name: Import and verify complete manifest-authorized payload
         shell: bash
         run: |
           set -euo pipefail
@@ -87,8 +88,7 @@ jobs:
 
           root = Path.cwd()
           extract = Path(os.environ['EXTRACT_DIR'])
-          manifest_path = extract / 'EXPORT-MANIFEST.json'
-          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          manifest = json.loads((extract / 'EXPORT-MANIFEST.json').read_text(encoding='utf-8'))
 
           assert manifest['bundle_type'] == 'AETHERIS_AI_RUNTIME_CONTENT_EXPORT'
           assert manifest['export_revision'] == '16e1bbc2b357e36c2a484e0ff66bb81a329c1c99'
@@ -105,8 +105,7 @@ jobs:
               src = extract / rel
               dst = root / rel
               data = src.read_bytes()
-              digest = hashlib.sha256(data).hexdigest()
-              if digest != entry['sha256']:
+              if hashlib.sha256(data).hexdigest() != entry['sha256']:
                   raise SystemExit(f'hash mismatch before copy: {rel}')
               dst.parent.mkdir(parents=True, exist_ok=True)
               dst.write_bytes(data)
@@ -120,50 +119,50 @@ jobs:
           shutil.copyfile(extract / 'EXPORT-MANIFEST.json', root / 'EXPORT-MANIFEST.json')
           shutil.copyfile(extract / 'README-EXTRACTION.md', root / 'README-EXTRACTION.md')
 
+          for entry in manifest['exported_files']:
+              path = root / entry['path']
+              if hashlib.sha256(path.read_bytes()).hexdigest() != entry['sha256']:
+                  raise SystemExit(f'imported hash mismatch: {entry["path"]}')
+
           provenance = {
               'schema_version': 1,
-              'status': 'IMPORTED_PENDING_DESTINATION_CERTIFICATION',
+              'status': 'IMPORTED_PAYLOAD_PENDING_WORKFLOW_TRANSFER',
               'source_repository': 'teldigi5-wq/aetheris-platform',
               'source_sha': '16e1bbc2b357e36c2a484e0ff66bb81a329c1c99',
               'source_archive_sha256': 'df2f1eaa176072ec59c0dcc9061812ab8e2d77977c8a9722ee0ef58ab8d2b389',
               'payload_file_count': copied,
               'payload_bytes': copied_bytes,
               'history_included': False,
-              'truth_boundary': 'Hosted content-transfer evidence only; destination CI and runtime provenance are not yet certified.'
+              'workflow_transfer_pending': [
+                  '.github/workflows/ai-runtime-build.yml',
+                  '.github/workflows/ai-runtime-codeql.yml',
+                  '.github/workflows/ai-runtime-foundation-bootstrap.yml',
+                  '.github/workflows/ai-runtime-foundation-hardening.yml'
+              ],
+              'truth_boundary': 'Hosted content-transfer evidence only; four workflow files are verified in the complete export but must be committed separately because the Actions token cannot modify workflow files.'
           }
           (root / 'EXTRACTION-PROVENANCE.json').write_text(json.dumps(provenance, indent=2, sort_keys=True) + '\n', encoding='utf-8')
-          print(f'Imported {copied} certified payload files ({copied_bytes} bytes)')
+          print(f'Verified complete certified export: {copied} files ({copied_bytes} bytes)')
           PY
 
-      - name: Verify imported payload byte-for-byte
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import hashlib
-          import json
-          from pathlib import Path
-          manifest = json.loads(Path('EXPORT-MANIFEST.json').read_text(encoding='utf-8'))
-          for entry in manifest['exported_files']:
-              path = Path(entry['path'])
-              if not path.is_file():
-                  raise SystemExit(f'missing imported file: {path}')
-              digest = hashlib.sha256(path.read_bytes()).hexdigest()
-              if digest != entry['sha256']:
-                  raise SystemExit(f'imported hash mismatch: {path}')
-          print(f"Verified {len(manifest['exported_files'])} imported files byte-for-byte")
-          PY
-
-      - name: Commit certified extraction to destination branch
+      - name: Commit non-workflow payload to destination branch
         shell: bash
         run: |
           set -euo pipefail
           rm -rf _certified_source
-          rm -f .github/workflows/bootstrap-certified-extraction.yml
+
+          # GitHub intentionally blocks the Actions token from modifying workflow files.
+          # Those four files were verified above and are transferred separately through
+          # the connected GitHub app. Keep this bootstrap workflow unchanged in this commit.
+          rm -f \
+            .github/workflows/ai-runtime-build.yml \
+            .github/workflows/ai-runtime-codeql.yml \
+            .github/workflows/ai-runtime-foundation-bootstrap.yml \
+            .github/workflows/ai-runtime-foundation-hardening.yml
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add -A -- ':!.github/workflows/bootstrap-certified-extraction.yml'
           git diff --cached --quiet && { echo 'No extraction changes to commit'; exit 1; }
-          git commit -m "Import certified AI runtime from aetheris-platform@${SOURCE_SHA}"
+          git commit -m "Import certified AI runtime payload from aetheris-platform@${SOURCE_SHA}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
