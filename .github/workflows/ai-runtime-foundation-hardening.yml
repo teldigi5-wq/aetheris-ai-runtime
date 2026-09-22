@@ -2,9 +2,9 @@ name: AI Runtime Dependency Lockdown and Reproducibility
 
 on:
   pull_request:
-    branches: [ feature/syntra-aetheris-foundation-v2, main ]
+    branches: [ main ]
   push:
-    branches: [ feature/syntra-aetheris-foundation-v2 ]
+    branches: [ main, feature/initial-runtime-extraction ]
 
 permissions:
   contents: read
