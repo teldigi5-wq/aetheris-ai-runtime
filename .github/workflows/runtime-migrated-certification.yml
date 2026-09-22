@@ -1,0 +1,122 @@
+name: AI Runtime Migrated Certification
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'orchestrator-service/**'
+      - 'aetheris-reasoning/**'
+      - 'aetheris-quant/**'
+      - 'workstation-agent/**'
+      - 'architecture/runtime-certification-ownership.json'
+      - '.github/workflows/runtime-migrated-certification.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'orchestrator-service/**'
+      - 'aetheris-reasoning/**'
+      - 'aetheris-quant/**'
+      - 'workstation-agent/**'
+      - 'architecture/runtime-certification-ownership.json'
+      - '.github/workflows/runtime-migrated-certification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: '21.0.12'
+  PYTHON_VERSION: '3.13.15'
+
+jobs:
+  ownership-provenance:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - name: Validate migrated ownership manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('architecture/runtime-certification-ownership.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          assert data['schema_version'] == 1
+          assert data['status'] == 'RUNTIME_CERTIFICATION_OWNERSHIP_MIGRATED'
+          assert data['source_platform']['repository'] == 'teldigi5-wq/aetheris-platform'
+          assert data['source_platform']['certified_sha'] == '16e1bbc2b357e36c2a484e0ff66bb81a329c1c99'
+          assert data['destination_runtime']['repository'] == 'teldigi5-wq/aetheris-ai-runtime'
+          assert data['destination_runtime']['certified_baseline_sha'] == '4fb481aff15cfc23ecd8d0ceb689a3e01bcebe46'
+          migrated = data['migrated_runtime_owned_workflows']
+          assert len(migrated) == 27, migrated
+          assert len(migrated) == len(set(migrated)), migrated
+          assert all(item.startswith('.github/workflows/') for item in migrated)
+          assert data['replacement_certification_model']['orchestrator'] == 'FULL_MAVEN_TEST_SUITE_DOUBLE_PASS'
+          assert data['replacement_certification_model']['reasoning'] == 'FULL_PYTHON_UNIT_SUITE_DOUBLE_PASS'
+          truth = data['truth_boundaries']
+          assert truth['hosted_ci_only'] is True
+          assert truth['physical_pc_validation'] is False
+          assert truth['physical_pc_status'] == 'BLOCKED_PENDING_HARDWARE'
+          assert truth['production_deployment_claim'] is False
+          assert truth['registry_publication_claim'] is False
+          for root in ('orchestrator-service', 'aetheris-reasoning', 'aetheris-quant', 'workstation-agent'):
+              assert Path(root).is_dir(), root
+          print('Runtime certification ownership provenance: PASS')
+          PY
+
+  orchestrator-pass-1:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - name: Set up Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+      - name: Run complete orchestrator certification suite - pass 1
+        run: ./mvnw -f orchestrator-service/pom.xml test
+
+  orchestrator-pass-2:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - name: Set up Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+      - name: Run complete orchestrator certification suite - pass 2
+        run: ./mvnw -f orchestrator-service/pom.xml test
+
+  reasoning-pass-1:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Run complete reasoning certification suite - pass 1
+        working-directory: aetheris-reasoning
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+  reasoning-pass-2:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Run complete reasoning certification suite - pass 2
+        working-directory: aetheris-reasoning
+        run: python -m unittest discover -s tests -p 'test_*.py' -v

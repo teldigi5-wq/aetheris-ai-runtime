@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "status": "RUNTIME_CERTIFICATION_OWNERSHIP_MIGRATED",
+  "source_platform": {
+    "repository": "teldigi5-wq/aetheris-platform",
+    "branch": "feature/syntra-aetheris-foundation-v2",
+    "certified_sha": "16e1bbc2b357e36c2a484e0ff66bb81a329c1c99"
+  },
+  "destination_runtime": {
+    "repository": "teldigi5-wq/aetheris-ai-runtime",
+    "branch": "main",
+    "certified_baseline_sha": "4fb481aff15cfc23ecd8d0ceb689a3e01bcebe46"
+  },
+  "replacement_certification_model": {
+    "orchestrator": "FULL_MAVEN_TEST_SUITE_DOUBLE_PASS",
+    "reasoning": "FULL_PYTHON_UNIT_SUITE_DOUBLE_PASS",
+    "baseline_build": "AI Runtime Build remains mandatory for orchestrator, reasoning, quant, and workstation-agent",
+    "purpose": "Preserve runtime-internal Phase 9-13 and Stage 30-33 regression/repeatability coverage under destination ownership without weakening the existing complete runtime build."
+  },
+  "migrated_runtime_owned_workflows": [
+    ".github/workflows/phase9-memory-production-proof.yml",
+    ".github/workflows/phase10-computer-use-production-proof.yml",
+    ".github/workflows/phase11-security-production-proof.yml",
+    ".github/workflows/phase12-closure-certification.yml",
+    ".github/workflows/phase12-connector-account-continuity-proof.yml",
+    ".github/workflows/phase12-oauth-lifecycle-continuity-proof.yml",
+    ".github/workflows/phase12-specialist-divisions-proof.yml",
+    ".github/workflows/phase13-adapter-aware-runtime-registration.yml",
+    ".github/workflows/phase13-adapter-invocation-lease.yml",
+    ".github/workflows/phase13-adapter-promotion-governance.yml",
+    ".github/workflows/phase13-bound-adapter-invocation-handle.yml",
+    ".github/workflows/phase13-concrete-ollama-adapter-runtime.yml",
+    ".github/workflows/phase13-context-aware-local-inference.yml",
+    ".github/workflows/phase13-live-adapter-registration-reconciliation.yml",
+    ".github/workflows/phase13-local-adapter-activation-governance.yml",
+    ".github/workflows/phase13-local-inference-evaluation.yml",
+    ".github/workflows/phase13-local-runtime-adapter.yml",
+    ".github/workflows/phase13-owner-controlled-adaptation.yml",
+    ".github/workflows/phase13-owner-runtime-readiness-wiring.yml",
+    ".github/workflows/phase13-point-of-invocation-adapter-revalidation.yml",
+    ".github/workflows/phase13-retrieval-rag-foundation.yml",
+    ".github/workflows/phase13-structured-context-assembly.yml",
+    ".github/workflows/phase13-syntra-core-runtime-foundation.yml",
+    ".github/workflows/stage30-reasoning.yml",
+    ".github/workflows/stage31-digital-twins.yml",
+    ".github/workflows/stage32-automation-control.yml",
+    ".github/workflows/stage33-governance.yml"
+  ],
+  "platform_retained_certifications": [
+    ".github/workflows/stage24-foundation-bootstrap.yml",
+    ".github/workflows/stage24-foundation-hardening.yml",
+    ".github/workflows/stage25-readiness.yml",
+    ".github/workflows/stage26-safety-certification.yml",
+    ".github/workflows/stage27-repository-governance.yml",
+    ".github/workflows/stage28-pc-care.yml",
+    ".github/workflows/stage29-trading-intelligence.yml",
+    ".github/workflows/stage34-master-build.yml"
+  ],
+  "truth_boundaries": {
+    "hosted_ci_only": true,
+    "physical_pc_validation": false,
+    "physical_pc_status": "BLOCKED_PENDING_HARDWARE",
+    "production_deployment_claim": false,
+    "registry_publication_claim": false
+  }
+}
