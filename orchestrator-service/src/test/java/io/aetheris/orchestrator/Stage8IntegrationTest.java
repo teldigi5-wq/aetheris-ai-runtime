@@ -109,10 +109,14 @@ class Stage8IntegrationTest {
         trading.accept(signal.getId());
         market.ingest(new MarketDataSnapshot(symbol,"stage8-test",Instant.now(),List.of(new MarketBar(Instant.now(),100,101,99,100,10000))));
         PaperExecutionResult result=paper.open(signal.getId());
-        assertThat(result.executed()).isTrue();
-        assertThat(result.mode()).isEqualTo("PAPER_ONLY");
-        assertThat(result.detail()).contains("live execution is not implemented");
-        assertThat(result.position().getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        try {
+            assertThat(result.executed()).isTrue();
+            assertThat(result.mode()).isEqualTo("PAPER_ONLY");
+            assertThat(result.detail()).contains("live execution is not implemented");
+            assertThat(result.position().getStatus()).isEqualTo(PaperPositionStatus.OPEN);
+        } finally {
+            if(result.executed() && result.position()!=null) paper.close(result.position().getId(),100);
+        }
     }
 
     @Test
