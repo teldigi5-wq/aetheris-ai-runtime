@@ -1,0 +1,170 @@
+name: Bootstrap Certified AI Runtime Extraction
+
+on:
+  push:
+    branches:
+      - feature/initial-runtime-extraction
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bootstrap-certified-ai-runtime-extraction
+  cancel-in-progress: false
+
+env:
+  SOURCE_REPOSITORY: teldigi5-wq/aetheris-platform
+  SOURCE_SHA: 16e1bbc2b357e36c2a484e0ff66bb81a329c1c99
+  EXPECTED_ARCHIVE_SHA256: df2f1eaa176072ec59c0dcc9061812ab8e2d77977c8a9722ee0ef58ab8d2b389
+  EXPECTED_PAYLOAD_FILES: '887'
+  EXPECTED_PAYLOAD_BYTES: '2510621'
+
+jobs:
+  extract:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out destination branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check out exact certified platform source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SOURCE_REPOSITORY }}
+          ref: ${{ env.SOURCE_SHA }}
+          path: _certified_source
+          fetch-depth: 1
+
+      - name: Verify exact source revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git -C _certified_source rev-parse HEAD)"
+          test "$actual" = "$SOURCE_SHA"
+          echo "Certified source revision: $actual"
+
+      - name: Rebuild certified deterministic export
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 _certified_source/tools/build_ai_runtime_export_bundle.py \
+            --expected-revision "$SOURCE_SHA" \
+            --output-dir build-evidence/architecture/export-bundle
+
+          bundle="_certified_source/build-evidence/architecture/export-bundle/aetheris-ai-runtime-export.tar"
+          echo "$EXPECTED_ARCHIVE_SHA256  $bundle" | sha256sum --check --strict
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('_certified_source/build-evidence/architecture/export-bundle/ai-runtime-export-bundle-report.json').read_text())
+          assert report['status'] == 'PASS'
+          assert report['export_revision'] == '16e1bbc2b357e36c2a484e0ff66bb81a329c1c99'
+          assert report['destination_repository'] == 'teldigi5-wq/aetheris-ai-runtime'
+          assert report['archive_sha256'] == 'df2f1eaa176072ec59c0dcc9061812ab8e2d77977c8a9722ee0ef58ab8d2b389'
+          assert report['payload_file_count'] == 887
+          assert report['payload_bytes'] == 2510621
+          print('Certified export metadata: PASS')
+          PY
+
+      - name: Import manifest-authorized payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          export EXTRACT_DIR="$RUNNER_TEMP/aetheris-certified-export"
+          rm -rf "$EXTRACT_DIR"
+          mkdir -p "$EXTRACT_DIR"
+          tar -xf _certified_source/build-evidence/architecture/export-bundle/aetheris-ai-runtime-export.tar -C "$EXTRACT_DIR"
+
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import shutil
+          from pathlib import Path
+
+          root = Path.cwd()
+          extract = Path(os.environ['EXTRACT_DIR'])
+          manifest_path = extract / 'EXPORT-MANIFEST.json'
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+
+          assert manifest['bundle_type'] == 'AETHERIS_AI_RUNTIME_CONTENT_EXPORT'
+          assert manifest['export_revision'] == '16e1bbc2b357e36c2a484e0ff66bb81a329c1c99'
+          assert manifest['destination_repository'] == 'teldigi5-wq/aetheris-ai-runtime'
+          assert manifest['history_included'] is False
+          assert len(manifest['exported_files']) == 887
+
+          copied = 0
+          copied_bytes = 0
+          for entry in manifest['exported_files']:
+              rel = Path(entry['path'])
+              if rel.is_absolute() or '..' in rel.parts:
+                  raise SystemExit(f'unsafe export path: {rel}')
+              src = extract / rel
+              dst = root / rel
+              data = src.read_bytes()
+              digest = hashlib.sha256(data).hexdigest()
+              if digest != entry['sha256']:
+                  raise SystemExit(f'hash mismatch before copy: {rel}')
+              dst.parent.mkdir(parents=True, exist_ok=True)
+              dst.write_bytes(data)
+              os.chmod(dst, 0o755 if entry['git_mode'] == '100755' else 0o644)
+              copied += 1
+              copied_bytes += len(data)
+
+          if copied != 887 or copied_bytes != 2510621:
+              raise SystemExit(f'payload cardinality mismatch: files={copied} bytes={copied_bytes}')
+
+          shutil.copyfile(extract / 'EXPORT-MANIFEST.json', root / 'EXPORT-MANIFEST.json')
+          shutil.copyfile(extract / 'README-EXTRACTION.md', root / 'README-EXTRACTION.md')
+
+          provenance = {
+              'schema_version': 1,
+              'status': 'IMPORTED_PENDING_DESTINATION_CERTIFICATION',
+              'source_repository': 'teldigi5-wq/aetheris-platform',
+              'source_sha': '16e1bbc2b357e36c2a484e0ff66bb81a329c1c99',
+              'source_archive_sha256': 'df2f1eaa176072ec59c0dcc9061812ab8e2d77977c8a9722ee0ef58ab8d2b389',
+              'payload_file_count': copied,
+              'payload_bytes': copied_bytes,
+              'history_included': False,
+              'truth_boundary': 'Hosted content-transfer evidence only; destination CI and runtime provenance are not yet certified.'
+          }
+          (root / 'EXTRACTION-PROVENANCE.json').write_text(json.dumps(provenance, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          print(f'Imported {copied} certified payload files ({copied_bytes} bytes)')
+          PY
+
+      - name: Verify imported payload byte-for-byte
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path('EXPORT-MANIFEST.json').read_text(encoding='utf-8'))
+          for entry in manifest['exported_files']:
+              path = Path(entry['path'])
+              if not path.is_file():
+                  raise SystemExit(f'missing imported file: {path}')
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              if digest != entry['sha256']:
+                  raise SystemExit(f'imported hash mismatch: {path}')
+          print(f"Verified {len(manifest['exported_files'])} imported files byte-for-byte")
+          PY
+
+      - name: Commit certified extraction to destination branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf _certified_source
+          rm -f .github/workflows/bootstrap-certified-extraction.yml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git diff --cached --quiet && { echo 'No extraction changes to commit'; exit 1; }
+          git commit -m "Import certified AI runtime from aetheris-platform@${SOURCE_SHA}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
