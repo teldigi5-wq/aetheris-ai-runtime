@@ -1,4 +1,5 @@
 {
+  "content_transfer_checkpoint_sha": "912cd4feae40f33e88560e0ac1b5b73f049b33cb",
   "history_included": false,
   "payload_bytes": 2510621,
   "payload_file_count": 887,
@@ -6,12 +7,12 @@
   "source_archive_sha256": "df2f1eaa176072ec59c0dcc9061812ab8e2d77977c8a9722ee0ef58ab8d2b389",
   "source_repository": "teldigi5-wq/aetheris-platform",
   "source_sha": "16e1bbc2b357e36c2a484e0ff66bb81a329c1c99",
-  "status": "IMPORTED_PAYLOAD_PENDING_WORKFLOW_TRANSFER",
-  "truth_boundary": "Hosted content-transfer evidence only; four workflow files are verified in the complete export but must be committed separately because the Actions token cannot modify workflow files.",
-  "workflow_transfer_pending": [
-    ".github/workflows/ai-runtime-build.yml",
-    ".github/workflows/ai-runtime-codeql.yml",
-    ".github/workflows/ai-runtime-foundation-bootstrap.yml",
-    ".github/workflows/ai-runtime-foundation-hardening.yml"
-  ]
+  "status": "CONTENT_TRANSFER_VERIFIED_PENDING_DESTINATION_CI",
+  "truth_boundary": "Hosted content-transfer evidence only. All 887 manifest-authorized payload files were verified against the certified export. The four workflow files were transferred separately through the connected GitHub app and their destination Git blob IDs match the certified source blob IDs. Destination CI and runtime artifact provenance are not yet certified.",
+  "workflow_blob_verification": {
+    ".github/workflows/ai-runtime-build.yml": "13aaaff24a739d82beef3460ca11837cd3b9f87f",
+    ".github/workflows/ai-runtime-codeql.yml": "5f7ef7e0ab53e702fea05acbe7dca9240f8e81bd",
+    ".github/workflows/ai-runtime-foundation-bootstrap.yml": "b1949ef3e9262cdc5466a4730b8bbef2b2cd9c3f",
+    ".github/workflows/ai-runtime-foundation-hardening.yml": "edb4363aae1a11461158cfec608c387d11ca5683"
+  }
 }
