@@ -164,7 +164,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git diff --cached --check
           git diff --cached --quiet && { echo 'No extraction changes to commit'; exit 1; }
           git commit -m "Import certified AI runtime from aetheris-platform@${SOURCE_SHA}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
