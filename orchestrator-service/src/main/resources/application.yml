@@ -1,0 +1,279 @@
+server:
+  port: ${ORCHESTRATOR_PORT:8090}
+
+spring:
+  application:
+    name: orchestrator-service
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+aetheris:
+  agent-catalog:
+    agents:
+      - id: executive-planner
+        display-name: Executive Planner
+        division: Executive Office
+        mission: Break owner goals into safe, verifiable plans and coordinate specialist agents.
+        capabilities: [planning, prioritization, delegation, decision-logging]
+        allowed-tools: [memory, task-graph, rules-engine]
+        risk-level: MEDIUM
+        preferred-model-class: REASONING
+        approval-required-for-high-impact-actions: true
+
+      - id: project-manager
+        display-name: Project Manager
+        division: Executive Office
+        mission: Track milestones, dependencies, blockers, acceptance criteria and delivery status.
+        capabilities: [roadmaps, task-tracking, dependency-analysis, reporting]
+        allowed-tools: [projects, memory, notifications]
+        risk-level: LOW
+        preferred-model-class: GENERAL
+        approval-required-for-high-impact-actions: true
+
+      - id: software-architect
+        display-name: Software Architect
+        division: Software Engineering
+        mission: Design maintainable system boundaries, APIs, data flows and technical decisions.
+        capabilities: [architecture, api-design, code-review, dependency-analysis]
+        allowed-tools: [github, filesystem, diagrams, mcp]
+        risk-level: MEDIUM
+        preferred-model-class: CODING
+        approval-required-for-high-impact-actions: true
+
+      - id: backend-engineer
+        display-name: Backend Engineer
+        division: Software Engineering
+        mission: Build and debug backend services, APIs, persistence and integrations.
+        capabilities: [java, spring-boot, python, api-development, databases, debugging]
+        allowed-tools: [github, filesystem, terminal, mcp, tests]
+        risk-level: MEDIUM
+        preferred-model-class: CODING
+        approval-required-for-high-impact-actions: true
+
+      - id: frontend-engineer
+        display-name: Frontend Engineer
+        division: Software Engineering
+        mission: Build fast, accessible and resilient web interfaces for Syntra and Aetheris.
+        capabilities: [react, typescript, ui-engineering, accessibility, performance]
+        allowed-tools: [github, filesystem, terminal, browser, tests]
+        risk-level: MEDIUM
+        preferred-model-class: CODING
+        approval-required-for-high-impact-actions: true
+
+      - id: desktop-engineer
+        display-name: Desktop Engineer
+        division: Software Engineering
+        mission: Build Windows-first desktop shells, IPC, native integrations and high-refresh UI behavior.
+        capabilities: [windows, desktop-ui, ipc, performance, installers]
+        allowed-tools: [filesystem, terminal, pc-control, github, tests]
+        risk-level: HIGH
+        preferred-model-class: CODING
+        approval-required-for-high-impact-actions: true
+
+      - id: ai-engineer
+        display-name: AI Engineer
+        division: AI and Data
+        mission: Build model adapters, routing, RAG, evaluation and Syntra-Core capabilities.
+        capabilities: [llm-routing, rag, embeddings, local-models, evaluation, fine-tuning]
+        allowed-tools: [model-router, ollama, mcp, datasets, evals]
+        risk-level: MEDIUM
+        preferred-model-class: REASONING
+        approval-required-for-high-impact-actions: true
+
+      - id: data-engineer
+        display-name: Data Engineer
+        division: AI and Data
+        mission: Build trustworthy ingestion, storage, lineage and analytics pipelines.
+        capabilities: [etl, sql, data-quality, lineage, analytics]
+        allowed-tools: [databases, filesystem, mcp, observability]
+        risk-level: MEDIUM
+        preferred-model-class: GENERAL
+        approval-required-for-high-impact-actions: true
+
+      - id: devops-engineer
+        display-name: DevOps Engineer
+        division: DevOps and SRE
+        mission: Automate builds, CI/CD, containers, deployments and reproducible environments.
+        capabilities: [docker, kubernetes, helm, ci-cd, release-engineering]
+        allowed-tools: [github, terminal, docker, kubernetes, observability]
+        risk-level: HIGH
+        preferred-model-class: CODING
+        approval-required-for-high-impact-actions: true
+
+      - id: sre-officer
+        display-name: Site Reliability Engineer
+        division: DevOps and SRE
+        mission: Protect reliability through SLOs, incident response, capacity planning and recovery.
+        capabilities: [slos, monitoring, incident-response, resilience, capacity-planning]
+        allowed-tools: [observability, kubernetes, terminal, runbooks]
+        risk-level: HIGH
+        preferred-model-class: REASONING
+        approval-required-for-high-impact-actions: true
+
+      - id: qa-engineer
+        display-name: QA and Verification Engineer
+        division: QA and Release
+        mission: Independently test features, reproduce bugs and verify acceptance criteria.
+        capabilities: [unit-testing, integration-testing, e2e-testing, regression, accessibility]
+        allowed-tools: [tests, browser, terminal, github, reports]
+        risk-level: LOW
+        preferred-model-class: CODING
+        approval-required-for-high-impact-actions: false
+
+      - id: release-manager
+        display-name: Release Manager
+        division: QA and Release
+        mission: Gate releases with evidence, changelogs, rollback plans and version discipline.
+        capabilities: [release-gates, changelogs, versioning, rollback, artifact-management]
+        allowed-tools: [github, ci-cd, artifacts, observability]
+        risk-level: HIGH
+        preferred-model-class: GENERAL
+        approval-required-for-high-impact-actions: true
+
+      - id: security-architect
+        display-name: Security Architect
+        division: Cybersecurity
+        mission: Design threat models, secure boundaries, secrets handling and defensive controls.
+        capabilities: [threat-modeling, architecture-review, secrets, zero-trust, hardening]
+        allowed-tools: [security-scanners, audit-log, github, mcp]
+        risk-level: HIGH
+        preferred-model-class: SECURITY
+        approval-required-for-high-impact-actions: true
+
+      - id: blue-team-officer
+        display-name: Blue Team Security Officer
+        division: Cybersecurity
+        mission: Monitor, detect and respond to defensive security issues across approved systems.
+        capabilities: [detection, vulnerability-management, log-analysis, remediation]
+        allowed-tools: [observability, security-scanners, endpoint-health, audit-log]
+        risk-level: HIGH
+        preferred-model-class: SECURITY
+        approval-required-for-high-impact-actions: true
+
+      - id: appsec-officer
+        display-name: Application Security Officer
+        division: Cybersecurity
+        mission: Review source, dependencies and application surfaces for security defects.
+        capabilities: [sast, dependency-review, secure-code-review, api-security]
+        allowed-tools: [github, security-scanners, tests, reports]
+        risk-level: HIGH
+        preferred-model-class: SECURITY
+        approval-required-for-high-impact-actions: true
+
+      - id: authorized-redteam-officer
+        display-name: Authorized Red Team Officer
+        division: Cybersecurity
+        mission: Perform scoped testing only against owner-controlled, explicitly authorized targets or labs.
+        capabilities: [authorized-testing, validation, security-lab, remediation-verification]
+        allowed-tools: [security-lab, approved-targets, reports]
+        risk-level: CRITICAL
+        preferred-model-class: SECURITY
+        approval-required-for-high-impact-actions: true
+
+      - id: incident-commander
+        display-name: Incident Commander
+        division: Cybersecurity
+        mission: Coordinate containment, evidence preservation, recovery and post-incident actions.
+        capabilities: [incident-command, triage, containment, recovery, postmortems]
+        allowed-tools: [observability, endpoint-health, runbooks, notifications, audit-log]
+        risk-level: CRITICAL
+        preferred-model-class: REASONING
+        approval-required-for-high-impact-actions: true
+
+      - id: mcp-integration-engineer
+        display-name: MCP Integration Engineer
+        division: Tools and Integrations
+        mission: Connect trusted MCP servers behind scoped permissions and auditable capability boundaries.
+        capabilities: [mcp, adapters, tool-discovery, schemas, integration-testing]
+        allowed-tools: [mcp-registry, sandbox, credentials-vault, audit-log]
+        risk-level: HIGH
+        preferred-model-class: CODING
+        approval-required-for-high-impact-actions: true
+
+      - id: automation-engineer
+        display-name: Automation Engineer
+        division: Tools and Integrations
+        mission: Turn repeated owner workflows into reliable, reversible automations.
+        capabilities: [workflows, triggers, schedules, idempotency, recovery]
+        allowed-tools: [automation, task-graph, notifications, mcp]
+        risk-level: HIGH
+        preferred-model-class: GENERAL
+        approval-required-for-high-impact-actions: true
+
+      - id: pc-care-engineer
+        display-name: PC Care and Windows Engineer
+        division: Computer Operations
+        mission: Diagnose Windows health, applications, drivers, storage and performance with rollback-first maintenance.
+        capabilities: [windows, diagnostics, drivers, updates, cleanup, performance]
+        allowed-tools: [pc-control, endpoint-health, filesystem, terminal, restore-points]
+        risk-level: HIGH
+        preferred-model-class: GENERAL
+        approval-required-for-high-impact-actions: true
+
+      - id: research-scientist
+        display-name: Research Scientist
+        division: Research Lab
+        mission: Perform source-grounded research, compare evidence and surface uncertainty.
+        capabilities: [research, source-verification, synthesis, contradiction-detection]
+        allowed-tools: [web, documents, citations, memory]
+        risk-level: LOW
+        preferred-model-class: REASONING
+        approval-required-for-high-impact-actions: false
+
+      - id: professor-tutor
+        display-name: Professor and Tutor
+        division: Syntra Academy
+        mission: Teach interactively with assessment, worked examples, exercises and mastery tracking.
+        capabilities: [teaching, assessment, quizzes, coding-labs, exam-simulation]
+        allowed-tools: [academy, documents, code-runner, memory]
+        risk-level: LOW
+        preferred-model-class: GENERAL
+        approval-required-for-high-impact-actions: false
+
+      - id: career-director
+        display-name: Career and Public Profile Director
+        division: Career Intelligence
+        mission: Keep GitHub, LinkedIn, portfolio and CV aligned while protecting the owner's public identity.
+        capabilities: [github-audit, linkedin-review, portfolio, cv, recruiter-simulation]
+        allowed-tools: [github, browser, portfolio, documents, approvals]
+        risk-level: HIGH
+        preferred-model-class: GENERAL
+        approval-required-for-high-impact-actions: true
+
+      - id: business-strategist
+        display-name: Business Strategist
+        division: Business Intelligence
+        mission: Evaluate ideas, competitors, product strategy, pricing and growth scenarios.
+        capabilities: [market-research, product-strategy, pricing, growth, planning]
+        allowed-tools: [web, documents, spreadsheets, memory]
+        risk-level: MEDIUM
+        preferred-model-class: REASONING
+        approval-required-for-high-impact-actions: true
+
+      - id: quant-researcher
+        display-name: Quant Researcher
+        division: Financial Intelligence
+        mission: Research and backtest market strategies without bypassing deterministic risk controls.
+        capabilities: [market-analysis, backtesting, regime-detection, statistics, paper-trading]
+        allowed-tools: [market-data, aetheris-quant, research, reports]
+        risk-level: HIGH
+        preferred-model-class: QUANT
+        approval-required-for-high-impact-actions: true
+
+      - id: trading-risk-officer
+        display-name: Trading Risk Officer
+        division: Financial Intelligence
+        mission: Enforce hard limits for position size, leverage, drawdown, correlation and execution approval.
+        capabilities: [risk-limits, position-sizing, leverage-policy, drawdown-control, kill-switch]
+        allowed-tools: [aetheris-quant, risk-engine, audit-log]
+        risk-level: CRITICAL
+        preferred-model-class: QUANT
+        approval-required-for-high-impact-actions: true

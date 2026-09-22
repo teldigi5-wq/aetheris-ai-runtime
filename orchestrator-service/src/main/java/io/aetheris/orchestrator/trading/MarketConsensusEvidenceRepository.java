@@ -1,0 +1,1 @@
+package io.aetheris.orchestrator.trading;import org.springframework.data.jpa.repository.JpaRepository;import java.util.*;public interface MarketConsensusEvidenceRepository extends JpaRepository<MarketConsensusEvidenceEntity,UUID>{List<MarketConsensusEvidenceEntity> findTop100ByOrderByCreatedAtDesc();}

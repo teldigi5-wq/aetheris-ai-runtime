@@ -1,0 +1,1 @@
+package io.aetheris.orchestrator.remote;import java.time.Instant;import java.util.Set;import java.util.UUID;public record RemoteCompanionSessionResponse(UUID sessionId,String pairingToken,Instant expiresAt,Set<String> capabilities,String transport){}

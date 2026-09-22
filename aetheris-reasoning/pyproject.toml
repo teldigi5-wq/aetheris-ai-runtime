@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aetheris-reasoning"
+version = "0.1.0"
+description = "Deterministic reasoning-control primitives for Aetheris Stage 30"
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["aetheris_reasoning*"]

@@ -1,0 +1,11 @@
+package io.aetheris.orchestrator.model;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+public interface ProviderUsageRepository extends JpaRepository<ProviderUsageEntity, UUID> {
+    List<ProviderUsageEntity> findByProviderIdAndCreatedAtAfter(String providerId, Instant createdAt);
+}

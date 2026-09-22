@@ -1,0 +1,1 @@
+package io.aetheris.orchestrator.stage9;import io.aetheris.orchestrator.runtime.WorkItemEntity;import io.aetheris.orchestrator.scheduler.SchedulerTicketEntity;public record CapabilityDispatchResult(boolean dispatched,String workerId,String reason,SchedulerTicketEntity ticket,WorkItemEntity workItem){}

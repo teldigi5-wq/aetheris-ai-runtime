@@ -1,0 +1,1 @@
+package io.aetheris.orchestrator.trading;import java.util.List;public record AdvancedBacktestRequest(String symbol,List<MarketBar>bars,int fastWindow,int slowWindow,double initialBalance,double feeBps,double spreadBps,double slippageBps,double fundingBpsPerBar,int walkForwardWindows){public AdvancedBacktestRequest{bars=bars==null?List.of():List.copyOf(bars);}}

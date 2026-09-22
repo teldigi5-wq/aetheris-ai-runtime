@@ -1,0 +1,1 @@
+package io.aetheris.orchestrator.career;import java.util.List;public record GitHubCareerEvidenceResult(String repository,String path,String ref,String sha,String htmlUrl,int contentLength,int evidenceScore,List<String> evidence,List<String> gaps){public GitHubCareerEvidenceResult{evidence=List.copyOf(evidence);gaps=List.copyOf(gaps);}}

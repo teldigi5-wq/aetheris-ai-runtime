@@ -1,0 +1,1 @@
+package io.aetheris.orchestrator.career;import java.util.List;public record RecruiterSimulationResult(String targetRole,String companyTier,int screeningScore,String verdict,List<String> strengths,List<String> risks,List<String> nextActions){}

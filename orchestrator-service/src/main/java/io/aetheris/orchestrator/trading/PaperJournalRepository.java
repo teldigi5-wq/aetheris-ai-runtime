@@ -1,0 +1,1 @@
+package io.aetheris.orchestrator.trading;import org.springframework.data.jpa.repository.JpaRepository;import java.util.*;public interface PaperJournalRepository extends JpaRepository<PaperJournalEntity,UUID>{List<PaperJournalEntity> findTop200ByOrderByCreatedAtDesc();}
