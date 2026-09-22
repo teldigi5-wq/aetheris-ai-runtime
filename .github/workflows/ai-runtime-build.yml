@@ -1,0 +1,66 @@
+name: AI Runtime Build
+
+on:
+  push:
+    branches: [ main, feature/syntra-aetheris-foundation-v2 ]
+  pull_request:
+    branches: [ main, feature/syntra-aetheris-foundation-v2 ]
+
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: '21.0.12'
+  PYTHON_VERSION: '3.13.15'
+
+jobs:
+  orchestrator:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+      - name: Test orchestrator service
+        run: ./mvnw -f orchestrator-service/pom.xml test
+
+  reasoning-and-quant:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Test reasoning primitives
+        working-directory: aetheris-reasoning
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Compile quant sources
+        run: python -m compileall -q aetheris-quant/app
+
+  workstation-agent:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+      - name: Parse and policy-check packaging scripts
+        shell: pwsh
+        run: ./workstation-agent/packaging/validate-scripts.ps1
+      - name: Build, test and create unsigned source package
+        shell: pwsh
+        run: ./workstation-agent/packaging/build-package.ps1
+      - name: Verify generated package remains non-production without signature
+        shell: pwsh
+        run: |
+          $manifest = Get-Content ./workstation-agent/dist/manifest.json -Raw | ConvertFrom-Json
+          if ($manifest.loopbackOnly -ne $true) { throw 'Host agent package must remain loopback-only' }
+          if ($manifest.shellCapability -ne $false) { throw 'Host agent package must not expose shell capability' }
+          if ($manifest.requiresAdminAtRuntime -ne $false) { throw 'Host agent normal runtime must not require administrator privileges' }
+          if ($manifest.productionActivationAllowed -ne $false) { throw 'Unsigned CI package must not allow production activation' }
+          if ($manifest.liveMoneyEnabled -ne $false -or $manifest.withdrawalsEnabled -ne $false -or $manifest.transfersEnabled -ne $false) { throw 'Financial hard boundaries changed unexpectedly' }
+          if (-not (Test-Path ./workstation-agent/dist/checksums.sha256)) { throw 'Package checksums are missing' }
