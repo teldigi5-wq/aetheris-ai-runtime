@@ -2,9 +2,9 @@ name: AI Runtime Build
 
 on:
   push:
-    branches: [ main, feature/syntra-aetheris-foundation-v2 ]
+    branches: [ main, feature/initial-runtime-extraction ]
   pull_request:
-    branches: [ main, feature/syntra-aetheris-foundation-v2 ]
+    branches: [ main ]
 
 permissions:
   contents: read
