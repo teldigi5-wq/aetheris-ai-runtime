@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "stage": 29,
+  "defaultMode": "PAPER",
+  "allowedModes": ["PAPER", "TESTNET"],
+  "liveExecutionEnabled": false,
+  "testnetExecutionEnabled": false,
+  "minSetupScore": 72,
+  "maxRiskPerTrade": 0.005,
+  "maxDailyLoss": 0.02,
+  "maxOpenPositions": 3,
+  "maxLeverage": 3,
+  "minRewardRiskRatio": 1.5,
+  "maxStopDistancePct": 0.03,
+  "requireExplicitApproval": true,
+  "networkRequiredForCertification": false,
+  "secretsRequiredForCertification": false
+}
