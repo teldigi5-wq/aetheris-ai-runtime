@@ -2,7 +2,7 @@ name: AI Runtime Build
 
 on:
   push:
-    branches: [ main, feature/initial-runtime-extraction ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
