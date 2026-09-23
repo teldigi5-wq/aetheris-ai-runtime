@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "stage": 28,
+  "name": "PC Care & System Engineering — Diagnostic and Remediation Planning",
+  "mode": "PRE_PC_SYNTHETIC_ONLY",
+  "physical_pc_status": "BLOCKED_PENDING_HARDWARE",
+  "allowed_ci_snapshot_sources": ["synthetic_fixture"],
+  "thresholds": {
+    "cpu_percent": {"warning": 85.0, "critical": 95.0, "direction": "high_bad"},
+    "memory_percent": {"warning": 85.0, "critical": 95.0, "direction": "high_bad"},
+    "disk_free_percent": {"warning": 15.0, "critical": 5.0, "direction": "low_bad"},
+    "temperature_c": {"warning": 85.0, "critical": 95.0, "direction": "high_bad"}
+  },
+  "remediation": {
+    "recommendations_only": true,
+    "owner_approval_required_for_mutation": true,
+    "autonomous_mutation_allowed": false,
+    "process_kill_allowed": false,
+    "file_deletion_allowed": false,
+    "registry_write_allowed": false,
+    "driver_change_allowed": false,
+    "service_restart_allowed": false,
+    "shutdown_reboot_allowed": false,
+    "network_change_allowed": false,
+    "security_control_change_allowed": false
+  },
+  "truth_boundaries": {
+    "host_scanned_by_ci": false,
+    "real_temperature_measured": false,
+    "real_gpu_measured": false,
+    "real_disk_health_measured": false,
+    "repair_executed": false,
+    "external_action_attempted": false
+  }
+}
