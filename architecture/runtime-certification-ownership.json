@@ -10,15 +10,28 @@
     "repository": "teldigi5-wq/aetheris-ai-runtime",
     "branch": "main",
     "certified_baseline_sha": "4fb481aff15cfc23ecd8d0ceb689a3e01bcebe46",
-    "pre_stage28_29_migration_sha": "f6f64ef391f63ca81e802302d6c8d3ad4c052ff2"
+    "pre_stage28_29_migration_sha": "f6f64ef391f63ca81e802302d6c8d3ad4c052ff2",
+    "stage28_29_certified_merge_sha": "2272b563d894800c7627e8354dd910519b92d5e6"
   },
   "replacement_certification_model": {
     "orchestrator": "FULL_MAVEN_TEST_SUITE_DOUBLE_PASS",
     "reasoning": "FULL_PYTHON_UNIT_SUITE_DOUBLE_PASS",
+    "stage26_runtime_safety": "DESTINATION_OWNED_DETERMINISTIC_SOURCE_CONTRACT_CERTIFICATION_WITH_TEN_RUNTIME_SCENARIOS_AND_FAIL_CLOSED_SELF_TESTS",
     "stage28_pc_care": "BYTE_IDENTICAL_SYNTHETIC_DIAGNOSTIC_SUITE_WITH_DETERMINISTIC_DOUBLE_RENDER_AND_NO_HOST_MUTATION",
     "stage29_trading": "BYTE_IDENTICAL_PROPOSAL_ONLY_SUITE_WITH_DETERMINISTIC_DOUBLE_RENDER_AND_LIVE_EXECUTION_BLOCKED",
     "baseline_build": "AI Runtime Build remains mandatory for orchestrator, reasoning, quant, and workstation-agent",
-    "purpose": "Preserve runtime-internal Phase 9-13, Stage 28-33 regression, safety, and repeatability coverage under destination ownership without weakening the existing complete runtime build."
+    "purpose": "Preserve runtime-internal Phase 9-13, Stage 26 runtime safety, Stage 28-33 regression, safety, and repeatability coverage under destination ownership without weakening the existing complete runtime build."
+  },
+  "stage26_split_ownership": {
+    "runtime_owned_scope": "Ten source-contract scenarios covering orchestrator policy/tooling/planning/replay safety and workstation-agent financial/shell boundaries.",
+    "runtime_config": "configs/stage26/runtime-safety-scenarios.json",
+    "runtime_verifier": "scripts/stage26/runtime_safety_certification.py",
+    "runtime_workflow": ".github/workflows/runtime-stage26-safety.yml",
+    "platform_retained_scope": "Evidence integrity, evidence catalog, public truth guard, physical-PC claim boundary, and repository/platform evidence certification remain in aetheris-platform.",
+    "physical_pc_status": "BLOCKED_PENDING_HARDWARE",
+    "live_side_effects": false,
+    "network_required": false,
+    "shell_execution_required": false
   },
   "byte_identical_asset_proofs": {
     "tests_fixtures_tree": "32eb03e471ac297f3a2cc326df489610b1f98bcf",
@@ -72,6 +85,8 @@
     "hosted_ci_only": true,
     "physical_pc_validation": false,
     "physical_pc_status": "BLOCKED_PENDING_HARDWARE",
+    "stage26_runtime_simulation_only": true,
+    "stage26_runtime_live_side_effects": false,
     "stage28_synthetic_only": true,
     "stage28_host_mutation_permitted": false,
     "stage29_proposal_only": true,
