@@ -7,12 +7,32 @@
   "source_archive_sha256": "df2f1eaa176072ec59c0dcc9061812ab8e2d77977c8a9722ee0ef58ab8d2b389",
   "source_repository": "teldigi5-wq/aetheris-platform",
   "source_sha": "16e1bbc2b357e36c2a484e0ff66bb81a329c1c99",
-  "status": "CONTENT_TRANSFER_VERIFIED_PENDING_DESTINATION_CI",
-  "truth_boundary": "Hosted content-transfer evidence only. All 887 manifest-authorized payload files were verified against the certified export. The four workflow files were transferred separately through the connected GitHub app and their destination Git blob IDs match the certified source blob IDs. Destination CI and runtime artifact provenance are not yet certified.",
+  "status": "CONTENT_AND_RUNTIME_CERTIFICATION_TRANSFERRED_PENDING_EXACT_HEAD_CI",
+  "truth_boundary": "Hosted migration evidence only. The original 887-file runtime payload remains verified against the certified export. Stage 28 and Stage 29 runtime-owned safety/certification assets are now destination-owned and byte-identical to source revision 16e1bbc2b357e36c2a484e0ff66bb81a329c1c99. Physical owner-PC validation remains BLOCKED_PENDING_HARDWARE. Stage 28 remains synthetic/recommendation-only with no host mutation. Stage 29 remains proposal-only with live execution and order submission disabled. Exact-head destination CI and runtime artifact/image provenance must still be certified before platform source removal.",
   "workflow_blob_verification": {
     ".github/workflows/ai-runtime-build.yml": "13aaaff24a739d82beef3460ca11837cd3b9f87f",
     ".github/workflows/ai-runtime-codeql.yml": "5f7ef7e0ab53e702fea05acbe7dca9240f8e81bd",
     ".github/workflows/ai-runtime-foundation-bootstrap.yml": "b1949ef3e9262cdc5466a4730b8bbef2b2cd9c3f",
     ".github/workflows/ai-runtime-foundation-hardening.yml": "edb4363aae1a11461158cfec608c387d11ca5683"
+  },
+  "runtime_certification_extension": {
+    "pre_migration_runtime_sha": "f6f64ef391f63ca81e802302d6c8d3ad4c052ff2",
+    "ownership_manifest": "architecture/runtime-certification-ownership.json",
+    "destination_workflow": ".github/workflows/runtime-migrated-certification.yml",
+    "source_workflows_replaced": [
+      ".github/workflows/stage28-pc-care.yml",
+      ".github/workflows/stage29-trading-intelligence.yml"
+    ],
+    "byte_identical_asset_proofs": {
+      "tests_fixtures_tree": "32eb03e471ac297f3a2cc326df489610b1f98bcf",
+      "stage28_script_tree": "52901a208ab835753aaaa2986a5a87e9bcc417f1",
+      "stage29_script_tree": "8369551f88fcd1a252e4c98f84d84f5c534a13e7",
+      "stage28_config_tree": "c14065d6c1a6e7ce80ff73dab90f15bcbc4142ed",
+      "stage29_config_tree": "40e31cad50250a313327f730bb41ae746ae5af01",
+      "stage28_test_blob": "ae39ec9b91162b500d59f3f038d5335e5a819010",
+      "stage29_test_blob": "30ecd0822d253fa1878b50127f2fb320dc34b007"
+    },
+    "ci_certification_status": "PENDING_PR_EXACT_HEAD",
+    "runtime_artifact_provenance_status": "PENDING"
   }
 }
