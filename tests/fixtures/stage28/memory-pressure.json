@@ -1,0 +1,10 @@
+{
+  "snapshot_id": "stage28-memory-pressure-fixture",
+  "source": "synthetic_fixture",
+  "metrics": {
+    "cpu_percent": 61.0,
+    "memory_percent": 91.0,
+    "disk_free_percent": 44.0,
+    "temperature_c": 67.0
+  }
+}
