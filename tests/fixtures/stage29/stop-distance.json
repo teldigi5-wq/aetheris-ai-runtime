@@ -1,0 +1,14 @@
+{
+  "symbol": "BTCUSDT",
+  "direction": "LONG",
+  "entryPrice": "50000",
+  "stopLossPrice": "48000",
+  "takeProfitPrice": "55000",
+  "setupScore": 94,
+  "accountBalance": "10000",
+  "riskPerTrade": "0.005",
+  "requestedLeverage": 2,
+  "openPositions": 0,
+  "dailyLossFraction": "0.001",
+  "mode": "PAPER"
+}

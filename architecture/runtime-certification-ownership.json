@@ -9,13 +9,25 @@
   "destination_runtime": {
     "repository": "teldigi5-wq/aetheris-ai-runtime",
     "branch": "main",
-    "certified_baseline_sha": "4fb481aff15cfc23ecd8d0ceb689a3e01bcebe46"
+    "certified_baseline_sha": "4fb481aff15cfc23ecd8d0ceb689a3e01bcebe46",
+    "pre_stage28_29_migration_sha": "f6f64ef391f63ca81e802302d6c8d3ad4c052ff2"
   },
   "replacement_certification_model": {
     "orchestrator": "FULL_MAVEN_TEST_SUITE_DOUBLE_PASS",
     "reasoning": "FULL_PYTHON_UNIT_SUITE_DOUBLE_PASS",
+    "stage28_pc_care": "BYTE_IDENTICAL_SYNTHETIC_DIAGNOSTIC_SUITE_WITH_DETERMINISTIC_DOUBLE_RENDER_AND_NO_HOST_MUTATION",
+    "stage29_trading": "BYTE_IDENTICAL_PROPOSAL_ONLY_SUITE_WITH_DETERMINISTIC_DOUBLE_RENDER_AND_LIVE_EXECUTION_BLOCKED",
     "baseline_build": "AI Runtime Build remains mandatory for orchestrator, reasoning, quant, and workstation-agent",
-    "purpose": "Preserve runtime-internal Phase 9-13 and Stage 30-33 regression/repeatability coverage under destination ownership without weakening the existing complete runtime build."
+    "purpose": "Preserve runtime-internal Phase 9-13, Stage 28-33 regression, safety, and repeatability coverage under destination ownership without weakening the existing complete runtime build."
+  },
+  "byte_identical_asset_proofs": {
+    "tests_fixtures_tree": "32eb03e471ac297f3a2cc326df489610b1f98bcf",
+    "stage28_script_tree": "52901a208ab835753aaaa2986a5a87e9bcc417f1",
+    "stage29_script_tree": "8369551f88fcd1a252e4c98f84d84f5c534a13e7",
+    "stage28_config_tree": "c14065d6c1a6e7ce80ff73dab90f15bcbc4142ed",
+    "stage29_config_tree": "40e31cad50250a313327f730bb41ae746ae5af01",
+    "stage28_test_blob": "ae39ec9b91162b500d59f3f038d5335e5a819010",
+    "stage29_test_blob": "30ecd0822d253fa1878b50127f2fb320dc34b007"
   },
   "migrated_runtime_owned_workflows": [
     ".github/workflows/phase9-memory-production-proof.yml",
@@ -41,6 +53,8 @@
     ".github/workflows/phase13-retrieval-rag-foundation.yml",
     ".github/workflows/phase13-structured-context-assembly.yml",
     ".github/workflows/phase13-syntra-core-runtime-foundation.yml",
+    ".github/workflows/stage28-pc-care.yml",
+    ".github/workflows/stage29-trading-intelligence.yml",
     ".github/workflows/stage30-reasoning.yml",
     ".github/workflows/stage31-digital-twins.yml",
     ".github/workflows/stage32-automation-control.yml",
@@ -52,14 +66,17 @@
     ".github/workflows/stage25-readiness.yml",
     ".github/workflows/stage26-safety-certification.yml",
     ".github/workflows/stage27-repository-governance.yml",
-    ".github/workflows/stage28-pc-care.yml",
-    ".github/workflows/stage29-trading-intelligence.yml",
     ".github/workflows/stage34-master-build.yml"
   ],
   "truth_boundaries": {
     "hosted_ci_only": true,
     "physical_pc_validation": false,
     "physical_pc_status": "BLOCKED_PENDING_HARDWARE",
+    "stage28_synthetic_only": true,
+    "stage28_host_mutation_permitted": false,
+    "stage29_proposal_only": true,
+    "stage29_live_execution_enabled": false,
+    "stage29_order_submission_permitted": false,
     "production_deployment_claim": false,
     "registry_publication_claim": false
   }

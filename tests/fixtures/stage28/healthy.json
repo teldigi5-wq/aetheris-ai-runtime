@@ -1,0 +1,10 @@
+{
+  "snapshot_id": "stage28-healthy-fixture",
+  "source": "synthetic_fixture",
+  "metrics": {
+    "cpu_percent": 32.0,
+    "memory_percent": 48.0,
+    "disk_free_percent": 62.0,
+    "temperature_c": 58.0
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "snapshot_id": "stage28-critical-pressure-fixture",
+  "source": "synthetic_fixture",
+  "metrics": {
+    "cpu_percent": 97.0,
+    "memory_percent": 96.0,
+    "disk_free_percent": 4.0,
+    "temperature_c": 98.0
+  }
+}

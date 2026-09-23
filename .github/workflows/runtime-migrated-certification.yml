@@ -8,7 +8,16 @@ on:
       - 'aetheris-reasoning/**'
       - 'aetheris-quant/**'
       - 'workstation-agent/**'
+      - 'configs/stage28/**'
+      - 'configs/stage29/**'
+      - 'scripts/stage28/**'
+      - 'scripts/stage29/**'
+      - 'tests/fixtures/stage28/**'
+      - 'tests/fixtures/stage29/**'
+      - 'tests/test_stage28_pc_care.py'
+      - 'tests/test_stage29_trading.py'
       - 'architecture/runtime-certification-ownership.json'
+      - 'EXTRACTION-PROVENANCE.json'
       - '.github/workflows/runtime-migrated-certification.yml'
   pull_request:
     branches: [ main ]
@@ -17,7 +26,16 @@ on:
       - 'aetheris-reasoning/**'
       - 'aetheris-quant/**'
       - 'workstation-agent/**'
+      - 'configs/stage28/**'
+      - 'configs/stage29/**'
+      - 'scripts/stage28/**'
+      - 'scripts/stage29/**'
+      - 'tests/fixtures/stage28/**'
+      - 'tests/fixtures/stage29/**'
+      - 'tests/test_stage28_pc_care.py'
+      - 'tests/test_stage29_trading.py'
       - 'architecture/runtime-certification-ownership.json'
+      - 'EXTRACTION-PROVENANCE.json'
       - '.github/workflows/runtime-migrated-certification.yml'
   workflow_dispatch:
 
@@ -34,12 +52,14 @@ jobs:
     steps:
       - name: Checkout exact revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-      - name: Validate migrated ownership manifest
+
+      - name: Validate migrated ownership manifest and byte identity
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import json
+          import subprocess
           from pathlib import Path
 
           path = Path('architecture/runtime-certification-ownership.json')
@@ -50,22 +70,197 @@ jobs:
           assert data['source_platform']['certified_sha'] == '16e1bbc2b357e36c2a484e0ff66bb81a329c1c99'
           assert data['destination_runtime']['repository'] == 'teldigi5-wq/aetheris-ai-runtime'
           assert data['destination_runtime']['certified_baseline_sha'] == '4fb481aff15cfc23ecd8d0ceb689a3e01bcebe46'
+          assert data['destination_runtime']['pre_stage28_29_migration_sha'] == 'f6f64ef391f63ca81e802302d6c8d3ad4c052ff2'
+
           migrated = data['migrated_runtime_owned_workflows']
-          assert len(migrated) == 27, migrated
+          assert len(migrated) == 29, migrated
           assert len(migrated) == len(set(migrated)), migrated
           assert all(item.startswith('.github/workflows/') for item in migrated)
-          assert data['replacement_certification_model']['orchestrator'] == 'FULL_MAVEN_TEST_SUITE_DOUBLE_PASS'
-          assert data['replacement_certification_model']['reasoning'] == 'FULL_PYTHON_UNIT_SUITE_DOUBLE_PASS'
+          for required in (
+              '.github/workflows/stage28-pc-care.yml',
+              '.github/workflows/stage29-trading-intelligence.yml',
+          ):
+              assert required in migrated, required
+              assert required not in data['platform_retained_certifications'], required
+
+          model = data['replacement_certification_model']
+          assert model['orchestrator'] == 'FULL_MAVEN_TEST_SUITE_DOUBLE_PASS'
+          assert model['reasoning'] == 'FULL_PYTHON_UNIT_SUITE_DOUBLE_PASS'
+          assert model['stage28_pc_care'] == 'BYTE_IDENTICAL_SYNTHETIC_DIAGNOSTIC_SUITE_WITH_DETERMINISTIC_DOUBLE_RENDER_AND_NO_HOST_MUTATION'
+          assert model['stage29_trading'] == 'BYTE_IDENTICAL_PROPOSAL_ONLY_SUITE_WITH_DETERMINISTIC_DOUBLE_RENDER_AND_LIVE_EXECUTION_BLOCKED'
+
+          expected_objects = {
+              'tests/fixtures': '32eb03e471ac297f3a2cc326df489610b1f98bcf',
+              'scripts/stage28': '52901a208ab835753aaaa2986a5a87e9bcc417f1',
+              'scripts/stage29': '8369551f88fcd1a252e4c98f84d84f5c534a13e7',
+              'configs/stage28': 'c14065d6c1a6e7ce80ff73dab90f15bcbc4142ed',
+              'configs/stage29': '40e31cad50250a313327f730bb41ae746ae5af01',
+              'tests/test_stage28_pc_care.py': 'ae39ec9b91162b500d59f3f038d5335e5a819010',
+              'tests/test_stage29_trading.py': '30ecd0822d253fa1878b50127f2fb320dc34b007',
+          }
+          assert data['byte_identical_asset_proofs']['tests_fixtures_tree'] == expected_objects['tests/fixtures']
+          for object_path, expected in expected_objects.items():
+              actual = subprocess.check_output(
+                  ['git', 'rev-parse', f'HEAD:{object_path}'],
+                  text=True,
+              ).strip()
+              assert actual == expected, (object_path, actual, expected)
+
           truth = data['truth_boundaries']
           assert truth['hosted_ci_only'] is True
           assert truth['physical_pc_validation'] is False
           assert truth['physical_pc_status'] == 'BLOCKED_PENDING_HARDWARE'
+          assert truth['stage28_synthetic_only'] is True
+          assert truth['stage28_host_mutation_permitted'] is False
+          assert truth['stage29_proposal_only'] is True
+          assert truth['stage29_live_execution_enabled'] is False
+          assert truth['stage29_order_submission_permitted'] is False
           assert truth['production_deployment_claim'] is False
           assert truth['registry_publication_claim'] is False
+
+          provenance = json.loads(Path('EXTRACTION-PROVENANCE.json').read_text(encoding='utf-8'))
+          assert provenance['source_sha'] == data['source_platform']['certified_sha']
+          extension = provenance['runtime_certification_extension']
+          assert extension['pre_migration_runtime_sha'] == data['destination_runtime']['pre_stage28_29_migration_sha']
+          assert extension['runtime_artifact_provenance_status'] == 'PENDING'
+
           for root in ('orchestrator-service', 'aetheris-reasoning', 'aetheris-quant', 'workstation-agent'):
               assert Path(root).is_dir(), root
           print('Runtime certification ownership provenance: PASS')
           PY
+
+  stage28-synthetic-certification:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Compile Stage 28 diagnostic planner
+        run: python -m py_compile scripts/stage28/pc_care_diagnostics.py
+
+      - name: Run Stage 28 tests
+        run: python -m unittest discover -s tests -p 'test_stage28_pc_care.py' -v
+
+      - name: Generate deterministic Stage 28 reports twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/stage28/pass-1 build/stage28/pass-2
+          for fixture in healthy memory-pressure critical-pressure; do
+            for pass in pass-1 pass-2; do
+              python scripts/stage28/pc_care_diagnostics.py \
+                --snapshot "tests/fixtures/stage28/${fixture}.json" \
+                --output "build/stage28/${pass}/${fixture}.json"
+            done
+            cmp "build/stage28/pass-1/${fixture}.json" "build/stage28/pass-2/${fixture}.json"
+          done
+
+      - name: Assert Stage 28 safety and truth boundaries
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          reports = [json.loads(path.read_text()) for path in sorted(Path('build/stage28/pass-1').glob('*.json'))]
+          assert {r['diagnosticSeverity'] for r in reports} == {'HEALTHY', 'WARNING', 'CRITICAL'}, reports
+          for report in reports:
+              assert report['status'] == 'PASS', report
+              assert report['physicalPcStatus'] == 'BLOCKED_PENDING_HARDWARE', report
+              assert report['simulationOnly'] is True, report
+              assert report['recommendationsOnly'] is True, report
+              assert report['hostMutationAttempted'] is False, report
+              assert report['networkRequired'] is False, report
+              assert report['shellExecutionRequired'] is False, report
+          print('Stage 28 synthetic PC-care certification: PASS')
+          PY
+
+      - name: Publish Stage 28 evidence
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: stage28-pc-care-certification-${{ github.sha }}
+          path: build/stage28/pass-1/
+          if-no-files-found: error
+          retention-days: 30
+
+  stage29-proposal-only-certification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Compile Stage 29 planner
+        run: python -m py_compile scripts/stage29/trading_intelligence.py
+
+      - name: Run Stage 29 unit tests
+        run: python -m unittest tests/test_stage29_trading.py -v
+
+      - name: Generate deterministic Stage 29 reports twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/stage29/pass1 artifacts/stage29/pass2
+          for candidate in tests/fixtures/stage29/*.json; do
+            base="$(basename "$candidate" .json)"
+            for pass in pass1 pass2; do
+              python scripts/stage29/trading_intelligence.py \
+                --policy configs/stage29/trading-policy.json \
+                --candidate "$candidate" \
+                --output "artifacts/stage29/${pass}/${base}.json"
+            done
+          done
+          diff -ru artifacts/stage29/pass1 artifacts/stage29/pass2
+
+      - name: Assert Stage 29 safety boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          policy = json.loads(Path('configs/stage29/trading-policy.json').read_text())
+          assert policy['liveExecutionEnabled'] is False
+          assert 'LIVE' not in policy['allowedModes']
+          assert policy['requireExplicitApproval'] is True
+          assert policy['networkRequiredForCertification'] is False
+          assert policy['secretsRequiredForCertification'] is False
+
+          reports = [json.loads(p.read_text()) for p in sorted(Path('artifacts/stage29/pass1').glob('*.json'))]
+          assert len(reports) == 30, len(reports)
+          for report in reports:
+              assert report['stage'] == 29
+              assert report['executionPermitted'] is False
+              assert report['orderSubmitted'] is False
+              assert report['networkUsed'] is False
+              assert report['secretsUsed'] is False
+
+          approved = next(r for r in reports if r['symbol'] == 'BTCUSDT' and r['status'] == 'PROPOSAL_READY')
+          assert approved['requiresExplicitApproval'] is True
+          live = [r for r in reports if r['mode'] == 'LIVE']
+          assert live and 'LIVE_EXECUTION_BLOCKED_STAGE_29' in live[0]['rejectionReasons']
+          print('Stage 29 proposal-only trading certification: PASS')
+          PY
+
+      - name: Publish Stage 29 evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: stage29-trading-certification-${{ github.sha }}
+          path: artifacts/stage29/pass1
+          if-no-files-found: error
+          retention-days: 14
 
   orchestrator-pass-1:
     runs-on: ubuntu-24.04

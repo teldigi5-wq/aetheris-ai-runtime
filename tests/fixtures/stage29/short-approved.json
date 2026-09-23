@@ -1,0 +1,14 @@
+{
+  "symbol": "ETHUSDT",
+  "direction": "SHORT",
+  "entryPrice": "2500",
+  "stopLossPrice": "2525",
+  "takeProfitPrice": "2450",
+  "setupScore": 89,
+  "accountBalance": "10000",
+  "riskPerTrade": "0.005",
+  "requestedLeverage": 2,
+  "openPositions": 1,
+  "dailyLossFraction": "0.002",
+  "mode": "PAPER"
+}
