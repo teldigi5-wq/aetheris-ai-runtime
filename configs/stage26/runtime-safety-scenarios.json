@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "stage": 26,
+  "name": "Aetheris Runtime Safety Scenario Certification",
+  "ownership": "AI_RUNTIME",
+  "simulation_only": true,
+  "live_side_effects": false,
+  "physical_pc_status": "BLOCKED_PENDING_HARDWARE",
+  "scenarios": [
+    {
+      "id": "zero-cost-blocks-billable",
+      "category": "policy",
+      "file": "orchestrator-service/src/main/java/io/aetheris/orchestrator/policy/OwnerPolicyService.java",
+      "must_contain": [
+        "mode == OperationMode.ZERO_COST && request.billable()",
+        "ZERO_COST mode blocks billable providers and paid actions.",
+        "PolicyDecision.deny"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "private-blocks-off-device",
+      "category": "policy",
+      "file": "orchestrator-service/src/main/java/io/aetheris/orchestrator/policy/OwnerPolicyService.java",
+      "must_contain": [
+        "mode == OperationMode.PRIVATE && request.sendsDataOffDevice()",
+        "PRIVATE mode blocks actions that send protected context off-device.",
+        "PolicyDecision.deny"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "high-impact-requires-owner-approval",
+      "category": "policy",
+      "file": "orchestrator-service/src/main/java/io/aetheris/orchestrator/policy/OwnerPolicyService.java",
+      "must_contain": [
+        "riskLevel == RiskLevel.CRITICAL",
+        "Critical actions always require explicit owner approval.",
+        "riskLevel == RiskLevel.HIGH",
+        "High-impact actions require owner approval by default.",
+        "PolicyDecision.requireApproval"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "owner-deny-rule-fails-closed",
+      "category": "policy",
+      "file": "orchestrator-service/src/main/java/io/aetheris/orchestrator/policy/OwnerRuleCompilerService.java",
+      "must_contain": [
+        "rule.getEffect() == RuleEffect.DENY",
+        "return new CompiledPolicyDecision(false, false"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "workspace-execution-remains-high-risk",
+      "category": "tooling",
+      "file": "orchestrator-service/src/main/java/io/aetheris/orchestrator/tool/SafeToolRegistryService.java",
+      "must_contain": [
+        "terminal.execute-workspace",
+        "RiskLevel.HIGH, false, false",
+        "policy.evaluate(new PolicyEvaluationRequest"
+      ],
+      "must_not_contain": [
+        "new ToolDescriptor(\"terminal.execute-workspace\", \"Terminal Workspace Execute\", ToolTransport.CLI, Set.of(\"workspace:execute\"), RiskLevel.LOW"
+      ]
+    },
+    {
+      "id": "github-write-remains-proposal-only",
+      "category": "tooling",
+      "file": "orchestrator-service/src/main/java/io/aetheris/orchestrator/tool/SafeToolRegistryService.java",
+      "must_contain": [
+        "github.propose-change",
+        "repo:write-draft",
+        "RiskLevel.HIGH, false, true"
+      ],
+      "must_not_contain": [
+        "github.force-push",
+        "repo:admin"
+      ]
+    },
+    {
+      "id": "mission-dry-run-rejects-dangerous-intent",
+      "category": "planning",
+      "file": "orchestrator-service/src/main/java/io/aetheris/orchestrator/stage9/MissionDryRunService.java",
+      "must_contain": [
+        "withdraw",
+        "transfer funds",
+        "live trade",
+        "disable safety",
+        "steal credential",
+        "format disk",
+        "rm -rf /",
+        "bypass approval",
+        "Dry-run only: no task, tool, external action or financial execution was created"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "incident-replay-is-read-only",
+      "category": "replay",
+      "file": "orchestrator-service/src/main/java/io/aetheris/orchestrator/stage15/Stage15IncidentReplayService.java",
+      "must_contain": [
+        "new IncidentReplay(\"REPLAY_READY\"",
+        "List.copyOf(events), true, false",
+        "boolean readOnly, boolean externalActionAttempted"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "chaos-rehearsal-is-isolated",
+      "category": "replay",
+      "file": "orchestrator-service/src/main/java/io/aetheris/orchestrator/stage15/Stage15ChaosRehearsalService.java",
+      "must_contain": [
+        "if (!request.isolatedSimulation())",
+        "Stage 15 chaos rehearsal must be isolated simulation only",
+        "proof, true, false, false",
+        "boolean simulationOnly, boolean productionAffected, boolean externalActionAttempted"
+      ],
+      "must_not_contain": []
+    },
+    {
+      "id": "workstation-agent-keeps-financial-boundaries",
+      "category": "host-safety",
+      "file": ".github/workflows/ai-runtime-build.yml",
+      "must_contain": [
+        "productionActivationAllowed -ne $false",
+        "liveMoneyEnabled -ne $false",
+        "withdrawalsEnabled -ne $false",
+        "transfersEnabled -ne $false",
+        "Host agent package must not expose shell capability"
+      ],
+      "must_not_contain": []
+    }
+  ]
+}

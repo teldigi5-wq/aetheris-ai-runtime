@@ -1,0 +1,150 @@
+name: AI Runtime Stage 26 Safety Certification
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'orchestrator-service/**'
+      - 'workstation-agent/**'
+      - 'configs/stage26/runtime-safety-scenarios.json'
+      - 'scripts/stage26/runtime_safety_certification.py'
+      - '.github/workflows/ai-runtime-build.yml'
+      - '.github/workflows/runtime-stage26-safety.yml'
+      - 'architecture/runtime-certification-ownership.json'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'orchestrator-service/**'
+      - 'workstation-agent/**'
+      - 'configs/stage26/runtime-safety-scenarios.json'
+      - 'scripts/stage26/runtime_safety_certification.py'
+      - '.github/workflows/ai-runtime-build.yml'
+      - '.github/workflows/runtime-stage26-safety.yml'
+      - 'architecture/runtime-certification-ownership.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: '3.13.15'
+
+jobs:
+  runtime-safety-certification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Compile Stage 26 runtime verifier
+        run: python -m py_compile scripts/stage26/runtime_safety_certification.py
+
+      - name: Exercise fail-closed verifier contracts
+        run: |
+          python - <<'PY'
+          import copy
+          import importlib.util
+          import json
+          import tempfile
+          from pathlib import Path
+
+          path = Path('scripts/stage26/runtime_safety_certification.py')
+          spec = importlib.util.spec_from_file_location('runtime_stage26', path)
+          module = importlib.util.module_from_spec(spec)
+          assert spec and spec.loader
+          spec.loader.exec_module(module)
+
+          config_path = Path('configs/stage26/runtime-safety-scenarios.json')
+          config = module.load_config(config_path)
+          report = module.certify(config, config_path=config_path)
+          assert report['certification'] == 'PASS', report
+          assert report['scenario_count'] == 10, report
+          assert report['pass_count'] == 10, report
+          assert report['fail_count'] == 0, report
+          assert report['simulation_only'] is True, report
+          assert report['live_side_effects'] is False, report
+          assert report['external_action_attempted'] is False, report
+          assert report['physical_pc_status'] == 'BLOCKED_PENDING_HARDWARE', report
+          assert report['network_required'] is False, report
+          assert report['shell_execution_required'] is False, report
+
+          broken = copy.deepcopy(config)
+          broken['scenarios'][0]['must_contain'].append('THIS_MARKER_MUST_NOT_EXIST_STAGE26_RUNTIME')
+          failed = module.certify(broken, config_path=config_path)
+          assert failed['certification'] == 'FAIL', failed
+          assert failed['fail_count'] > 0, failed
+
+          escaped = copy.deepcopy(config)
+          escaped['scenarios'][0]['file'] = '../../outside-aetheris.txt'
+          try:
+              module.certify(escaped, config_path=config_path)
+          except module.CertificationError:
+              pass
+          else:
+              raise AssertionError('path escape did not fail closed')
+
+          duplicate = copy.deepcopy(config)
+          duplicate['scenarios'].append(copy.deepcopy(duplicate['scenarios'][0]))
+          with tempfile.TemporaryDirectory() as tmp:
+              bad_path = Path(tmp) / 'duplicate.json'
+              bad_path.write_text(json.dumps(duplicate), encoding='utf-8')
+              try:
+                  module.load_config(bad_path)
+              except module.CertificationError:
+                  pass
+              else:
+                  raise AssertionError('duplicate scenario IDs did not fail closed')
+
+          print('Stage 26 runtime fail-closed contracts: PASS')
+          PY
+
+      - name: Generate deterministic runtime safety evidence - pass 1
+        run: |
+          python scripts/stage26/runtime_safety_certification.py \
+            --output-dir build/stage26/pass-1
+
+      - name: Generate deterministic runtime safety evidence - pass 2
+        run: |
+          python scripts/stage26/runtime_safety_certification.py \
+            --output-dir build/stage26/pass-2
+
+      - name: Compare deterministic evidence bytes
+        run: |
+          cmp build/stage26/pass-1/runtime-safety-report.json build/stage26/pass-2/runtime-safety-report.json
+          cmp build/stage26/pass-1/manifest.sha256 build/stage26/pass-2/manifest.sha256
+
+      - name: Assert runtime-owned Stage 26 boundaries
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path('build/stage26/pass-1/runtime-safety-report.json').read_text())
+          assert report['stage'] == 26, report
+          assert report['ownership'] == 'AI_RUNTIME', report
+          assert report['certification'] == 'PASS', report
+          assert report['scenario_count'] == 10, report
+          assert report['pass_count'] == 10, report
+          assert report['fail_count'] == 0, report
+          assert report['simulation_only'] is True, report
+          assert report['live_side_effects'] is False, report
+          assert report['external_action_attempted'] is False, report
+          assert report['physical_pc_status'] == 'BLOCKED_PENDING_HARDWARE', report
+          assert report['network_required'] is False, report
+          assert report['shell_execution_required'] is False, report
+          print('AI-runtime Stage 26 safety certification: PASS')
+          PY
+
+      - name: Publish Stage 26 runtime safety evidence
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: runtime-stage26-safety-${{ github.sha }}
+          path: build/stage26/pass-1/
+          if-no-files-found: error
+          retention-days: 30
