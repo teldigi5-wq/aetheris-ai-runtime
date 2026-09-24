@@ -1,0 +1,56 @@
+version: 2
+
+updates:
+  - package-ecosystem: "pip"
+    directory: "/aetheris-quant"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # Keep routine version-update PR noise disabled; security updates remain separate.
+    open-pull-requests-limit: 0
+    groups:
+      quant-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "pip"
+    directory: "/aetheris-reasoning"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 0
+    groups:
+      reasoning-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "maven"
+    directories:
+      - "/orchestrator-service"
+      - "/workstation-agent"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 0
+    groups:
+      maven-by-dependency:
+        patterns:
+          - "*"
+        group-by: "dependency-name"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 0
+    groups:
+      github-actions-updates:
+        patterns:
+          - "*"
