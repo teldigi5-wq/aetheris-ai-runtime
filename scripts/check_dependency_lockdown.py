@@ -144,6 +144,8 @@ def verify_ai_container_policy() -> None:
         fail(f"orchestrator runtime must run as exact non-root UID/GID 10001:10001: {user_lines!r}")
     if "COPY --from=build --chown=10001:10001 /app/target/*.jar app.jar" not in lines:
         fail("orchestrator runtime JAR must be copied with non-root ownership")
+    if "install -d -o 10001 -g 10001 /app/workspace" not in text:
+        fail("orchestrator runtime must provision /app/workspace for the non-root runtime user")
     if "EXPOSE 8090" not in lines:
         fail("orchestrator runtime container must keep the certified 8090 boundary")
 
