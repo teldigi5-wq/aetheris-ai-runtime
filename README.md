@@ -69,11 +69,11 @@ Models and reasoning workers may propose actions, but deterministic policy, appr
 
 See [`README-EXTRACTION.md`](README-EXTRACTION.md) for the deterministic extraction bundle provenance and the historical source-removal gate that preceded the completed two-repository cutover.
 
-## Licensing status
+## License
 
-This repository does not currently have a GitHub-recognized software license. Public repository visibility by itself does not grant general third-party reuse rights.
+Aetheris AI Runtime is licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE) for the full terms. Third-party dependencies and incorporated third-party materials remain subject to their respective licenses.
 
-The owner-level licensing decision is being tracked with the platform release blocker [`aetheris-platform#162`](https://github.com/teldigi5-wq/aetheris-platform/issues/162). If a license is selected for the Aetheris repositories, the runtime license and platform license should be reviewed together for compatible reuse terms before either project is represented as generally open-source licensed.
+Licensing does not alter the runtime certification boundary: the platform-certified checkpoint remains `68af39a1115a7330020c18b6e2cb601e66b8f22f`, physical owner-PC validation remains `BLOCKED_PENDING_HARDWARE`, and no production-activation, registry-publication or live-money execution claim is implied.
 
 ## Related repository
 
