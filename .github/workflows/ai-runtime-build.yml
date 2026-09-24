@@ -38,6 +38,9 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Compile quant sources
         run: python -m compileall -q aetheris-quant/app
+      - name: Test quant safety boundaries
+        working-directory: aetheris-quant
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
 
   workstation-agent:
     runs-on: windows-2022

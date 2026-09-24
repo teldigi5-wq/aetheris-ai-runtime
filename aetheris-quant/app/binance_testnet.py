@@ -8,12 +8,14 @@ from urllib.parse import urlencode
 
 import httpx
 
+from .execution_boundary import validate_binance_testnet_rest_base
+
 
 class BinanceTestnetClient:
     def __init__(self, api_key: str, api_secret: str, base_url: str, enabled: bool = False, recv_window: int = 10000, http_retries: int = 3, retry_base_seconds: float = 0.5):
         self.api_key = api_key.strip()
         self.api_secret = api_secret.strip()
-        self.base_url = base_url.rstrip("/")
+        self.base_url = validate_binance_testnet_rest_base(base_url)
         self.enabled = bool(enabled)
         self.recv_window = int(recv_window)
         self.http_retries = max(0, int(http_retries))
