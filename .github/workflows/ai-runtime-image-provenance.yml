@@ -56,6 +56,24 @@ jobs:
           test "$runtime_user" = "10001:10001"
           printf '%s\n' "$image_id" > runtime-image-id.txt
 
+      - name: Prove non-root workspace writability
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${IMAGE_NAME}:${GITHUB_SHA}"
+          docker run --rm --entrypoint sh "$image" -c '
+            set -eu
+            test "$(id -u)" = "10001"
+            test "$(id -g)" = "10001"
+            test -d /app/workspace
+            test -w /app/workspace
+            probe=/app/workspace/.aetheris-ci-write-probe
+            printf "%s\n" workspace-writable > "$probe"
+            test "$(cat "$probe")" = "workspace-writable"
+            rm "$probe"
+          '
+          printf 'PASS\n' > runtime-workspace-write-probe.txt
+
       - name: Export and round-trip runtime image
         shell: bash
         run: |
@@ -73,6 +91,16 @@ jobs:
           test "$loaded_id" = "$original_id"
           test "$loaded_revision" = "$GITHUB_SHA"
           test "$loaded_user" = "10001:10001"
+          docker run --rm --entrypoint sh "$image" -c '
+            set -eu
+            test "$(id -u)" = "10001"
+            test "$(id -g)" = "10001"
+            test -d /app/workspace
+            test -w /app/workspace
+            probe=/app/workspace/.aetheris-ci-roundtrip-probe
+            : > "$probe"
+            rm "$probe"
+          '
 
       - name: Write hosted runtime artifact evidence
         shell: bash
@@ -90,6 +118,9 @@ jobs:
           archive = Path(f'{name}-{sha}.tar.gz')
           digest = hashlib.sha256(archive.read_bytes()).hexdigest()
           image_id = Path('runtime-image-id.txt').read_text(encoding='utf-8').strip()
+          workspace_probe = Path('runtime-workspace-write-probe.txt').read_text(encoding='utf-8').strip()
+          if workspace_probe != 'PASS':
+              raise SystemExit(f'unexpected workspace write probe result: {workspace_probe!r}')
           canonical_main = os.environ.get('GITHUB_EVENT_NAME') == 'push' and os.environ.get('GITHUB_REF') == 'refs/heads/main'
           release_tag = f'runtime-{sha}'
           report = {
@@ -104,10 +135,12 @@ jobs:
               'archive_sha256': digest,
               'release_tag': release_tag,
               'release_publication_expected': canonical_main,
+              'runtime_user': '10001:10001',
+              'workspace_write_probe': True,
               'registry_publication_claim': False,
               'production_deployment_claim': False,
               'physical_pc_validation': False,
-              'truth_boundary': 'Hosted GitHub Actions runtime image build and archive round-trip proof. This does not claim container-registry publication, production deployment, or physical owner-PC validation.'
+              'truth_boundary': 'Hosted GitHub Actions runtime image build, non-root workspace write probe, and archive round-trip proof. This does not claim container-registry publication, production deployment, or physical owner-PC validation.'
           }
           Path('runtime-image-provenance.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
           print(json.dumps(report, indent=2, sort_keys=True))
@@ -124,6 +157,7 @@ jobs:
             aetheris-ai-runtime-${{ github.sha }}.tar.gz
             aetheris-ai-runtime-${{ github.sha }}.tar.gz.sha256
             runtime-image-id.txt
+            runtime-workspace-write-probe.txt
             runtime-image-provenance.json
           if-no-files-found: error
 
@@ -145,4 +179,5 @@ jobs:
             "$archive" \
             "${archive}.sha256" \
             runtime-image-id.txt \
+            runtime-workspace-write-probe.txt \
             runtime-image-provenance.json
