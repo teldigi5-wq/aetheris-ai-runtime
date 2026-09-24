@@ -16,6 +16,9 @@ EXACT_SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 FORBIDDEN_LICENSE_MARKERS = ("AGPL-", "SSPL-", "BUSL-", "COMMONS CLAUSE", "GPL-3.0-ONLY")
 CORE_MAVEN_MODULES = ("gateway", "user-service", "identity-service", "audit-service")
 AI_MAVEN_MODULES = ("orchestrator-service", "workstation-agent")
+AI_RUNTIME_BUILDER_IMAGE = "eclipse-temurin:21.0.12_8-jdk-noble@sha256:5dd9dbc6f6eccb82184b340da9488b70b68d2af81474cf8f280f8ce6b2933282"
+AI_RUNTIME_JRE_IMAGE = "eclipse-temurin:21.0.12_8-jre-noble@sha256:86883d2dc1d0e57d4fb2c539f5fd3a2155749c0bdcdccb9cb452828bdc8b0caf"
+AI_RUNTIME_MAVEN_SHA512 = "bcfe4fe305c962ace56ac7b5fc7a08b87d5abd8b7e89027ab251069faebee516b0ded8961445d6d91ec1985dfe30f8153268843c89aa392733d1a3ec956c9978"
 
 
 def fail(message: str) -> None:
@@ -117,6 +120,34 @@ def verify_ai_toolchain() -> None:
         fail("aetheris-quant/.python-version must contain 3.13.15")
 
 
+def verify_ai_container_policy() -> None:
+    dockerfile = require_file("orchestrator-service/Dockerfile")
+    if not dockerfile.is_file():
+        return
+    text = dockerfile.read_text(encoding="utf-8")
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    from_lines = [line for line in lines if line.startswith("FROM ")]
+    expected_from = [
+        f"FROM {AI_RUNTIME_BUILDER_IMAGE} AS build",
+        f"FROM {AI_RUNTIME_JRE_IMAGE}",
+    ]
+    if from_lines != expected_from:
+        fail(f"orchestrator runtime base images must remain exact digest pins: {from_lines!r}")
+    if "ARG MAVEN_VERSION=3.9.11" not in lines:
+        fail("orchestrator runtime Maven version must remain pinned to 3.9.11")
+    if f"ARG MAVEN_SHA512={AI_RUNTIME_MAVEN_SHA512}" not in lines:
+        fail("orchestrator runtime Maven archive SHA-512 pin changed unexpectedly")
+    if "sha512sum --check --strict" not in text:
+        fail("orchestrator runtime Maven download must be verified with sha512sum --check --strict")
+    user_lines = [line for line in lines if line.startswith("USER ")]
+    if user_lines != ["USER 10001:10001"]:
+        fail(f"orchestrator runtime must run as exact non-root UID/GID 10001:10001: {user_lines!r}")
+    if "COPY --from=build --chown=10001:10001 /app/target/*.jar app.jar" not in lines:
+        fail("orchestrator runtime JAR must be copied with non-root ownership")
+    if "EXPOSE 8090" not in lines:
+        fail("orchestrator runtime container must keep the certified 8090 boundary")
+
+
 def verify_maven(modules: tuple[str, ...], include_root: bool) -> None:
     pom_paths = (["pom.xml"] if include_root else []) + [f"{module}/pom.xml" for module in modules]
     for relative in pom_paths:
@@ -151,6 +182,7 @@ def verify_core_boundaries() -> None:
 
 def verify_ai_boundaries() -> None:
     for relative in (
+        "orchestrator-service/Dockerfile",
         "orchestrator-service/pom.xml",
         "workstation-agent/pom.xml",
         "aetheris-quant/requirements.in",
@@ -170,6 +202,7 @@ def write_hash_manifest(scope: str) -> None:
         output = ROOT / "build-evidence/core-dependency-lock-sha256.txt"
     elif scope == "ai-runtime":
         evidence_files = [
+            "orchestrator-service/Dockerfile",
             "aetheris-quant/requirements.in", "aetheris-quant/requirements.lock.txt",
             "aetheris-reasoning/pyproject.toml", ".mvn/wrapper/maven-wrapper.properties",
             *(f"build-evidence/maven/{module}.txt" for module in AI_MAVEN_MODULES),
@@ -178,6 +211,7 @@ def write_hash_manifest(scope: str) -> None:
     else:
         evidence_files = [
             "dashboard/package.json", "dashboard/package-lock.json", "dashboard/Dockerfile",
+            "orchestrator-service/Dockerfile",
             "aetheris-quant/requirements.in", "aetheris-quant/requirements.lock.txt",
             "aetheris-reasoning/pyproject.toml", ".mvn/wrapper/maven-wrapper.properties",
             *(f"build-evidence/maven/{module}.txt" for module in (*CORE_MAVEN_MODULES, *AI_MAVEN_MODULES)),
@@ -206,6 +240,7 @@ def main() -> int:
     if args.scope in ("ai-runtime", "all"):
         verify_quant_python()
         verify_ai_toolchain()
+        verify_ai_container_policy()
         verify_maven(AI_MAVEN_MODULES, include_root=False)
         verify_ai_boundaries()
     if args.write_hashes:

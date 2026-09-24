@@ -48,10 +48,12 @@ jobs:
           revision="$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
           source="$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')"
           evidence_class="$(docker image inspect "$image" --format '{{index .Config.Labels "io.aetheris.evidence-class"}}')"
+          runtime_user="$(docker image inspect "$image" --format '{{.Config.User}}')"
           test -n "$image_id"
           test "$revision" = "$GITHUB_SHA"
           test "$source" = "https://github.com/${GITHUB_REPOSITORY}"
           test "$evidence_class" = "HOSTED_RUNTIME_ARTIFACT"
+          test "$runtime_user" = "10001:10001"
           printf '%s\n' "$image_id" > runtime-image-id.txt
 
       - name: Export and round-trip runtime image
@@ -67,8 +69,10 @@ jobs:
           gzip -dc "$archive" | docker load
           loaded_id="$(docker image inspect "$image" --format '{{.Id}}')"
           loaded_revision="$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+          loaded_user="$(docker image inspect "$image" --format '{{.Config.User}}')"
           test "$loaded_id" = "$original_id"
           test "$loaded_revision" = "$GITHUB_SHA"
+          test "$loaded_user" = "10001:10001"
 
       - name: Write hosted runtime artifact evidence
         shell: bash
