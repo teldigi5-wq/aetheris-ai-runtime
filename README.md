@@ -69,6 +69,12 @@ Models and reasoning workers may propose actions, but deterministic policy, appr
 
 See [`README-EXTRACTION.md`](README-EXTRACTION.md) for the deterministic extraction bundle provenance and the historical source-removal gate that preceded the completed two-repository cutover.
 
+## Licensing status
+
+This repository does not currently have a GitHub-recognized software license. Public repository visibility by itself does not grant general third-party reuse rights.
+
+The owner-level licensing decision is being tracked with the platform release blocker [`aetheris-platform#162`](https://github.com/teldigi5-wq/aetheris-platform/issues/162). If a license is selected for the Aetheris repositories, the runtime license and platform license should be reviewed together for compatible reuse terms before either project is represented as generally open-source licensed.
+
 ## Related repository
 
 Platform repository: [`teldigi5-wq/aetheris-platform`](https://github.com/teldigi5-wq/aetheris-platform)
