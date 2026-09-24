@@ -16,7 +16,8 @@ RUN mvn -q -DskipTests package
 FROM eclipse-temurin:21.0.12_8-jre-noble@sha256:86883d2dc1d0e57d4fb2c539f5fd3a2155749c0bdcdccb9cb452828bdc8b0caf
 WORKDIR /app
 RUN groupadd --system --gid 10001 aetheris \
- && useradd --system --uid 10001 --gid aetheris --create-home --home-dir /home/aetheris --shell /usr/sbin/nologin aetheris
+ && useradd --system --uid 10001 --gid aetheris --create-home --home-dir /home/aetheris --shell /usr/sbin/nologin aetheris \
+ && install -d -o 10001 -g 10001 /app/workspace
 COPY --from=build --chown=10001:10001 /app/target/*.jar app.jar
 USER 10001:10001
 EXPOSE 8090
