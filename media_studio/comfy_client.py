@@ -158,6 +158,34 @@ class ComfyMediaClient:
             raise MediaTransportError("ComfyUI returned an unexpected JSON structure")
         return value
 
+    def observed_device_snapshot(self) -> dict[str, object]:
+        """Read reported VRAM from local ComfyUI; never claim actual PC certification."""
+        if not self.settings.enabled:
+            raise MediaDisabled("Local GPU telemetry is disabled")
+        stats = self._json("/system_stats")
+        devices = stats.get("devices")
+        if not isinstance(devices, list):
+            raise MediaTransportError("ComfyUI did not report device telemetry")
+        reported = []
+        for item in devices[:4]:
+            if not isinstance(item, dict):
+                continue
+            total, free = item.get("vram_total"), item.get("vram_free")
+            if (not isinstance(total, (int, float)) or isinstance(total, bool)
+                    or not isinstance(free, (int, float)) or isinstance(free, bool)
+                    or not 0 <= free <= total <= 2**52):
+                continue
+            reported.append({
+                "type": str(item.get("type", "unknown"))[:48],
+                "vramTotalMiB": round(total / (1024 * 1024)),
+                "vramFreeMiB": round(free / (1024 * 1024)),
+            })
+        return {
+            "source": "COMFYUI_REPORTED_NOT_CERTIFIED",
+            "devices": reported,
+            "physicalPcStatus": "BLOCKED_PENDING_HARDWARE",
+        }
+
     def queue_image(self, job: ImageJob) -> str:
         job.validate(self.settings)
         # This is a best-effort concurrency limit: ComfyUI itself owns its GPU queue.
