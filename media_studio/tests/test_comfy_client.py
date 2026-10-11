@@ -22,6 +22,8 @@ class FakeLocalComfy:
 
     def request(self, path, *, method="GET", payload=None, max_bytes=2_097_152):
         self.calls.append((path, method, payload))
+        if path == "/system_stats":
+            return json.dumps({"devices": [{"type": "cuda", "vram_total": 6*1024**3, "vram_free": 4*1024**3}]}).encode()
         if path == "/queue":
             return json.dumps({"queue_running": [[1]] if self.pending else [], "queue_pending": []}).encode()
         if path == "/prompt":
@@ -123,6 +125,14 @@ class MediaBoundaryTests(unittest.TestCase):
         ]}}}}
         self.assertEqual([{"filename": "AetherisMedia_00001_.png", "type": "output"}],
                          self.client().image_outputs(ID))
+
+
+    def test_local_gpu_snapshot_is_reported_not_certified(self):
+        report = self.client().observed_device_snapshot()
+        self.assertEqual("COMFYUI_REPORTED_NOT_CERTIFIED", report["source"])
+        self.assertEqual("BLOCKED_PENDING_HARDWARE", report["physicalPcStatus"])
+        self.assertEqual(6144, report["devices"][0]["vramTotalMiB"])
+        self.assertEqual(["/system_stats"], [call[0] for call in self.fake.calls])
 
     def test_download_rejects_traversal_and_existing_destination(self):
         with tempfile.TemporaryDirectory() as path:
