@@ -14,8 +14,8 @@ from typing import Any, Protocol
 
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_IMAGE_BYTES = 30 * 1024 * 1024
-CHECKPOINT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}\\.(?:safetensors|ckpt)$")
-FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,180}\\.(?:png|jpg|jpeg|webp)$", re.I)
+CHECKPOINT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}\.(?:safetensors|ckpt)$")
+FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,180}\.(?:png|jpg|jpeg|webp)$", re.I)
 PROMPT_ID = re.compile(r"^[a-f0-9-]{36}$", re.I)
 
 
@@ -214,8 +214,8 @@ class ComfyMediaClient:
         query = urllib.parse.urlencode({"filename": filename, "type": "output", "subfolder": ""})
         data = self.transport.request("/view?" + query, max_bytes=MAX_IMAGE_BYTES)
         # Validate signatures before exposing a generated artifact.
-        if not (data.startswith(b"\\x89PNG\\r\\n\\x1a\\n") or
-                data.startswith(b"\\xff\\xd8\\xff") or data.startswith(b"RIFF") and data[8:12] == b"WEBP"):
+        if not (data.startswith(b"\x89PNG\r\n\x1a\n") or
+                data.startswith(b"\xff\xd8\xff") or data.startswith(b"RIFF") and data[8:12] == b"WEBP"):
             raise MediaTransportError("ComfyUI returned non-image bytes")
         fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
