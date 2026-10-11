@@ -7,12 +7,17 @@ import sys
 from pathlib import Path
 
 from .comfy_client import ComfyMediaClient, ImageJob, MediaSettings, MediaDisabled, MediaTransportError, PROMPT_ID
+from .hardware_planner import PlanningScenario, plan_scenario
 
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Local ComfyUI image client; cloud and paid APIs are forbidden")
     subs = p.add_subparsers(dest="command", required=True)
     subs.add_parser("check", help="Inspect configuration without performing network requests")
+    planner = subs.add_parser("plan", help="Offline hypothetical GPU planning; always non-executable")
+    planner.add_argument("--workflow", choices=("image", "video"), default="image")
+    planner.add_argument("--hypothetical-vram-mib", type=int, default=None)
+    planner.add_argument("--hypothetical-free-vram-mib", type=int, default=None)
     img = subs.add_parser("submit-image", help="Submit one allowlisted local checkpoint graph")
     img.add_argument("--checkpoint", required=True, help="Exact installed checkpoint basename")
     img.add_argument("--prompt", required=True)
@@ -50,6 +55,14 @@ def main(argv: list[str] | None = None) -> int:
                 "cloudFallback": False,
                 "paidProviderCalls": False,
             }, indent=2))
+            return 0
+        if options.command == "plan":
+            scenario = PlanningScenario(
+                workflow=options.workflow,
+                hypothetical_total_vram_mib=options.hypothetical_vram_mib,
+                hypothetical_free_vram_mib=options.hypothetical_free_vram_mib,
+            )
+            print(json.dumps(plan_scenario(scenario), indent=2))
             return 0
         if options.command == "video-plan":
             print("Video backend NOT WIRED. Requires a reviewed, model-specific API workflow, VRAM validation, bounded artifact handling and owner policy.")
