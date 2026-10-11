@@ -91,12 +91,12 @@ def validate_skills(root: Path = ROOT) -> list[str]:
             errors.append(f"{name}: invalid Agent Skills frontmatter")
         if len(content) > 12000 or "TEMPLATE_ONLY" not in content or "untrusted data" not in content.lower():
             errors.append(f"{name}: skill safety/truth markers missing")
-        if re.search(r"(?m)^\\`\\`\\`(?:bash|sh|powershell|pwsh|python|javascript)", content):
+        if re.search(r"(?m)^```(?:bash|sh|powershell|pwsh|python|javascript)", content):
             errors.append(f"{name}: executable fenced content prohibited")
     if seen != set(CAPABILITIES):
         errors.append("missing pinned skills")
     skills_dir = root / "skills"
-    expected_files = {"catalog.json"} | {f"{name}/SKILL.md" for name in CAPABILITIES}
+    expected_files = {"catalog.json", "README.md"} | {f"{name}/SKILL.md" for name in CAPABILITIES}
     for path in skills_dir.rglob("*"):
         if path.is_symlink():
             errors.append("symlink is prohibited in skills catalog")
