@@ -16,12 +16,13 @@ This is a zero-subscription, zero-paid-API **opt-in local CLI** with a fixed bui
    $env:AETHERIS_COMFYUI_URL = "http://127.0.0.1:8188"
    $env:AETHERIS_MEDIA_ALLOWED_CHECKPOINTS = "YOUR_INSTALLED_SD15_CHECKPOINT.safetensors"
    python -m media_studio check
+   python -m media_studio probe-local-gpu
    python -m media_studio submit-image --checkpoint YOUR_INSTALLED_SD15_CHECKPOINT.safetensors --prompt "a mountain at sunrise" --width 512 --height 512 --steps 20
    python -m media_studio outputs --id YOUR_RETURNED_PROMPT_ID
    python -m media_studio save-image --id YOUR_RETURNED_PROMPT_ID --to ./generated-image.png
    ```
 
-The submit call reports `SUBMITTED_NOT_COMPLETED`. The history check is required; queued jobs do not count as generated images. `save-image` validates the returned filename, disallows subfolders, checks a bounded image signature/size, and never overwrites an existing file.
+The read-only GPU probe reports ComfyUI-observed memory in MiB, not independent GPU or owner-PC validation. The submit call reports `SUBMITTED_NOT_COMPLETED`. The history check is required; queued jobs do not count as generated images. `save-image` validates the returned filename, disallows subfolders, checks a bounded image signature/size, and never overwrites an existing file.
 
 The baseline API workflow supports SD1.5-style standard checkpoints. Other model architectures (FLUX, SDXL refiners, high-resolution upscalers, Wan, LTX Video) need separately reviewed templates; no unsupported checkpoint is promised to work just because it is allowlisted.
 
