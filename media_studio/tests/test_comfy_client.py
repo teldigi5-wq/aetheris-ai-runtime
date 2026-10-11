@@ -18,7 +18,7 @@ class FakeLocalComfy:
         self.calls = []
         self.pending = False
         self.history = {}
-        self.image = b"\\x89PNG\\r\\n\\x1a\\n" + b"some fake png test bytes"
+        self.image = b"\x89PNG\r\n\x1a\n" + b"some fake png test bytes"
 
     def request(self, path, *, method="GET", payload=None, max_bytes=2_097_152):
         self.calls.append((path, method, payload))
@@ -130,7 +130,7 @@ class MediaBoundaryTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.client().download_image("../secret.png", out)
             self.assertEqual(out, self.client().download_image("AetherisMedia_00001_.png", out))
-            self.assertTrue(out.read_bytes().startswith(b"\\x89PNG"))
+            self.assertTrue(out.read_bytes().startswith(b"\x89PNG"))
             with self.assertRaises(FileExistsError):
                 self.client().download_image("AetherisMedia_00001_.png", out)
 
