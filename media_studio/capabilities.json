@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "status": "SOURCE_IMPLEMENTED_NO_HARDWARE_VERIFICATION",
+  "physicalPcStatus": "BLOCKED_PENDING_HARDWARE",
+  "defaultEnabled": false,
+  "allowPaidProviders": false,
+  "allowCloudFallback": false,
+  "desktopWiring": "NOT_WIRED",
+  "gatewayWiring": "NOT_WIRED",
+  "engines": {
+    "image": {
+      "implementation": "COMFYUI_LOCAL_IMAGE_CLI",
+      "enabledByDefault": false,
+      "kind": "text-to-image",
+      "workflow": "fixed-sd15-api",
+      "maxConcurrency": "COMFYUI_QUEUE_BEST_EFFORT_ONE",
+      "maxPixels": 1048576,
+      "installation": "OWNER_MANAGED"
+    },
+    "video": {
+      "implementation": "MODEL_WORKFLOW_GATE",
+      "status": "PLANNED_NOT_WIRED",
+      "enabledByDefault": false,
+      "upgradeRequiredToAssess": true,
+      "modelFamilies": [
+        "LTX-Video",
+        "Wan"
+      ],
+      "licensesRequireReview": true
+    },
+    "editing": {
+      "implementation": "PLANNED_NOT_WIRED",
+      "enabledByDefault": false
+    },
+    "upscaling": {
+      "implementation": "PLANNED_NOT_WIRED",
+      "enabledByDefault": false
+    }
+  },
+  "mediaApiBoundary": "NO_UNAUTHENTICATED_HTTP_SERVICE"
+}
