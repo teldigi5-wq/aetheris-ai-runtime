@@ -27,6 +27,7 @@ def parser() -> argparse.ArgumentParser:
     download = subs.add_parser("save-image", help="Save the first image from verified ComfyUI job history")
     download.add_argument("--id", required=True)
     download.add_argument("--to", type=Path, required=True)
+    subs.add_parser("probe-local-gpu", help="Read reported VRAM without claiming device certification")
     subs.add_parser("video-plan", help="Explain gated future video engine readiness")
     return p
 
@@ -57,7 +58,9 @@ def main(argv: list[str] | None = None) -> int:
         if not cfg.enabled:
             raise MediaDisabled("Media execution is disabled by default")
         client = ComfyMediaClient(cfg)
-        if options.command == "submit-image":
+        if options.command == "probe-local-gpu":
+            print(json.dumps(client.observed_device_snapshot(), indent=2))
+        elif options.command == "submit-image":
             job = ImageJob(
                 options.prompt, options.checkpoint, options.negative, options.width,
                 options.height, options.steps, options.seed, options.cfg)
