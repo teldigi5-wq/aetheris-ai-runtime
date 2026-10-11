@@ -37,6 +37,20 @@ The baseline API workflow supports SD1.5-style standard checkpoints. Other model
 - Model files and third-party custom nodes remain an owner-managed supply-chain risk. Avoid installing arbitrary workflow packs/scripts; respect each checkpoint's license and content policy.
 - No guarantee of sufficient VRAM, available GPU, speed, quality, or zero electricity/storage cost.
 
+## Offline GPU-upgrade planning (works without owning a laptop)
+
+This planning command uses **only numbers you enter**. It does not detect the currently installed GPU, contact ComfyUI or activate generation:
+
+```powershell
+python -m media_studio plan --workflow image --hypothetical-vram-mib 6144
+python -m media_studio plan --workflow image --hypothetical-vram-mib 16384
+python -m media_studio plan --workflow video --hypothetical-vram-mib 24576
+```
+
+Results group the *hypothetical* VRAM into coarse capacity bands, suggest conservative **image experiment sizes only**, and return `BLOCKED_PENDING_HARDWARE` regardless of the GPU size entered. Video always returns `PLANNED_NOT_WIRED`. None of these bands asserts that an arbitrary model fits or achieves target performance. A model's *actual* VRAM requirements depend on the exact checkpoint, quantization, offload configuration, resolution, duration and drivers.
+
+The command never installs checkpoints, fetches telemetry, runs a model, makes network requests, or grants execution authority. Optional free-VRAM input is likewise a hypothetical estimate and **not** automatic detection.
+
 ## Hardware-adaptive video strategy
 
 `media_studio/capabilities.json` declares video `PLANNED_NOT_WIRED`. After GPU replacement, separately validate a model-specific, preapproved API workflow (Wan or LTX), licensing, VRAM usage, max duration/resolution, video outputs, storage quotas, cancellation and deterministic owner permissions. The CLI's `video-plan` does not generate video.
