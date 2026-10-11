@@ -35,9 +35,9 @@ The runtime-owned source roots above should **not** be copied back into the plat
 
 ## Integration with `aetheris-platform`
 
-At the September 2026 platform promotion, the certified runtime checkpoint was:
+The platform-certified runtime checkpoint (verified October 11, 2026) is:
 
-`68af39a1115a7330020c18b6e2cb601e66b8f22f`
+`65a6262717adcd52ac8d8a16ed6f223e299fd74d`
 
 The platform records that checkpoint in `architecture/ai-runtime-certification-reference.json` and integrates the runtime through:
 
@@ -48,9 +48,9 @@ The platform records that checkpoint in `architecture/ai-runtime-certification-r
 
 That SHA is a **certification checkpoint**, not a claim that runtime development must remain permanently fixed there. A later runtime SHA should be promoted only after its applicable runtime suite and the platform integration suite are green and the platform certification reference is deliberately advanced.
 
-## Certification and truth boundaries
+## Proposed read-only Agent Skills catalog\n\nThe proposed `skills/` directory holds `github-readonly` and `incident-investigation` as **TEMPLATE_ONLY** skill definitions plus an Aetheris fail-closed manifest validator and negative tests. It does not enable execution, extend MCP permissions or certify any live site/PC workflow. See [`skills/README.md`](skills/README.md).\n\n## Certification and truth boundaries
 
-The certified checkpoint `68af39a1115a7330020c18b6e2cb601e66b8f22f` completed the applicable canonical runtime certification suite. The platform certification reference records that checkpoint as `6_OF_6_SUCCESS`.
+The certified checkpoint `65a6262717adcd52ac8d8a16ed6f223e299fd74d` completed the applicable canonical runtime certification suite. The platform certification reference records that checkpoint as `6_OF_6_SUCCESS`.
 
 Certification is intentionally narrower than a production claim:
 
@@ -73,7 +73,7 @@ See [`README-EXTRACTION.md`](README-EXTRACTION.md) for the deterministic extract
 
 Aetheris AI Runtime is licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE) for the full terms. Third-party dependencies and incorporated third-party materials remain subject to their respective licenses.
 
-Licensing does not alter the runtime certification boundary: the platform-certified checkpoint remains `68af39a1115a7330020c18b6e2cb601e66b8f22f`, physical owner-PC validation remains `BLOCKED_PENDING_HARDWARE`, and no production-activation, registry-publication or live-money execution claim is implied.
+Licensing does not alter the runtime certification boundary: the platform-certified checkpoint remains `65a6262717adcd52ac8d8a16ed6f223e299fd74d`, physical owner-PC validation remains `BLOCKED_PENDING_HARDWARE`, and no production-activation, registry-publication or live-money execution claim is implied.
 
 ## Related repository
 
