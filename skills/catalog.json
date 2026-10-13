@@ -179,6 +179,54 @@
       "external_hosts": [],
       "owner_approval_required_for_mutations": true,
       "max_evidence_items": 20
+    },
+    {
+      "name": "realistic-globe-experience-review",
+      "path": "skills/realistic-globe-experience-review/SKILL.md",
+      "description": "Review realistic Earth geography, interactive globe UX, 2D fallback and mobile performance.",
+      "risk": "LOW",
+      "effect": "READ_ONLY",
+      "status": "TEMPLATE_ONLY",
+      "execution_enabled": false,
+      "allowed_tools": [
+        "design.3d.read",
+        "design.ui.read"
+      ],
+      "external_hosts": [],
+      "owner_approval_required_for_mutations": true,
+      "max_evidence_items": 20
+    },
+    {
+      "name": "agent-journey-trust-review",
+      "path": "skills/agent-journey-trust-review/SKILL.md",
+      "description": "Review truthful tool-using agent progress, verification labels and connected journey state handoffs.",
+      "risk": "LOW",
+      "effect": "READ_ONLY",
+      "status": "TEMPLATE_ONLY",
+      "execution_enabled": false,
+      "allowed_tools": [
+        "design.ui.read",
+        "observability.health.read"
+      ],
+      "external_hosts": [],
+      "owner_approval_required_for_mutations": true,
+      "max_evidence_items": 20
+    },
+    {
+      "name": "arrival-companion-ux-review",
+      "path": "skills/arrival-companion-ux-review/SKILL.md",
+      "description": "Review first-hour arrival UX, sourced travel data, offline readiness and accessibility.",
+      "risk": "LOW",
+      "effect": "READ_ONLY",
+      "status": "TEMPLATE_ONLY",
+      "execution_enabled": false,
+      "allowed_tools": [
+        "design.ui.read",
+        "quality.accessibility.read"
+      ],
+      "external_hosts": [],
+      "owner_approval_required_for_mutations": true,
+      "max_evidence_items": 20
     }
   ]
 }

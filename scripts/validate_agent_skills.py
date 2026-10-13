@@ -47,6 +47,18 @@ CAPABILITIES = {
         "tools": {"design.motion.read", "media.asset-metadata.read"},
         "hosts": set(),
     },
+    "realistic-globe-experience-review": {
+        "tools": {"design.3d.read", "design.ui.read"},
+        "hosts": set(),
+    },
+    "agent-journey-trust-review": {
+        "tools": {"design.ui.read", "observability.health.read"},
+        "hosts": set(),
+    },
+    "arrival-companion-ux-review": {
+        "tools": {"design.ui.read", "quality.accessibility.read"},
+        "hosts": set(),
+    },
 }
 SKILL_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 FRONTMATTER = re.compile(r"\A---\nname: ([a-z0-9-]+)\ndescription: ([^\n]+)\n---\n", re.ASCII)
