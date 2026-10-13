@@ -160,6 +160,59 @@ subscriber capacity, task deletion and rejected callback exceptions.
 - Do not call this class a live SSE feature until actual authorized
   source-to-client delivery and PC hardware tests are complete.
 
+## Committed-event notification boundary — isolated staging slice
+
+`OwnerTaskPostCommitGate` and `VerifiedOwnerPostCommitJournalBridge` are
+**standalone, non-Spring-registered Java classes**. They prepare an internal
+handoff from the real task journal to the owner-filtered event relay. They
+do not expose a new API, activate the client, or alter existing task
+publication.
+
+After an internal, trusted caller has appended a journal record **in the
+same active Spring transaction**, it may stage only a task UUID. The gate
+registers a Spring `TransactionSynchronization`, coalesces duplicate task
+IDs within the current transaction, caps pending task IDs at **128**, and
+notifies its callback **only** if the transaction completes with
+`STATUS_COMMITTED`. Invalid IDs, no actual transaction, rollback and
+capacity overflow do not produce callbacks. No messages, metadata,
+credentials, raw JWTs or source events are passed to the callback.
+
+The bridge runs the next owner-relay read in a separate
+`PROPAGATION_REQUIRES_NEW`, read-only database transaction after the
+original transaction commits. This is essential: the relay must query
+**committed** journal and task rows, not perform owner checks against a
+transaction that could still roll back. The existing relay independently
+checks the stored task owner again and sanitizes the event output.
+
+Real `SpringBootTest` + `TransactionTemplate` + JPA/H2 tests prove:
+- No subscriber sees event updates before commit;
+- A rolled-back journal append triggers no notification and leaves no
+  persisted history row;
+- Two distinct signed owners receive only their own committed updates;
+- Duplicate task IDs in one transaction result in a single callback,
+  while multiple events for the same task still appear correctly;
+- Calls outside an actual transaction and null task IDs fail closed;
+- A per-transaction 128-task cap is enforced and cleared after completion;
+- Callback failures cannot turn a committed journal write into a false
+  caller-observed rollback, and callback exceptions disclose no secrets.
+
+**Remaining boundary:** This is not a durable message outbox. A process
+crash between commit and callback (or an unavailable callback) can lose
+notifications. No replay guarantee, cluster delivery, dedup across
+restarts or external owner revocation integration is claimed. Before
+production, implement a durable outbox or recovery/replay proof, review
+callback backpressure and post-commit thread handling, and certify
+transaction isolation across two real accounts and multiple runtime
+instances.
+
+Importantly, the current `TaskEventStreamService.publish()` still has
+its pre-existing unscoped event delivery path. We did **not** modify
+that service or wire the relay into it, because the unsafe external
+`/api/orchestrator/tasks*`, `/missions*` and `/live*` endpoints remain
+quarantined by PR #24. The new components cannot be activated until a
+separately reviewed owner-safe publisher and transport are in place.
+No physical owner-PC or production data tests were performed.
+
 ## Explicit remaining blockers
 
 1. Platform draft [#228](https://github.com/teldigi5-wq/aetheris-platform/pull/228)
