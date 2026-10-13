@@ -33,6 +33,16 @@ python scripts/validate_extension_ecosystem.py
 python -m unittest discover -s tests -p 'test_extension_ecosystem.py' -v
 ~~~
 
+To search locally across the 14 curated sources by category, topic or reported GitHub license:
+
+~~~text
+python scripts/search_extension_catalog.py --category local-speech
+python scripts/search_extension_catalog.py --query GitHub
+python scripts/search_extension_catalog.py --reported-license Apache-2.0
+~~~
+
+Search returns reference-only metadata and **does not** query the internet, start a service, verify an installed binary or request an API key.
+
 For **a pre-existing local** third-party Agent Skill folder, the offline static quarantine checker is:
 
 ~~~text
