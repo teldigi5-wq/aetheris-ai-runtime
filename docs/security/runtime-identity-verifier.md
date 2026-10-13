@@ -37,6 +37,36 @@ Synthetic JUnit tests check two distinct signed identities, token tampering,
 wrong signing key, missing/incorrect claims, unsigned input, expired/future
 tokens, wrong scope, weak/default secret and fail-closed HTTP quarantine.
 
+## Signed owner-scoped task status reader (stacked, still internal)
+
+`VerifiedOwnerTaskRead` combines the independently signed
+`RuntimeAccessTokenVerifier` with JPA task owner lookups. It is an
+**unregistered Java component, not a Spring controller**. Before returning a
+task it checks a fresh JWT signature/issuer/audience/read scope and compares
+the immutable numeric owner from the database to that verified token's
+`IdentityAccount.id`.
+
+Until project-membership identity is cryptographically bound and audited,
+only **owner-global tasks with `owner_project_id IS NULL`** can be returned.
+Project-scoped tasks are denied, even to a user with the correct owner ID.
+Legacy ownerless and other-user rows remain inaccessible. `recent()` uses
+the owner/global-project indexed repository query and caps results at 50.
+A cross-account request and missing ID both return the same coarse
+`TASK_NOT_AVAILABLE` message (not a leaky owner/ID explanation).
+
+The returned `TaskStatusView` exposes only task ID, state, agent ID and
+update timestamp; private `commandText`, task messages, attachment content,
+email, account ID and ownership metadata are never serialized into the DTO.
+Database-backed tests use two synthetic signed account IDs, other-project
+records and ownerless legacy tasks to check both list and lookup isolation,
+including wrong audience, missing read scope and malformed tokens.
+
+**Still blocked:** No new HTTP endpoint, servlet principal context, live SSE
+subscription, Tauri credential bridge, host action, agent execution or
+release activation. Existing global/task/mission route quarantine remains
+active. This deliberately provides a proven building block, not a claim that
+the Syntra desktop can read live user tasks.
+
 ## Explicit remaining blockers
 
 1. Platform draft [#228](https://github.com/teldigi5-wq/aetheris-platform/pull/228)
