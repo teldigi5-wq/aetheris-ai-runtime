@@ -2,7 +2,7 @@
 import json
 import unittest
 
-from scripts.search_extension_catalog import search_sources
+from scripts.search_extension_catalog import search_sources, list_discovery_hubs
 
 
 class OfflineSearchTest(unittest.TestCase):
@@ -38,6 +38,15 @@ class OfflineSearchTest(unittest.TestCase):
         x = search_sources(query="n8n", limit=25)
         self.assertEqual("NOASSERTION", x["results"][0]["reportedLicense"])
         self.assertEqual("NOT_REVIEWED", x["results"][0]["licenseReview"])
+
+    def test_offline_discovery_hubs_are_uninstalled_links(self):
+        hubs = list_discovery_hubs()
+        self.assertEqual(6, len(hubs["hubs"]))
+        self.assertFalse(hubs["networkUsed"])
+        self.assertFalse(hubs["automaticInstallation"])
+        self.assertTrue(hubs["licenseReviewRequired"])
+        self.assertIn("https://huggingface.co/models", [x["url"] for x in hubs["hubs"]])
+        self.assertTrue(all(not x["installed"] and not x["executionEnabled"] for x in hubs["hubs"]))
 
     def test_invalid_limit_and_types_rejected(self):
         for limit in (0, 26, 10000, True, "3"):
