@@ -263,5 +263,73 @@
       "auto_update": false,
       "owner_install_approval": false
     }
+  ],
+  "discovery_hubs": [
+    {
+      "id": "agent-skills",
+      "url": "https://agentskills.io",
+      "kind": "skills-format",
+      "status": "REFERENCE_ONLY",
+      "trusted": false,
+      "network_fetch_enabled": false,
+      "install_enabled": false,
+      "execution_enabled": false,
+      "license_and_model_review_required": true
+    },
+    {
+      "id": "official-mcp",
+      "url": "https://registry.modelcontextprotocol.io",
+      "kind": "mcp-server-index",
+      "status": "REFERENCE_ONLY",
+      "trusted": false,
+      "network_fetch_enabled": false,
+      "install_enabled": false,
+      "execution_enabled": false,
+      "license_and_model_review_required": true
+    },
+    {
+      "id": "python-pypi",
+      "url": "https://pypi.org",
+      "kind": "python-packages",
+      "status": "REFERENCE_ONLY",
+      "trusted": false,
+      "network_fetch_enabled": false,
+      "install_enabled": false,
+      "execution_enabled": false,
+      "license_and_model_review_required": true
+    },
+    {
+      "id": "npm",
+      "url": "https://www.npmjs.com",
+      "kind": "javascript-packages",
+      "status": "REFERENCE_ONLY",
+      "trusted": false,
+      "network_fetch_enabled": false,
+      "install_enabled": false,
+      "execution_enabled": false,
+      "license_and_model_review_required": true
+    },
+    {
+      "id": "hugging-face-models",
+      "url": "https://huggingface.co/models",
+      "kind": "model-weights-and-cards",
+      "status": "REFERENCE_ONLY",
+      "trusted": false,
+      "network_fetch_enabled": false,
+      "install_enabled": false,
+      "execution_enabled": false,
+      "license_and_model_review_required": true
+    },
+    {
+      "id": "ollama-model-library",
+      "url": "https://ollama.com/library",
+      "kind": "local-model-library",
+      "status": "REFERENCE_ONLY",
+      "trusted": false,
+      "network_fetch_enabled": false,
+      "install_enabled": false,
+      "execution_enabled": false,
+      "license_and_model_review_required": true
+    }
   ]
 }
