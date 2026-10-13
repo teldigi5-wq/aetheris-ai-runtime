@@ -78,11 +78,15 @@ public final class VerifiedOwnerTaskJournalOutbox {
                 !TransactionSynchronizationManager.isSynchronizationActive()) {
             throw new IllegalStateException("TRUSTED_TRANSACTION_REQUIRED");
         }
-        TaskEntity stored = tasks.findById(event.taskId())
+        // PESSIMISTIC_WRITE on the existing TaskEntity row ensures that
+        // same-task writers cannot allocate overlapping or commit-inverted
+        // sequence numbers. The row lock remains held until the *outer*
+        // transaction commits, with sequence allocation rolled back on error.
+        TaskEntity stored = tasks.lockForJournalSequence(event.taskId())
                 .orElseThrow(VerifiedOwnerTaskJournalOutbox::unavailable);
         if (!eligible(stored)) throw unavailable();
-
-        UUID journalId = journal.appendReturningId(event);
+        long sequence = stored.allocateCommittedJournalSequence();
+        UUID journalId = journal.appendWithCommittedSequence(event, sequence);
         outbox.save(new TaskJournalOutboxEntity(
                 UUID.randomUUID(), journalId, event.taskId(), storageNow()));
         return journalId;

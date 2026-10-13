@@ -44,6 +44,11 @@ public class TaskEntity {
     @Column(name = "owner_project_id", updatable = false)
     private UUID ownerProjectId;
 
+    // Nullable for legacy tasks. Incremented only while the task row is
+    // PESSIMISTIC_WRITE locked by the same DB transaction as journal+outbox.
+    @Column(name = "last_journal_sequence")
+    private Long lastJournalSequence;
+
     @Column(length = 120)
     private String activeAgentId;
 
@@ -83,6 +88,15 @@ public class TaskEntity {
 
     public Long getOwnerUserId() { return ownerUserId; }
     public UUID getOwnerProjectId() { return ownerProjectId; }
+
+    public Long getLastJournalSequence() { return lastJournalSequence; }
+
+    long allocateCommittedJournalSequence() {
+        long prior = lastJournalSequence == null ? 0L : lastJournalSequence;
+        if (prior == Long.MAX_VALUE) throw new IllegalStateException("JOURNAL_SEQUENCE_EXHAUSTED");
+        lastJournalSequence = prior + 1L;
+        return lastJournalSequence;
+    }
 
     public UUID getId() { return id; }
     public String getTitle() { return title; }

@@ -326,6 +326,63 @@ authentication or Windows-PC integration was activated in this slice.
 The server-side owner-sensitive API quarantine from PR #24 remains
 intact, and issue #23 remains open.
 
+## Per-task transaction-serialized journal ordering (stacked draft)
+
+This slice adds an **opt-in per-task commit-serialized sequence** for *new*
+journal events written through `VerifiedOwnerTaskJournalOutbox.appendInCurrentTransaction`.
+It addresses the earlier timestamp/UUID cursor weakness for that **specific**
+controlled writer path. It does not silently rewrite or backfill legacy
+journal rows.
+
+- `TaskEntity.lastJournalSequence` is nullable for old task rows. The new
+  writer loads the *existing* task with `PESSIMISTIC_WRITE` and keeps the
+  database row lock until the caller's outer transaction commits/rolls back.
+  It allocates the next positive sequence inside that transaction; journal
+  event, outbox record and counter mutation commit or roll back **together**.
+  Two transactions writing the **same task** cannot commit assigned sequence
+  `N+1` while `N` remains uncommitted, because the second transaction
+  must first acquire that task's database row lock.
+- `TaskEventJournalEntity.commitSequence` is nullable. Only the controlled
+  writer populates it. A unique composite index on
+  `(task_id,commit_sequence)` prevents duplicates; existing
+  `TaskEventJournalService.append()` still creates legacy unsequenced rows.
+- `VerifiedOwnerCommitSequenceCursor` is a new **unregistered, non-HTTP**
+  read-only Java component. It verifies the signed owner JWT/role scope and
+  persisted owner ID *before* accessing journal data. It reads only
+  `commitSequence > lastVerifiedEventSequence` with page size 1..100,
+  ordered by sequence, and validates that every supplied cursor event UUID
+  belongs to the **same** already-authorized task.
+- The JPA projection deliberately does not fetch event message/metadata,
+  commands, credentials or private owner details. Invalid agent identifiers
+  are redacted and events are labeled
+  `PERSISTED_JOURNAL_NOT_VERIFIED_OUTCOME`. Responses explicitly say
+  `OUTBOX_SEQUENCED_ONLY_LEGACY_NOT_INCLUDED`.
+
+Tests exercise same-task concurrent Spring/H2 transactions under the row
+lock, backwards timestamps, duplicate event times, rollback without
+sequence-number gaps, legacy exclusion, foreign-owner/project cursor
+rejection, wrong audience/scope and the existing full orchestrator suite.
+
+### Still NOT lossless end-to-end
+
+This ordering applies **only** when all same-task writers use the controlled
+atomic journal+outbox path and the storage engine honors the per-task row
+lock. Historical unsequenced events do not appear in these pages, and
+external/bypass writers can still create unsequenced events. No HTTP,
+SSE, desktop, outbox worker or native command is activated.
+
+Before a release: review PostgreSQL **additive** migrations for
+`aetheris_tasks.last_journal_sequence BIGINT NULL`,
+`aetheris_task_events.commit_sequence BIGINT NULL` and the partial
+(unique on non-null) `(task_id,commit_sequence)` index. Prove
+multi-worker/concurrent PostgreSQL commit ordering and benchmark lock
+contention. Ensure retention, durable receiver acknowledgement, full
+event-UUID replay, owner/project identity checks on all indirect paths,
+native key storage, multi-instance recovery and STOP/revocation are
+complete. Application DB auto-DDL is **not** a safe migration plan.
+The runtime owner-sensitive HTTP quarantine (#24) stays in place; no
+protected main merge or owner-PC certification is claimed.
+
 ## Explicit remaining blockers
 
 1. Platform draft [#228](https://github.com/teldigi5-wq/aetheris-platform/pull/228)
