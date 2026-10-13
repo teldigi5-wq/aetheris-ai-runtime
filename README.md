@@ -48,7 +48,15 @@ The platform records that checkpoint in `architecture/ai-runtime-certification-r
 
 That SHA is a **certification checkpoint**, not a claim that runtime development must remain permanently fixed there. A later runtime SHA should be promoted only after its applicable runtime suite and the platform integration suite are green and the platform certification reference is deliberately advanced.
 
-## Proposed read-only Agent Skills catalog\n\nThe proposed `skills/` directory holds `github-readonly` and `incident-investigation` as **TEMPLATE_ONLY** skill definitions plus an Aetheris fail-closed manifest validator and negative tests. It does not enable execution, extend MCP permissions or certify any live site/PC workflow. See [`skills/README.md`](skills/README.md).\n\n## Certification and truth boundaries
+## Proposed Agent Skills and global extension research
+
+The proposed [Agent Skills catalog](skills/README.md) now contains **five TEMPLATE_ONLY read-only review skills** for GitHub checks, incidents, MCP extension discovery, license provenance and local model readiness. No autonomous tool execution or privilege grants were added.
+
+The new [global ecosystem research index](ecosystem/README.md) lists **14 external GitHub repositories** spanning MCP registries, browser automation, Ollama, ComfyUI, faster-whisper, Piper, Qdrant, Chroma, LangChain, LlamaIndex and n8n. References are **not installs or licenses**; candidate source revisions and dependency/model licenses need review.
+
+`scripts/search_extension_catalog.py` offers **offline catalog search**, while `scripts/review_external_skill_bundle.py` only statically quarantines pre-existing local Skill documents. All imports and runtime connections remain disabled, owner-controlled and pending hardware/compatibility verification. 
+
+## Certification and truth boundaries
 
 The certified checkpoint `65a6262717adcd52ac8d8a16ed6f223e299fd74d` completed the applicable canonical runtime certification suite. The platform certification reference records that checkpoint as `6_OF_6_SUCCESS`.
 
