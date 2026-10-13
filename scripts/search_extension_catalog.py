@@ -8,7 +8,10 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from scripts.validate_extension_ecosystem import ROOT, validate_catalog
+if __package__:
+    from .validate_extension_ecosystem import ROOT, validate_catalog
+else:
+    from validate_extension_ecosystem import ROOT, validate_catalog
 
 def search_sources(
     root: Path = ROOT, *,
