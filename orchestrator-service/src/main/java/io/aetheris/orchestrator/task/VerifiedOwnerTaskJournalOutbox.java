@@ -163,7 +163,9 @@ public final class VerifiedOwnerTaskJournalOutbox {
                     DrainResult.HANDOFF_ATTEMPTED : DrainResult.STALE_CLAIM;
         } catch (RuntimeException ignored) {
             // Suppress sensitive callback exceptions; no private log output.
-            return retryOrPark(claim) ? DrainResult.RETRY_SCHEDULED : DrainResult.STALE_CLAIM;
+            if (!retryOrPark(claim)) return DrainResult.STALE_CLAIM;
+            return claim.attempt() >= MAX_ATTEMPTS ?
+                    DrainResult.PARKED : DrainResult.RETRY_SCHEDULED;
         }
     }
 
