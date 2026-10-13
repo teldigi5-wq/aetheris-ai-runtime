@@ -65,7 +65,7 @@ def validate_catalog(root: Path = ROOT) -> list[str]:
         return ["research index must be a JSON object"]
     if set(data) != TOP_LEVEL_KEYS:
         errors.append("unexpected or missing research index fields")
-    if type(data.get("schema_version")) is not int or data["schema_version"] != 1:
+    if type(data.get("schema_version")) is not int or data.get("schema_version") != 1:
         errors.append("unsupported research index schema")
     if data.get("catalog_status") != "RESEARCH_AND_QUARANTINE_ONLY":
         errors.append("catalog cannot claim integration or enablement")
