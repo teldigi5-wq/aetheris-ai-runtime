@@ -33,6 +33,17 @@ public class TaskEntity {
     @Column(nullable = false, length = 32)
     private OperationMode mode;
 
+    /**
+     * Trusted owner binding for future authenticated APIs. Legacy and
+     * internally-created tasks remain unowned and must never be exposed
+     * to an arbitrary caller by guessing a UUID or setting a header.
+     */
+    @Column(name = "owner_user_id", updatable = false)
+    private UUID ownerUserId;
+
+    @Column(name = "owner_project_id", updatable = false)
+    private UUID ownerProjectId;
+
     @Column(length = 120)
     private String activeAgentId;
 
@@ -57,6 +68,21 @@ public class TaskEntity {
         this.createdAt = Instant.now();
         this.updatedAt = this.createdAt;
     }
+
+    // Not wired to any HTTP request. Only a future *verified server-side*
+    // principal resolver may call a trusted owning creation path.
+    TaskEntity(UUID id, String title, String commandText, OperationMode mode,
+               UUID trustedOwnerUserId, UUID trustedProjectId) {
+        this(id, title, commandText, mode);
+        if (trustedOwnerUserId == null) {
+            throw new IllegalArgumentException("Verified task owner is required");
+        }
+        this.ownerUserId = trustedOwnerUserId;
+        this.ownerProjectId = trustedProjectId;
+    }
+
+    public UUID getOwnerUserId() { return ownerUserId; }
+    public UUID getOwnerProjectId() { return ownerProjectId; }
 
     public UUID getId() { return id; }
     public String getTitle() { return title; }
