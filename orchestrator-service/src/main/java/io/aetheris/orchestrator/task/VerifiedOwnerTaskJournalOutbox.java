@@ -8,6 +8,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.UUID;
@@ -83,7 +84,7 @@ public final class VerifiedOwnerTaskJournalOutbox {
 
         UUID journalId = journal.appendReturningId(event);
         outbox.save(new TaskJournalOutboxEntity(
-                UUID.randomUUID(), journalId, event.taskId(), clock.instant()));
+                UUID.randomUUID(), journalId, event.taskId(), storageNow()));
         return journalId;
     }
 
@@ -94,7 +95,7 @@ public final class VerifiedOwnerTaskJournalOutbox {
      */
     public Claim claimReady() {
         return requiresNew.execute(status -> {
-            Instant now = clock.instant();
+            Instant now = storageNow();
             var rows = outbox.claimable(TaskJournalOutboxEntity.State.PENDING,
                     TaskJournalOutboxEntity.State.IN_FLIGHT, now, PageRequest.of(0, 1));
             if (rows.isEmpty()) return null;
@@ -114,7 +115,7 @@ public final class VerifiedOwnerTaskJournalOutbox {
         if (claim == null) return false;
         return Boolean.TRUE.equals(requiresNew.execute(status -> {
             var row = outbox.findById(claim.outboxId()).orElse(null);
-            if (row == null || !row.ownsLease(claim.leaseToken(), clock.instant()))
+            if (row == null || !row.ownsLease(claim.leaseToken(), storageNow()))
                 return false;
             row.handoffAttempted();
             return true;
@@ -136,7 +137,7 @@ public final class VerifiedOwnerTaskJournalOutbox {
             } else {
                 long seconds = Math.min(MAX_BACKOFF.getSeconds(),
                         1L << Math.min(row.getAttempts(), 6));
-                row.scheduleRetry(clock.instant().plusSeconds(seconds));
+                row.scheduleRetry(storageNow().plusSeconds(seconds));
             }
             return true;
         }));
@@ -177,6 +178,15 @@ public final class VerifiedOwnerTaskJournalOutbox {
             row.park();
             return true;
         }));
+    }
+
+    /**
+     * PostgreSQL/H2 TIMESTAMP(6) commonly stores microseconds. Normalize
+     * enqueue and lease comparisons to avoid a newly committed row being
+     * just ahead of its own unrounded in-memory clock by one microsecond.
+     */
+    private Instant storageNow() {
+        return clock.instant().truncatedTo(ChronoUnit.MICROS);
     }
 
     private static boolean eligible(TaskEntity task) {
