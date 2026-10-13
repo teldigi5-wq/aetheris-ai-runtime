@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "artifact": "Aetheris reference-only connected flagship experience handoff",
+  "notDeployedTo": "wayfarer-journey-ai",
+  "stageOrder": [
+    "discover",
+    "plan",
+    "arrive",
+    "explore"
+  ],
+  "ownerApprovalRequiredForEveryStage": true,
+  "observabilityStates": [
+    "PROVIDER_RESPONSE_OBSERVED",
+    "ESTIMATE",
+    "AI_SUGGESTION",
+    "UNAVAILABLE"
+  ],
+  "providerVerification": "NOT_ASSERTED",
+  "bookingStatus": "NOT_AVAILABLE",
+  "executionStatus": "NOT_WIRED",
+  "hardwareStatus": "BLOCKED_PENDING_HARDWARE",
+  "networkAllowed": false,
+  "persistenceAllowed": false,
+  "paidProvidersEnabled": false,
+  "guestPaymentOrBookingEnabled": false,
+  "liveFlightOrHotelPriceClaimed": false,
+  "sourceReviewOnly": true
+}
