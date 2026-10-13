@@ -29,19 +29,34 @@ import java.util.Set;
 public final class RuntimeAccessTokenVerifier {
     public static final String READ_SCOPE = "orchestrator:read";
     public static final String WRITE_SCOPE = "orchestrator:write";
+    public static final String DEFAULT_ISSUER = "aetheris-identity";
+    public static final String DEFAULT_AUDIENCE = "aetheris-api";
     private static final String INSECURE_DEV_DEFAULT = "change-me-local-development-secret-32chars";
     private static final long MAX_TOKEN_LIFETIME_SECONDS = 24 * 60 * 60;
     private final SecretKey verificationKey;
+    private final String issuer;
+    private final String audience;
 
     /** Requires the explicitly provisioned same signing secret as identity. */
     public RuntimeAccessTokenVerifier(String explicitlyConfiguredSecret) {
+        this(explicitlyConfiguredSecret, DEFAULT_ISSUER, DEFAULT_AUDIENCE);
+    }
+
+    public RuntimeAccessTokenVerifier(String explicitlyConfiguredSecret,
+                                      String expectedIssuer, String expectedAudience) {
         if (explicitlyConfiguredSecret == null
                 || explicitlyConfiguredSecret.equals(INSECURE_DEV_DEFAULT)
                 || explicitlyConfiguredSecret.getBytes(StandardCharsets.UTF_8).length < 32) {
             throw new IllegalArgumentException("Verified signing key configuration required");
         }
+        if (expectedIssuer == null || expectedIssuer.isBlank() ||
+                expectedAudience == null || expectedAudience.isBlank()) {
+            throw new IllegalArgumentException("Expected issuer/audience required");
+        }
         this.verificationKey = Keys.hmacShaKeyFor(
                 explicitlyConfiguredSecret.getBytes(StandardCharsets.UTF_8));
+        this.issuer = expectedIssuer;
+        this.audience = expectedAudience;
     }
 
     public VerifiedPrincipal verify(String signedAccessToken, String requiredScope) {
@@ -54,6 +69,8 @@ public final class RuntimeAccessTokenVerifier {
         try {
             Jws<Claims> parsed = Jwts.parser()
                     .verifyWith(verificationKey)
+                    .requireIssuer(issuer)
+                    .requireAudience(audience)
                     .build()
                     .parseSignedClaims(signedAccessToken);
             // The current identity issuer chooses HS256 for its 32-byte key.
