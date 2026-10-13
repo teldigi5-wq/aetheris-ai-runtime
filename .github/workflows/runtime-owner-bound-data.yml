@@ -1,0 +1,56 @@
+name: Runtime Owner Bound Data Safety
+
+on:
+  pull_request:
+    branches:
+      - security/owner-task-http-quarantine-20261013
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/task/TaskEntity.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/task/TaskRepository.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/mission/MissionSessionEntity.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/mission/MissionSessionRepository.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/security/OwnerBoundResourcePolicy.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/task/TaskOwnerPersistenceTest.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/mission/MissionOwnerPersistenceTest.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/OwnerBoundResourcePolicyTest.java'
+      - 'docs/security/owner-task-isolation.md'
+      - '.github/workflows/runtime-owner-bound-data.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  owner-isolation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact draft revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Set up Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Verify two-account task and mission persistence and strict owner match
+        run: ./mvnw -f orchestrator-service/pom.xml -B -Dtest=TaskOwnerPersistenceTest,MissionOwnerPersistenceTest,OwnerBoundResourcePolicyTest,OwnerSensitiveApiQuarantineFilterTest,OwnerSensitiveApiQuarantineHttpTest test
+
+  full-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact draft revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Set up Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Run all orchestrator tests with ownerless HTTP boundary intact
+        run: ./mvnw -f orchestrator-service/pom.xml -B test
