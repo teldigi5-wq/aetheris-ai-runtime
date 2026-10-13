@@ -83,6 +83,8 @@ class VerifiedOwnerTaskTimelineTest {
         var timeline=timeline();
         var events=timeline.recentHistory(ownerA(),a.getId());
         assertThat(events).hasSize(3);
+        assertThat(events).allMatch(e -> e.provenance() ==
+                VerifiedOwnerTaskTimeline.Provenance.PERSISTED_JOURNAL_NOT_VERIFIED_OUTCOME);
         assertThat(events).extracting(VerifiedOwnerTaskTimeline.TimelineUpdate::state)
                 .containsExactly(TaskState.QUEUED,TaskState.RUNNING,TaskState.VERIFYING);
         assertThat(events).extracting(VerifiedOwnerTaskTimeline.TimelineUpdate::agentId)
@@ -121,6 +123,8 @@ class VerifiedOwnerTaskTimelineTest {
         var timeline=timeline();
         var safe=timeline.inspectSignedOwnerEvent(ownerA(),a.getId(),one);
         assertThat(safe.taskId()).isEqualTo(a.getId());
+        assertThat(safe.provenance()).isEqualTo(
+                VerifiedOwnerTaskTimeline.Provenance.UNTRUSTED_EVENT_ARGUMENT);
         assertThat(safe.toString()).doesNotContain(SENSITIVE_MESSAGE,SENSITIVE_META);
         assertThatThrownBy(()->timeline.inspectSignedOwnerEvent(ownerA(),a.getId(),forged))
                 .isInstanceOf(NoSuchElementException.class).hasMessage("TASK_NOT_AVAILABLE");
