@@ -43,6 +43,61 @@
       "external_hosts": [],
       "owner_approval_required_for_mutations": true,
       "max_evidence_items": 20
+    },
+    {
+      "name": "mcp-extension-review",
+      "path": "skills/mcp-extension-review/SKILL.md",
+      "description": "Research published MCP server metadata against trusted evidence without connecting, executing or approving tools.",
+      "risk": "LOW",
+      "effect": "READ_ONLY",
+      "status": "TEMPLATE_ONLY",
+      "execution_enabled": false,
+      "allowed_tools": [
+        "mcp.registry.read",
+        "github.repo.read"
+      ],
+      "external_hosts": [
+        "registry.modelcontextprotocol.io",
+        "github.com",
+        "api.github.com"
+      ],
+      "owner_approval_required_for_mutations": true,
+      "max_evidence_items": 20
+    },
+    {
+      "name": "license-provenance-review",
+      "path": "skills/license-provenance-review/SKILL.md",
+      "description": "Review exact source repository, declared license and dependency provenance without installing packages or approving licensing.",
+      "risk": "LOW",
+      "effect": "READ_ONLY",
+      "status": "TEMPLATE_ONLY",
+      "execution_enabled": false,
+      "allowed_tools": [
+        "github.repo.read",
+        "github.commit.read"
+      ],
+      "external_hosts": [
+        "github.com",
+        "api.github.com"
+      ],
+      "owner_approval_required_for_mutations": true,
+      "max_evidence_items": 20
+    },
+    {
+      "name": "local-model-readiness",
+      "path": "skills/local-model-readiness/SKILL.md",
+      "description": "Review owner-authorized local model inventory and read-only health telemetry without loading models or certifying a GPU.",
+      "risk": "LOW",
+      "effect": "READ_ONLY",
+      "status": "TEMPLATE_ONLY",
+      "execution_enabled": false,
+      "allowed_tools": [
+        "observability.health.read",
+        "models.catalog.read"
+      ],
+      "external_hosts": [],
+      "owner_approval_required_for_mutations": true,
+      "max_evidence_items": 20
     }
   ]
 }
