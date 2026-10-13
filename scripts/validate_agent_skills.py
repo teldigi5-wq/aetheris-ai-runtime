@@ -15,6 +15,18 @@ CAPABILITIES = {
         "tools": {"observability.health.read", "observability.metrics.read", "observability.logs.read", "observability.traces.read"},
         "hosts": set(),
     },
+    "mcp-extension-review": {
+        "tools": {"mcp.registry.read", "github.repo.read"},
+        "hosts": {"registry.modelcontextprotocol.io", "github.com", "api.github.com"},
+    },
+    "license-provenance-review": {
+        "tools": {"github.repo.read", "github.commit.read"},
+        "hosts": {"github.com", "api.github.com"},
+    },
+    "local-model-readiness": {
+        "tools": {"observability.health.read", "models.catalog.read"},
+        "hosts": set(),
+    },
 }
 SKILL_NAME = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 FRONTMATTER = re.compile(r"\A---\nname: ([a-z0-9-]+)\ndescription: ([^\n]+)\n---\n", re.ASCII)
