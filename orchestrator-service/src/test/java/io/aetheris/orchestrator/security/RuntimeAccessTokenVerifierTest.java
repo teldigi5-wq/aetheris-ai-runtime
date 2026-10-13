@@ -23,6 +23,8 @@ class RuntimeAccessTokenVerifierTest {
                                 Instant issued, Instant expires) {
         SecretKey secretKey=Keys.hmacShaKeyFor(key.getBytes(StandardCharsets.UTF_8));
         return Jwts.builder()
+                .issuer(RuntimeAccessTokenVerifier.DEFAULT_ISSUER)
+                .audience().add(RuntimeAccessTokenVerifier.DEFAULT_AUDIENCE).and()
                 .subject("owner@example.test")
                 .claim("uid", uid)
                 .claim("role", role)
@@ -115,6 +117,37 @@ class RuntimeAccessTokenVerifierTest {
         rejected(verifier,"x".repeat(8193),"orchestrator:read");
         rejected(verifier,null,"orchestrator:read");
         rejected(verifier,"","orchestrator:read");
+    }
+
+    @Test
+    void wrongOrMissingIssuerAudienceIsAlwaysRejectedDespiteValidSignatureAndScope() {
+        Instant t = now();
+        for (String token : List.of(
+            specialToken("other-issuer", RuntimeAccessTokenVerifier.DEFAULT_AUDIENCE),
+            specialToken(RuntimeAccessTokenVerifier.DEFAULT_ISSUER, "other-audience"),
+            specialToken(null, RuntimeAccessTokenVerifier.DEFAULT_AUDIENCE),
+            specialToken(RuntimeAccessTokenVerifier.DEFAULT_ISSUER, null))) {
+            rejected(verifier, token, "orchestrator:read");
+        }
+        // A correctly signed token is still the wrong recipient if this
+        // native service has been configured for another audience.
+        RuntimeAccessTokenVerifier differentService = new RuntimeAccessTokenVerifier(
+                SECRET_A, RuntimeAccessTokenVerifier.DEFAULT_ISSUER, "other-service");
+        rejected(differentService, currentToken(42L, List.of("orchestrator:read")),
+                "orchestrator:read");
+    }
+
+    private static String specialToken(String issuer, String audience) {
+        var token = Jwts.builder()
+                .subject("owner@example.test")
+                .claim("uid", 42L)
+                .claim("role", "API_CONSUMER")
+                .claim("scopes", List.of("orchestrator:read"))
+                .issuedAt(Date.from(now().minusSeconds(10)))
+                .expiration(Date.from(now().plusSeconds(120)));
+        if (issuer != null) token.issuer(issuer);
+        if (audience != null) token.audience().add(audience).and();
+        return token.signWith(Keys.hmacShaKeyFor(SECRET_A.getBytes(StandardCharsets.UTF_8))).compact();
     }
 
     @Test

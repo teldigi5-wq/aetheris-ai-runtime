@@ -3,7 +3,7 @@
 **Status:** `SOURCE_VERIFIED_NOT_WIRED` (a real signature verifier with synthetic
 JUnit tests; **NOT** an authenticated HTTP controller or SSE subscriber).
 
-The platform identity issuer and gateway at platform source
+The platform identity issuer and gateway baseline at platform source
 `57ad3e0e602efa6feb275328254151b959a3499b` use JJWT **0.12.6** with
 HMAC-SHA256 for 32-byte signing keys. Access tokens include:
 
@@ -12,6 +12,8 @@ HMAC-SHA256 for 32-byte signing keys. Access tokens include:
 - `role`: `ADMIN`, `DEVELOPER` or `API_CONSUMER`
 - `scopes`: list of strings including `orchestrator:read` for reads,
   `orchestrator:write` for modifying operations
+- `iss`: `aetheris-identity` **required by this stacked source contract**
+- `aud`: `aetheris-api` **required by this stacked source contract**
 - `iat` and `exp`
 
 A previous draft used owner UUIDs; **task and mission owner IDs were corrected
@@ -25,7 +27,7 @@ legacy ownerless records remain inaccessible to authenticated owner readers.
 `@Component`, Tauri command, servlet filter or HTTP endpoint). It must
 receive an **explicit, private, nondefault JWT signing secret**; it does not
 read forged `X-Aetheris-*` identity headers or fetch keys from HTTP. It
-verifies JWS signature and algorithm, expiration/issued-at times, a positive
+verifies JWS signature, issuer, API audience and algorithm, expiration/issued-at times, a positive
 numeric UID, valid role, bounded scope strings and an exact required
 orchestrator read/write scope. It returns a small in-process
 `VerifiedPrincipal` with numeric account ID and scoped permissions — never
@@ -37,11 +39,15 @@ tokens, wrong scope, weak/default secret and fail-closed HTTP quarantine.
 
 ## Explicit remaining blockers
 
-1. The current identity token **does not contain audience/issuer claims**;
-   a review must introduce verified issuer and audience expectations and a
-   compatible rotation/rollout plan, rather than pretending these are already
-   present. The symmetric signing secret must be distributed securely only
-   to trusted services; rotating to asymmetric signing is preferable.
+1. Platform draft [#228](https://github.com/teldigi5-wq/aetheris-platform/pull/228)
+   now **proposes** issuing `iss=aetheris-identity` and `aud=aetheris-api`
+   and requiring both in the gateway. This native verifier requires the same
+   source-defined claims. None are in deployed old-format tokens by default.
+   Old-format tokens will be rejected after activation, so coordinated
+   identity/gateway/runtime releases, re-login and refresh-session UX review
+   are mandatory. There is deliberately **no legacy unsigned/claimless
+   compatibility mode**. Signer secret distribution and asymmetric-signing
+   migration are separate security reviews.
 2. No production credential material is embedded in this repository,
    configured for the runtime, injected into client JavaScript or logged.
    The verifier constructor is **not wired** to HTTP; task, mission and live

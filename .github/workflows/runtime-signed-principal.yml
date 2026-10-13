@@ -3,6 +3,7 @@ name: Runtime Signed Principal Verification
 on:
   pull_request:
     branches:
+      - security/runtime-jwt-principal-verifier-20261013
       - security/owner-bound-task-data-20261013
       - main
     paths:
