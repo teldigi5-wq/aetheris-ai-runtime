@@ -45,6 +45,7 @@ jobs:
           python scripts/validate_extension_ecosystem.py
           python scripts/validate_agent_skills.py
           python scripts/search_extension_catalog.py --category local-speech --limit 5
+          python scripts/search_extension_catalog.py --hubs
       - name: Adversarial catalog and quarantine tests
         run: |
           python -m unittest discover -s tests -p 'test_extension_ecosystem.py' -v
