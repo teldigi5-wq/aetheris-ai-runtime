@@ -30,11 +30,24 @@ APPROVED_SOURCES = {
     "llama-index": ("run-llama/llama_index", "retrieval-library", "MIT"),
     "n8n": ("n8n-io/n8n", "workflow-automation", "NOASSERTION"),
 }
+APPROVED_HUBS = {
+    "agent-skills": ("https://agentskills.io", "skills-format"),
+    "official-mcp": ("https://registry.modelcontextprotocol.io", "mcp-server-index"),
+    "python-pypi": ("https://pypi.org", "python-packages"),
+    "npm": ("https://www.npmjs.com", "javascript-packages"),
+    "hugging-face-models": ("https://huggingface.co/models", "model-weights-and-cards"),
+    "ollama-model-library": ("https://ollama.com/library", "local-model-library"),
+}
+HUB_KEYS = {
+    "id", "url", "kind", "status", "trusted",
+    "network_fetch_enabled", "install_enabled",
+    "execution_enabled", "license_and_model_review_required",
+}
 TOP_LEVEL_KEYS = {
     "schema_version", "registry_name", "checked_on", "catalog_status",
     "auto_discovery", "network_fetch_during_runtime", "automatic_installation",
     "automatic_execution", "paid_services_enabled", "physical_pc_status",
-    "policy_authority", "sources",
+    "policy_authority", "sources", "discovery_hubs",
 }
 ENTRY_KEYS = {
     "id", "repository", "url", "category", "purpose",
@@ -79,6 +92,35 @@ def validate_catalog(root: Path = ROOT) -> list[str]:
         errors.append("research snapshot date missing")
     if data.get("policy_authority") != "existing deterministic owner approval, MCP grants and host execution policy":
         errors.append("policy authority drifted")
+    hubs = data.get("discovery_hubs")
+    if not isinstance(hubs, list) or len(hubs) != len(APPROVED_HUBS):
+        errors.append("missing or unreviewed extension discovery hubs")
+    else:
+        visited: set[str] = set()
+        for hub in hubs:
+            if not isinstance(hub, dict) or set(hub) != HUB_KEYS:
+                errors.append("invalid discovery hub schema")
+                continue
+            hub_id = hub.get("id")
+            if not isinstance(hub_id, str) or hub_id not in APPROVED_HUBS:
+                errors.append("unapproved discovery hub")
+                continue
+            if hub_id in visited:
+                errors.append("duplicate discovery hub")
+            visited.add(hub_id)
+            if (hub.get("url"), hub.get("kind")) != APPROVED_HUBS[hub_id]:
+                errors.append(f"{hub_id}: discovery hub URL/kind changed")
+            if hub.get("status") != "REFERENCE_ONLY" or hub.get("trusted") is not False:
+                errors.append(f"{hub_id}: discovery hub trust escalation")
+            if any(hub.get(flag) is not False for flag in (
+                "network_fetch_enabled", "install_enabled", "execution_enabled"
+            )):
+                errors.append(f"{hub_id}: unauthorized hub fetch/installation/execution")
+            if hub.get("license_and_model_review_required") is not True:
+                errors.append(f"{hub_id}: license or model approval bypass")
+        if visited != set(APPROVED_HUBS):
+            errors.append("approved discovery hub omitted")
+
     sources = data.get("sources")
     if not isinstance(sources, list) or len(sources) != len(APPROVED_SOURCES):
         return errors + ["unapproved, missing or duplicated source count"]
