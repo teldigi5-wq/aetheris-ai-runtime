@@ -275,6 +275,57 @@ principals, signed owner-scoped routes, project authorization, migration,
 multi-instance delivery tests, token expiry/logout propagation and the
 owner's actual Windows-PC validation. Protected main remains unchanged.
 
+## Stable journal-event-ID cursor for bounded owner-only catch-up
+
+`VerifiedOwnerJournalCursor` is an **isolated, non-HTTP Java reader** for
+owner-scoped task history pagination. It verifies the signed JWT signature,
+`iss`/`aud`, current `orchestrator:read` scope and numeric account identity,
+then checks the durable `TaskEntity.ownerUserId` **before** querying task
+journal rows. Project-scoped and legacy ownerless tasks remain denied.
+
+Existing `TaskEventJournalService.history()` still deliberately returns
+only the latest 200 records. The new reader uses a **database keyset query**
+ordered by (`eventAt`, persisted journal UUID), fetching at most
+`requestedLimit+1` rows, with `1 <= requestedLimit <= 100`.
+The cursor is an *event UUID* supplied by the previous page. Before using
+it, the server resolves that event ID **inside the already authorized task**
+and derives its timestamp from the database: callers cannot provide a
+fabricated event timestamp or use another task's cursor.
+
+The query selects into a JPA **projection** containing only journal event
+UUID, task UUID, timestamp, state and agent ID. It never retrieves raw
+message or serialized metadata on this path. Returned updates sanitize
+agent IDs and label recorded states with
+`PERSISTED_JOURNAL_NOT_VERIFIED_OUTCOME`. Cursor UUIDs grant no access;
+owner authorization is rechecked on **every page**. The new composite
+`task_id,event_at,id` index is a proposed schema/migration addition,
+**not an applied production migration**.
+
+Dedicated H2/JPA tests recover **275 historical events** beyond the legacy
+200-entry window, paginate 24 events sharing exactly the same timestamp
+without collapsing them, reject foreign/unknown event cursors, validate
+two independently signed accounts, exclude project/ownerless records,
+enforce size bounds and prove no private messages/metadata appear in
+the response. Full orchestrator regression remains mandatory.
+
+### Explicit remaining correctness limitations
+
+The ordering key is the event's `eventAt`, **not an append-only database
+commit sequence**. If a *new* record is inserted later with a backdated
+timestamp (or with the same timestamp and a lower UUID than the previous
+cursor), keyset continuation can miss it. The cursor also does not encode
+a snapshot high-water mark or durable client acknowledgement. Therefore
+this stage cannot claim **lossless, exact-once** live replay or
+multi-instance SSE delivery. Before production, introduce a committed,
+monotonic database sequence (or a transactionally ordered per-task
+log/outbox key), snapshot/watermark semantics, consumer acknowledgements,
+and PostgreSQL concurrency/retention/migration testing.
+
+No HTTP route, scheduler, ownerless global SSE subscription, native client
+authentication or Windows-PC integration was activated in this slice.
+The server-side owner-sensitive API quarantine from PR #24 remains
+intact, and issue #23 remains open.
+
 ## Explicit remaining blockers
 
 1. Platform draft [#228](https://github.com/teldigi5-wq/aetheris-platform/pull/228)
