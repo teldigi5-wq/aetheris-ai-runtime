@@ -16,6 +16,16 @@ The current curated index, in `sources.json`, includes:
 
 The listed `reported_repository_license` reflects current GitHub metadata, **not** legal approval to integrate or redistribute dependencies, packages, voice assets, prompts, checkpoints or model weights. `NOASSERTION` needs explicit license review; GPL and n8n fair-code terms require case-specific analysis. APIs, hosting and model providers may carry additional costs despite an openly available repository.
 
+## Six global discovery hubs (reference-only)
+
+The same catalog also identifies **six non-executing directory references**: [Agent Skills](https://agentskills.io), [MCP Registry](https://registry.modelcontextprotocol.io), [PyPI](https://pypi.org), [npm](https://www.npmjs.com), [Hugging Face models](https://huggingface.co/models) and [Ollama library](https://ollama.com/library). These are links for independently authorized research, not connected tools, automated downloads, subscription guarantees or endorsement of individual entries.
+
+Show the directory list offline:
+
+~~~text
+python scripts/search_extension_catalog.py --hubs
+~~~
+
 ## Three independent approval boundaries
 
 1. **Discover:** record an exact source URL and proposed capability. Never use a public registry ranking as a trust signal.
