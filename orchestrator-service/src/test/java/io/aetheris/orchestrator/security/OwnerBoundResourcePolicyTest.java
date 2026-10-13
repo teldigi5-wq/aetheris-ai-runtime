@@ -5,8 +5,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class OwnerBoundResourcePolicyTest {
-    private static final UUID OWNER_A = UUID.fromString("11111111-1111-4111-8111-111111111111");
-    private static final UUID OWNER_B = UUID.fromString("22222222-2222-4222-8222-222222222222");
+    private static final Long OWNER_A = 101L;
+    private static final Long OWNER_B = 202L;
     private static final UUID PROJECT_A = UUID.fromString("33333333-3333-4333-8333-333333333333");
     private static final UUID PROJECT_B = UUID.fromString("44444444-4444-4444-8444-444444444444");
 
