@@ -47,6 +47,35 @@ at an untrusted runtime port. An authenticated session is not established by
 string equality with a claimed owner, nor by a bearer token that the runtime
 has not validated.
 
+## Stacked owner-bound persistence foundation (still not an authenticated endpoint)
+
+The next reviewable slice introduces **nullable, immutable-on-update**
+`owner_user_id` and `owner_project_id` UUID columns on task and mission JPA
+entities. Ordinary existing `TaskService.create` and `MissionService.create`
+continue producing **ownerless rows**. Only non-HTTP, package-scoped
+constructors accept an explicitly *trusted* owner. This is preparatory schema
+support, not a principal verifier or a new way for callers to claim ownership.
+
+Repository query methods select by the trusted owner and, when appropriate,
+the project ID. The pure `OwnerBoundResourcePolicy` independently rejects
+unverified callers, legacy ownerless rows, a different owner's rows and a
+different project's rows. A same-owner global resource with no project scope
+can match a proven caller. Unit and JPA tests exercise two distinct synthetic
+users and projects, including legacy rows.
+
+**No owner is inferred from `X-Aetheris-User-Id`, `X-Aetheris-Owner-Id`,
+JWT-shaped text, forwarded headers, browser input, task UUID or the first
+person to read an existing record.** The future verified principal must be
+resolved server-side and must supply the owner at creation before exposing
+owner-scoped APIs. There is no self-service backfill of existing rows.
+
+These new nullable database columns are an application schema change that
+requires reviewed deployment/migration planning in databases where automatic
+Hibernate schema updates are disabled or inappropriate. Never use
+`ddl-auto=update` as an unreviewed production migration plan. Task creation,
+read, mission/attach, event replay and aggregate SSE remain blocked by the
+quarantine filter, regardless of the new repository methods.
+
 ## Definition of done to replace this quarantine
 
 1. Define a canonical owner identity from the platform identity service and a
