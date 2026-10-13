@@ -64,15 +64,34 @@ def search_sources(
         "physicalPcStatus": "BLOCKED_PENDING_HARDWARE",
     }
 
+def list_discovery_hubs(root: Path = ROOT) -> dict[str, object]:
+    """Return trusted-schema directory references, not network-fetched listings."""
+    if validate_catalog(root):
+        raise ValueError("extension research index validation failed")
+    hubs = json.loads((root / "ecosystem" / "sources.json").read_text(encoding="utf-8"))["discovery_hubs"]
+    return {
+        "schemaVersion": 1,
+        "source": "CURATED_OFFLINE_REGISTRY_LINKS",
+        "hubs": [
+            {"id": hub["id"], "url": hub["url"], "category": hub["kind"],
+             "status": "REFERENCE_ONLY", "installed": False, "executionEnabled": False}
+            for hub in hubs
+        ],
+        "networkUsed": False, "automaticInstallation": False,
+        "licenseReviewRequired": True,
+        "physicalPcStatus": "BLOCKED_PENDING_HARDWARE",
+    }
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Search staged reference sources, never install or execute them")
+    parser.add_argument("--hubs", action="store_true", help="List only static extension directory URLs")
     parser.add_argument("--query", default="")
     parser.add_argument("--category", default="")
     parser.add_argument("--reported-license", default="")
     parser.add_argument("--limit", type=int, default=15)
     args = parser.parse_args()
     try:
-        result = search_sources(
+        result = list_discovery_hubs() if args.hubs else search_sources(
             query=args.query, category=args.category,
             reported_license=args.reported_license, limit=args.limit
         )
