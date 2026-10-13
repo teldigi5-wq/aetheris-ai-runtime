@@ -13,7 +13,8 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "aetheris_task_events", indexes =
-        @Index(name = "idx_aetheris_task_event_cursor", columnList = "task_id,event_at,id"))
+        @Index(name = "idx_aetheris_task_event_cursor", columnList = "task_id,event_at,id"),
+        @Index(name = "idx_aetheris_task_event_sequence", columnList = "task_id,commit_sequence", unique = true))
 public class TaskEventJournalEntity {
 
     @Id
@@ -24,6 +25,11 @@ public class TaskEventJournalEntity {
 
     @Column(nullable = false)
     private Instant eventAt;
+
+    // Only journal+outbox writes under the task row lock set this.
+    // Existing legacy history remains NULL; never fabricate backfill order.
+    @Column(name = "commit_sequence")
+    private Long commitSequence;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
@@ -51,6 +57,15 @@ public class TaskEventJournalEntity {
         this.metadataJson = metadataJson;
     }
 
+    TaskEventJournalEntity(UUID id, UUID taskId, Instant eventAt, TaskState state,
+                           String agentId, String message, String metadataJson,
+                           long commitSequence) {
+        this(id, taskId, eventAt, state, agentId, message, metadataJson);
+        if (commitSequence < 1) throw new IllegalArgumentException("Invalid commit sequence");
+        this.commitSequence = commitSequence;
+    }
+
+    public Long getCommitSequence() { return commitSequence; }
     public UUID getId() { return id; }
     public UUID getTaskId() { return taskId; }
     public Instant getEventAt() { return eventAt; }
