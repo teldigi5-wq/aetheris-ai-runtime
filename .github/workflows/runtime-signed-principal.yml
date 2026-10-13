@@ -3,6 +3,7 @@ name: Runtime Signed Principal Verification
 on:
   pull_request:
     branches:
+      - security/verified-owner-task-history-20261013
       - security/verified-owner-task-read-20261013
       - security/runtime-jwt-issuer-audience-20261013
       - security/runtime-jwt-principal-verifier-20261013
@@ -34,7 +35,7 @@ jobs:
           java-version: '21.0.12'
           cache: maven
       - name: Test signed principal verifier and preserved server-side quarantine
-        run: ./mvnw -f orchestrator-service/pom.xml -B -Dtest=VerifiedOwnerTaskTimelineTest,VerifiedOwnerTaskReadTest,RuntimeAccessTokenVerifierTest,OwnerBoundResourcePolicyTest,OwnerSensitiveApiQuarantineFilterTest,OwnerSensitiveApiQuarantineHttpTest test
+        run: ./mvnw -f orchestrator-service/pom.xml -B -Dtest=VerifiedOwnerTaskEventRelayTest,VerifiedOwnerTaskTimelineTest,VerifiedOwnerTaskReadTest,RuntimeAccessTokenVerifierTest,OwnerBoundResourcePolicyTest,OwnerSensitiveApiQuarantineFilterTest,OwnerSensitiveApiQuarantineHttpTest test
   full-orchestrator-regression:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
