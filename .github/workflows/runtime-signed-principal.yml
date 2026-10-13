@@ -3,6 +3,7 @@ name: Runtime Signed Principal Verification
 on:
   pull_request:
     branches:
+      - security/owner-task-journal-cursor-20261013
       - security/durable-task-journal-outbox-20261013
       - security/owner-task-postcommit-bridge-20261013
       - security/owner-scoped-task-event-relay-20261013
@@ -38,7 +39,7 @@ jobs:
           java-version: '21.0.12'
           cache: maven
       - name: Test signed principal verifier and preserved server-side quarantine
-        run: ./mvnw -f orchestrator-service/pom.xml -B -Dtest=VerifiedOwnerJournalCursorTest,VerifiedOwnerTaskJournalOutboxTest,VerifiedOwnerPostCommitJournalBridgeTest,VerifiedOwnerTaskEventRelayTest,VerifiedOwnerTaskTimelineTest,VerifiedOwnerTaskReadTest,RuntimeAccessTokenVerifierTest,OwnerBoundResourcePolicyTest,OwnerSensitiveApiQuarantineFilterTest,OwnerSensitiveApiQuarantineHttpTest test
+        run: ./mvnw -f orchestrator-service/pom.xml -B -Dtest=VerifiedOwnerCommitSequenceCursorTest,VerifiedOwnerJournalCursorTest,VerifiedOwnerTaskJournalOutboxTest,VerifiedOwnerPostCommitJournalBridgeTest,VerifiedOwnerTaskEventRelayTest,VerifiedOwnerTaskTimelineTest,VerifiedOwnerTaskReadTest,RuntimeAccessTokenVerifierTest,OwnerBoundResourcePolicyTest,OwnerSensitiveApiQuarantineFilterTest,OwnerSensitiveApiQuarantineHttpTest test
   full-orchestrator-regression:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
