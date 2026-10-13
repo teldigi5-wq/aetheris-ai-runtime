@@ -45,6 +45,18 @@ public class TaskEventJournalService {
         return id;
     }
 
+    /**
+     * Atomic journal/outbox path only. Allocation is made by the
+     * pessimistically locked parent task inside this SAME transaction.
+     */
+    UUID appendWithCommittedSequence(TaskEvent event, long commitSequence) {
+        UUID eventId = UUID.randomUUID();
+        repository.save(new TaskEventJournalEntity(eventId, event.taskId(),
+                event.timestamp(), event.state(), event.agentId(), event.message(),
+                serialize(event.metadata()), commitSequence));
+        return eventId;
+    }
+
     public List<TaskEvent> history(UUID taskId) {
         List<TaskEventJournalEntity> rows = new ArrayList<>(repository.findTop200ByTaskIdOrderByEventAtDesc(taskId));
         java.util.Collections.reverse(rows);
