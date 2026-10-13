@@ -8,5 +8,8 @@ import java.util.UUID;
 
 public interface TaskRepository extends JpaRepository<TaskEntity, UUID> {
     List<TaskEntity> findTop50ByOrderByUpdatedAtDesc();
+    List<TaskEntity> findTop50ByOwnerUserIdOrderByUpdatedAtDesc(UUID ownerUserId);
+    List<TaskEntity> findTop50ByOwnerUserIdAndOwnerProjectIdOrderByUpdatedAtDesc(UUID ownerUserId, UUID ownerProjectId);
+    List<TaskEntity> findTop50ByOwnerUserIdAndOwnerProjectIdIsNullOrderByUpdatedAtDesc(UUID ownerUserId);
     List<TaskEntity> findByStateIn(Collection<TaskState> states);
 }
