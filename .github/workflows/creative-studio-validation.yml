@@ -1,0 +1,36 @@
+name: Creative Studio Skills Contract
+
+on:
+  pull_request:
+    branches:
+      - main
+      - feature/read-only-agent-skills-20261011
+    paths:
+      - 'creative-studio/**'
+      - 'skills/**'
+      - 'scripts/validate_agent_skills.py'
+      - 'scripts/validate_creative_studio.py'
+      - 'tests/test_creative_studio.py'
+      - '.github/workflows/creative-studio-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  creative-studio-contract:
+    name: creative-studio-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13.15'
+      - name: Confirm read-only creative skill manifest
+        run: |
+          python scripts/validate_agent_skills.py
+          python scripts/validate_creative_studio.py
+      - name: Try adversarial activation and repository-substitution cases
+        run: python -m unittest discover -s tests -p 'test_creative_studio.py' -v
