@@ -7,9 +7,11 @@ on:
       - 'ecosystem/**'
       - 'skills/**'
       - 'scripts/validate_extension_ecosystem.py'
+      - 'scripts/search_extension_catalog.py'
       - 'scripts/review_external_skill_bundle.py'
       - 'scripts/validate_agent_skills.py'
       - 'tests/test_extension_ecosystem.py'
+      - 'tests/test_extension_search.py'
       - 'tests/test_agent_skills.py'
       - '.github/workflows/extension-ecosystem-validation.yml'
   push:
@@ -42,7 +44,9 @@ jobs:
         run: |
           python scripts/validate_extension_ecosystem.py
           python scripts/validate_agent_skills.py
+          python scripts/search_extension_catalog.py --category local-speech --limit 5
       - name: Adversarial catalog and quarantine tests
         run: |
           python -m unittest discover -s tests -p 'test_extension_ecosystem.py' -v
+          python -m unittest discover -s tests -p 'test_extension_search.py' -v
           python -m unittest discover -s tests -p 'test_agent_skills.py' -v
