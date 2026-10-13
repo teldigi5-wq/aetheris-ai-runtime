@@ -200,7 +200,9 @@ class VerifiedOwnerTaskJournalOutboxTest {
         for(int attempt=1;attempt<=VerifiedOwnerTaskJournalOutbox.MAX_ATTEMPTS;attempt++) {
             assertThat(service.dispatchOnce(id -> {
                 throw new IllegalStateException("no delivery");
-            })).isEqualTo(VerifiedOwnerTaskJournalOutbox.DrainResult.RETRY_SCHEDULED);
+            })).isEqualTo(attempt == VerifiedOwnerTaskJournalOutbox.MAX_ATTEMPTS
+                    ? VerifiedOwnerTaskJournalOutbox.DrainResult.PARKED
+                    : VerifiedOwnerTaskJournalOutbox.DrainResult.RETRY_SCHEDULED);
             clock.advance(Duration.ofSeconds(65));
         }
         assertThat(outbox.findByJournalEventId(journalId).orElseThrow().getState())
