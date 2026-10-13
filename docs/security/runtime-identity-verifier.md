@@ -102,6 +102,64 @@ for a future native authenticated read-only event stream after verified
 owner/project routing, protection from direct-port access and reconnect/
 revocation checks.
 
+## Prepared owner-filtered journal event relay (internal only)
+
+`VerifiedOwnerTaskEventRelay` is a new **unregistered, non-HTTP** Java
+component for a future governed live-delivery adapter. It does not
+subscribe to `TaskEventStreamService.subscribeAll()`, register a servlet
+route or expose native desktop credentials. The previously identified
+ownerless aggregate SSE broadcast remains quarantined by runtime #24.
+
+On subscription, the relay checks an independently verified HS256 JWT
+signature, expected issuer and audience, positive numeric owner ID, access
+expiry and `orchestrator:read` scope, then fetches the selected task and
+checks the stored task owner **before** registering a callback. Legacy
+ownerless, other-account and project-scoped tasks are all refused.
+The lease retains only the verified owner ID, selected task ID,
+expiration, last-seen event time and a trusted internal callback; it does
+**not retain the raw token**.
+
+The caller-facing `onJournalChanged(taskId)` method accepts only a
+task UUID, never a raw event, message or metadata. It reads the existing
+journal itself, rechecks that the task exists and belongs to the leased
+owner, and delivers only minimal `taskId/timestamp/state/agentId`
+projections with `PERSISTED_JOURNAL_NOT_VERIFIED_OUTCOME` provenance.
+A journal state is **not proof** that work happened or was verified.
+The relay does not itself check cryptographic event signatures or evidence
+attestations. Callback failures close subscriptions without exposing
+exception messages. No replay occurs on a fresh subscription; prior
+history remains available only from the separate signed history reader.
+
+Boundaries: **32 total subscriptions per relay instance**, a **60-second
+maximum lease**, and **at most 100 events per dispatch** from a bounded
+200-event journal lookup. Expired leases, deleted/foreign tasks and
+explicit owner revocation stop delivery. This in-memory design is
+not cluster-ready and offers no persistence, distributed revocation,
+connection resumption or guarantee of lossless delivery.
+
+Two-account DB/JWT tests cover foreign-owner/project denial, expired
+leases, explicit owner revocation, private-field redaction, invalid agent
+IDs, duplicate replay suppression, no historical replay on subscribe,
+subscriber capacity, task deletion and rejected callback exceptions.
+
+### Requirements to activate future production live SSE
+
+- Replace the unsafe global stream and direct task paths with
+  server-verified owner/project subscription policies, including all
+  indirect mission/approval/event routes. Current project membership
+  remains unverified, so project-bound reads stay blocked.
+- Bind the event relay only to a trusted **post-commit** journal
+  notification; otherwise uncommitted/rolled-back task events could
+  be announced. Test ordering/reconnect boundaries and stable event IDs.
+- Add HTTPS/mTLS or independently verified runtime HTTP principals,
+  trusted gateway-to-runtime access, logout/token revocation propagation,
+  globally bounded subscriber budgets and multi-instance routing.
+- Use an audited native owner-only client session before exposing a
+  streaming route. Test two real authenticated identities, foreign task
+  IDs, token replay/expiry, direct runtime port and app-background stops.
+- Do not call this class a live SSE feature until actual authorized
+  source-to-client delivery and PC hardware tests are complete.
+
 ## Explicit remaining blockers
 
 1. Platform draft [#228](https://github.com/teldigi5-wq/aetheris-platform/pull/228)
