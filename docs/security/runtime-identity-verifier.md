@@ -213,6 +213,68 @@ quarantined by PR #24. The new components cannot be activated until a
 separately reviewed owner-safe publisher and transport are in place.
 No physical owner-PC or production data tests were performed.
 
+## Durable journal outbox (database recovery foundation, NOT LIVE)
+
+The standalone `VerifiedOwnerTaskJournalOutbox` builds on the commit-only
+work from PR #31. Its durable JPA table
+`aetheris_task_journal_outbox` saves **only** a journal-event UUID, task UUID,
+outbox UUID, status, timestamps, bounded attempts, an opaque lease nonce
+and version for concurrency control. Raw event messages, model outputs,
+private commands, owner email, credentials and metadata are **not**
+stored in the outbox table.
+
+`TaskEventJournalService.appendReturningId` is a source-compatible
+addition that returns the exact persisted journal-event UUID as a stable
+idempotency key; its existing `append` callers still work unchanged.
+`appendInCurrentTransaction` *requires* an existing active Spring
+transaction and rejects ownerless/project-scoped tasks. A reviewed internal
+caller can write the journal event plus its durable outbox row in that
+same transaction. Rollback removes **both**, while successful commit leaves
+a pending record that survives an application-worker restart.
+
+A manual worker (not registered or scheduled) claims one eligible row
+under a database **pessimistic row lock**, commits the claim, then may
+perform a narrowly scoped internal callback with **only the task UUID**.
+Each claim has a fresh nonce, a **30-second lease**, and a maximum of five
+attempts. An expired in-flight claim can be reclaimed by a new worker
+instance; a stale former claim cannot acknowledge an event after nonce
+rotation. Callback errors cause bounded backoff (up to 60 seconds),
+followed by a `PARKED` state for manual review. Successful callback
+invocation is recorded as `HANDOFF_ATTEMPTED`, **not** evidence that any
+desktop client, SSE connection or external agent received an event.
+There is no always-running worker, new HTTP route or owner-authorization
+shortcut.
+
+Real H2/JPA + Spring transaction tests exercise:
+- Atomic journal and outbox commit, and no committed rows after rollback;
+- Refusal of no-transaction/ownerless/project-scoped journal staging;
+- Resume/reclaim after constructing a new worker object with the same DB;
+- Lease-nonce fencing against stale acknowledgements;
+- Bounded callback-error retries, exponential backoff and dead-letter parking;
+- Isolated updates through the already-tested signed two-owner task relay;
+- Private payload exclusion from the outbox row and projected updates.
+
+### Remaining production constraints
+
+This is **NOT** a complete enterprise outbox dispatch service. Database
+migrations, PostgreSQL claim/lock contention tests, parallel-worker race
+tests, an explicit durable-outbox health dashboard, parked-item review,
+batch processing, and bounded polling/backpressure must be reviewed and
+validated before deployment. A crash *after callback but before ack* may
+repeat an internal handoff: delivery is **at-least-once attempted**, not
+exactly once. The existing relay's timestamp-based cursor and 200-event
+journal limit may still miss identical-timestamp events or long offline
+periods; add journal-UUID cursors and audited pagination/replay before
+claiming reliable per-event end-to-end history.
+
+The old `TaskEventStreamService.publish` still directly sends to an
+unfiltered shared SSE broadcaster. This new outbox is intentionally **not
+wired** to that path. Its row statuses are not task-work verification
+evidence. Any activation requires cryptographically verified HTTP
+principals, signed owner-scoped routes, project authorization, migration,
+multi-instance delivery tests, token expiry/logout propagation and the
+owner's actual Windows-PC validation. Protected main remains unchanged.
+
 ## Explicit remaining blockers
 
 1. Platform draft [#228](https://github.com/teldigi5-wq/aetheris-platform/pull/228)
