@@ -1,12 +1,17 @@
 # Agent Skills: current trust boundary
 
-This catalog contains **five read-only declarative templates only** for a future external runtime integration. It is not a tool loader, autonomous execution engine or evidence of physical or site validation. The registered templates are:
+This catalog contains **ten read-only declarative templates only** for a future external runtime integration. It is not a tool loader, autonomous execution engine or evidence of physical or site validation. The registered templates are:
 
 - `github-readonly` — authorized repository metadata, PR and CI diagnosis;
 - `incident-investigation` — authorized metrics, logs, health and trace correlation;
 - `mcp-extension-review` — evaluate public MCP metadata without installing or connecting servers;
 - `license-provenance-review` — research repository and model/dependency licensing questions;
 - `local-model-readiness` — reason over authorized read-only inventory without GPU inference.
+- `ui-ux-audit` — review user journeys, hierarchy and responsive design;
+- `motion-experience-review` — review animations, reduced-motion and performance;
+- `3d-web-experience-review` — review 3D/web experiences and resource budgets;
+- `frontend-quality-review` — review web accessibility and frontend performance;
+- `creative-production-review` — plan media workflows, licenses, export and provenance.
 
 The markdown frontmatter uses the Agent Skills `name` and `description` fields. `catalog.json` is an Aetheris-specific, deterministic policy envelope. `scripts/validate_agent_skills.py` rejects unapproved tools and external hosts, execution enablement, mutation modes, unknown files, symlinks, and drifted safety status. Tests include negative cases.
 
@@ -21,3 +26,7 @@ Run locally: `python scripts/validate_agent_skills.py` and `python -m unittest d
 ## Global ecosystem research (separate, non-executable)
 
 The `../ecosystem/sources.json` catalog contains **14 external repository references**, not bundled or installed dependencies. License compatibility, immutable source revision, scopes, upstream authenticity, sandboxing, hardware fit and user consent still require independent review. The static inspection utility `scripts/review_external_skill_bundle.py` never imports, runs or installs a third-party Skill. Its output is not an approval to activate plugins.
+
+## Proposed Creative Studio (stacked draft)
+
+Five additional **TEMPLATE_ONLY**, non-executing review skills and a 12-repository quarantined design/animation/3D reference list are defined under [`../creative-studio/`](../creative-studio/README.md). They **do not** install GSAP, Three.js, Blender, Figma plugins, media processors or new permissions. Physical GPU/PC validation remains blocked.
