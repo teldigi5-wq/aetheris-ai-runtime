@@ -5,13 +5,15 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "aetheris_task_events")
+@Table(name = "aetheris_task_events", indexes =
+        @Index(name = "idx_aetheris_task_event_cursor", columnList = "task_id,event_at,id"))
 public class TaskEventJournalEntity {
 
     @Id
