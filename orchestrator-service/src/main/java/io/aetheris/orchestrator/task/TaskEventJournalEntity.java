@@ -12,9 +12,10 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "aetheris_task_events", indexes =
+@Table(name = "aetheris_task_events", indexes = {
         @Index(name = "idx_aetheris_task_event_cursor", columnList = "task_id,event_at,id"),
-        @Index(name = "idx_aetheris_task_event_sequence", columnList = "task_id,commit_sequence", unique = true))
+        @Index(name = "idx_aetheris_task_event_sequence", columnList = "task_id,commit_sequence", unique = true)
+})
 public class TaskEventJournalEntity {
 
     @Id
