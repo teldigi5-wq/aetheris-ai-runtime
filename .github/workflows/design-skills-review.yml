@@ -1,0 +1,25 @@
+name: Design skill source proposal review
+on:
+  pull_request:
+    paths:
+      - 'ecosystem/design_skills_sources.json'
+      - 'scripts/validate_design_skills_sources.py'
+      - 'tests/test_design_skills_sources.py'
+      - 'docs/skills/design-stack-review.md'
+      - '.github/workflows/design-skills-review.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate-offline-sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Static manifest guard
+        run: python scripts/validate_design_skills_sources.py
+      - name: Negative safety contracts
+        run: python -m unittest tests.test_design_skills_sources -v
