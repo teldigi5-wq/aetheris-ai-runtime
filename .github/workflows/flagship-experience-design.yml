@@ -1,0 +1,40 @@
+name: Flagship Experience Design Safety
+
+on:
+  pull_request:
+    branches:
+      - main
+      - feature/creative-studio-skills-20261013
+    paths:
+      - 'experience-design/**'
+      - 'skills/**'
+      - 'scripts/validate_agent_skills.py'
+      - 'scripts/validate_flagship_sources.py'
+      - 'tests/test_flagship_design_safety.py'
+      - 'tests/test_connected_journey.mjs'
+      - '.github/workflows/flagship-experience-design.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  flagship-experience-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13.15'
+      - name: Enforce Agent Skills and external library quarantine
+        run: |
+          python scripts/validate_agent_skills.py
+          python scripts/validate_flagship_sources.py
+          python -m unittest discover -s tests -p 'test_flagship_design_safety.py' -v
+      - name: Verify deterministic trusted data handoff and truth boundaries
+        run: |
+          node --version
+          node --check experience-design/connected-journey.mjs
+          node --test tests/test_connected_journey.mjs
