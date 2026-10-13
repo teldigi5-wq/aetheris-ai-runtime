@@ -20,7 +20,7 @@ class TaskOwnerPersistenceTest {
 
     @Test
     void ownerBindingIsDurableAndScopedQueriesExcludeOtherOwnerAndLegacyRows() {
-        UUID ownerA=UUID.randomUUID(), ownerB=UUID.randomUUID();
+        Long ownerA=101L, ownerB=202L;
         UUID projectA=UUID.randomUUID(), projectB=UUID.randomUUID();
         TaskEntity a=repository.save(new TaskEntity(UUID.randomUUID(),"owner A","sample",
                 OperationMode.PRIVATE,ownerA,projectA));
