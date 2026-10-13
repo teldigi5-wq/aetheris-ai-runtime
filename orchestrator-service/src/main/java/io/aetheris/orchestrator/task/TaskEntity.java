@@ -39,7 +39,7 @@ public class TaskEntity {
      * to an arbitrary caller by guessing a UUID or setting a header.
      */
     @Column(name = "owner_user_id", updatable = false)
-    private UUID ownerUserId;
+    private Long ownerUserId;
 
     @Column(name = "owner_project_id", updatable = false)
     private UUID ownerProjectId;
@@ -72,7 +72,7 @@ public class TaskEntity {
     // Not wired to any HTTP request. Only a future *verified server-side*
     // principal resolver may call a trusted owning creation path.
     TaskEntity(UUID id, String title, String commandText, OperationMode mode,
-               UUID trustedOwnerUserId, UUID trustedProjectId) {
+               Long trustedOwnerUserId, UUID trustedProjectId) {
         this(id, title, commandText, mode);
         if (trustedOwnerUserId == null) {
             throw new IllegalArgumentException("Verified task owner is required");
@@ -81,7 +81,7 @@ public class TaskEntity {
         this.ownerProjectId = trustedProjectId;
     }
 
-    public UUID getOwnerUserId() { return ownerUserId; }
+    public Long getOwnerUserId() { return ownerUserId; }
     public UUID getOwnerProjectId() { return ownerProjectId; }
 
     public UUID getId() { return id; }
