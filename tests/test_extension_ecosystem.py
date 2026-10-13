@@ -59,6 +59,18 @@ class ExternalCatalogTest(unittest.TestCase):
         (self.root / "ecosystem" / "run.py").write_text("print('no')", encoding="utf-8")
         self.assertTrue(validate_catalog(self.root))
 
+    def test_catalog_cannot_fetch_or_enable_hubs(self):
+        self.change(lambda d: d["discovery_hubs"][0].update(network_fetch_enabled=True))
+        self.assertTrue(validate_catalog(self.root))
+
+    def test_hub_url_cannot_be_substituted(self):
+        self.change(lambda d: d["discovery_hubs"][1].update(url="https://attacker.example"))
+        self.assertTrue(validate_catalog(self.root))
+
+    def test_adding_forged_directory_fails_closed(self):
+        self.change(lambda d: d["discovery_hubs"].append(dict(d["discovery_hubs"][0], id="malicious")))
+        self.assertTrue(validate_catalog(self.root))
+
     def test_missing_required_fields_fail_closed(self):
         self.change(lambda d: d.pop("schema_version"))
         self.assertTrue(validate_catalog(self.root))
