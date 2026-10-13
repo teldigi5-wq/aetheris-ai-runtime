@@ -24,14 +24,25 @@ public class TaskEventJournalService {
     }
 
     public void append(TaskEvent event) {
+        appendReturningId(event);
+    }
+
+    /**
+     * Returns the exact persisted journal event ID, so a future trusted
+     * transactional outbox can use it as a stable idempotency key.
+     * Existing append() callers preserve their old behavior.
+     */
+    public UUID appendReturningId(TaskEvent event) {
+        UUID id = UUID.randomUUID();
         repository.save(new TaskEventJournalEntity(
-                UUID.randomUUID(),
+                id,
                 event.taskId(),
                 event.timestamp(),
                 event.state(),
                 event.agentId(),
                 event.message(),
                 serialize(event.metadata())));
+        return id;
     }
 
     public List<TaskEvent> history(UUID taskId) {
