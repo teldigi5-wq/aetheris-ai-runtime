@@ -49,8 +49,8 @@ has not validated.
 
 ## Stacked owner-bound persistence foundation (still not an authenticated endpoint)
 
-The next reviewable slice introduces **nullable, immutable-on-update**
-`owner_user_id` and `owner_project_id` UUID columns on task and mission JPA
+The next reviewable slice follows the identity service's actual `IdentityAccount.id`/JWT `uid` type: **numeric Long (BIGINT), not UUID**, for `owner_user_id`. It introduces **nullable, immutable-on-update**
+`owner_user_id` and `owner_project_id` owner BIGINT and project typed columns on task and mission JPA
 entities. Ordinary existing `TaskService.create` and `MissionService.create`
 continue producing **ownerless rows**. Only non-HTTP, package-scoped
 constructors accept an explicitly *trusted* owner. This is preparatory schema
