@@ -27,8 +27,28 @@ CAPABILITIES = {
         "tools": {"observability.health.read", "models.catalog.read"},
         "hosts": set(),
     },
+    "ui-ux-audit": {
+        "tools": {"design.ui.read", "design.system.read"},
+        "hosts": set(),
+    },
+    "motion-experience-review": {
+        "tools": {"design.ui.read", "design.motion.read"},
+        "hosts": set(),
+    },
+    "3d-web-experience-review": {
+        "tools": {"design.ui.read", "design.3d.read"},
+        "hosts": set(),
+    },
+    "frontend-quality-review": {
+        "tools": {"design.ui.read", "quality.accessibility.read", "quality.performance.read"},
+        "hosts": set(),
+    },
+    "creative-production-review": {
+        "tools": {"design.motion.read", "media.asset-metadata.read"},
+        "hosts": set(),
+    },
 }
-SKILL_NAME = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+SKILL_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 FRONTMATTER = re.compile(r"\A---\nname: ([a-z0-9-]+)\ndescription: ([^\n]+)\n---\n", re.ASCII)
 
 def validate_skills(root: Path = ROOT) -> list[str]:

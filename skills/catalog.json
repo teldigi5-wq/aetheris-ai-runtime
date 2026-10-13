@@ -98,6 +98,87 @@
       "external_hosts": [],
       "owner_approval_required_for_mutations": true,
       "max_evidence_items": 20
+    },
+    {
+      "name": "ui-ux-audit",
+      "path": "skills/ui-ux-audit/SKILL.md",
+      "description": "Read-only UX critique, visual hierarchy, user flows and component consistency.",
+      "risk": "LOW",
+      "effect": "READ_ONLY",
+      "status": "TEMPLATE_ONLY",
+      "execution_enabled": false,
+      "allowed_tools": [
+        "design.ui.read",
+        "design.system.read"
+      ],
+      "external_hosts": [],
+      "owner_approval_required_for_mutations": true,
+      "max_evidence_items": 20
+    },
+    {
+      "name": "motion-experience-review",
+      "path": "skills/motion-experience-review/SKILL.md",
+      "description": "Read-only planning of transitions, scroll motion, reduced-motion fallbacks and interaction animation.",
+      "risk": "LOW",
+      "effect": "READ_ONLY",
+      "status": "TEMPLATE_ONLY",
+      "execution_enabled": false,
+      "allowed_tools": [
+        "design.ui.read",
+        "design.motion.read"
+      ],
+      "external_hosts": [],
+      "owner_approval_required_for_mutations": true,
+      "max_evidence_items": 20
+    },
+    {
+      "name": "3d-web-experience-review",
+      "path": "skills/3d-web-experience-review/SKILL.md",
+      "description": "Read-only Three.js scene planning, realistic 3D and resource-budget review.",
+      "risk": "LOW",
+      "effect": "READ_ONLY",
+      "status": "TEMPLATE_ONLY",
+      "execution_enabled": false,
+      "allowed_tools": [
+        "design.ui.read",
+        "design.3d.read"
+      ],
+      "external_hosts": [],
+      "owner_approval_required_for_mutations": true,
+      "max_evidence_items": 20
+    },
+    {
+      "name": "frontend-quality-review",
+      "path": "skills/frontend-quality-review/SKILL.md",
+      "description": "Read-only accessibility, responsive design, performance and frontend reliability audit.",
+      "risk": "LOW",
+      "effect": "READ_ONLY",
+      "status": "TEMPLATE_ONLY",
+      "execution_enabled": false,
+      "allowed_tools": [
+        "design.ui.read",
+        "quality.accessibility.read",
+        "quality.performance.read"
+      ],
+      "external_hosts": [],
+      "owner_approval_required_for_mutations": true,
+      "max_evidence_items": 20
+    },
+    {
+      "name": "creative-production-review",
+      "path": "skills/creative-production-review/SKILL.md",
+      "description": "Read-only video and media storyboard, export, license and provenance planning.",
+      "risk": "LOW",
+      "effect": "READ_ONLY",
+      "status": "TEMPLATE_ONLY",
+      "execution_enabled": false,
+      "allowed_tools": [
+        "design.motion.read",
+        "media.asset-metadata.read"
+      ],
+      "external_hosts": [],
+      "owner_approval_required_for_mutations": true,
+      "max_evidence_items": 20
     }
   ]
 }
