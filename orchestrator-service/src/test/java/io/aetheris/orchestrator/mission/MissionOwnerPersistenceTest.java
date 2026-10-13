@@ -18,7 +18,7 @@ class MissionOwnerPersistenceTest {
 
     @Test
     void missionOwnerAndProjectFieldsPersistAndCannotLeakAcrossAccounts() {
-        UUID ownerA=UUID.randomUUID(), ownerB=UUID.randomUUID();
+        Long ownerA=101L, ownerB=202L;
         UUID project=UUID.randomUUID();
         MissionSessionEntity a=repository.save(new MissionSessionEntity(UUID.randomUUID(),
                 "Owner A", "isolated mission", ownerA,project));
