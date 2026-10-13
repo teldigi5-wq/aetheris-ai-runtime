@@ -5,6 +5,7 @@ import io.aetheris.orchestrator.security.RuntimeAccessTokenVerifier;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -41,6 +42,12 @@ class VerifiedOwnerTaskJournalOutboxTest {
     @Autowired TaskEventJournalService journal;
     @Autowired TaskJournalOutboxRepository outbox;
     @Autowired PlatformTransactionManager manager;
+
+    // The JUnit Spring context is shared: isolate the intentionally durable
+    // outbox across methods instead of relying on method discovery order.
+    @BeforeEach
+    void clearSyntheticOutbox() { outbox.deleteAll(); }
+
 
     private static final class MutableClock extends Clock {
         private final AtomicReference<Instant> instant;
