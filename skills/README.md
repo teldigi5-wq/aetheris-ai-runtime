@@ -1,6 +1,6 @@
 # Agent Skills: current trust boundary
 
-This catalog contains **ten read-only declarative templates only** for a future external runtime integration. It is not a tool loader, autonomous execution engine or evidence of physical or site validation. The registered templates are:
+This catalog contains **thirteen read-only declarative templates only** for a future external runtime integration. It is not a tool loader, autonomous execution engine or evidence of physical or site validation. The registered templates are:
 
 - `github-readonly` — authorized repository metadata, PR and CI diagnosis;
 - `incident-investigation` — authorized metrics, logs, health and trace correlation;
@@ -12,6 +12,9 @@ This catalog contains **ten read-only declarative templates only** for a future 
 - `3d-web-experience-review` — review 3D/web experiences and resource budgets;
 - `frontend-quality-review` — review web accessibility and frontend performance;
 - `creative-production-review` — plan media workflows, licenses, export and provenance.
+- `realistic-globe-experience-review` — realistic Earth UX, device fallbacks and geography trust;
+- `agent-journey-trust-review` — tool authenticity, provenance states and consented flow;
+- `arrival-companion-ux-review` — first-hour travel confidence, offline behavior and reliable handoff.
 
 The markdown frontmatter uses the Agent Skills `name` and `description` fields. `catalog.json` is an Aetheris-specific, deterministic policy envelope. `scripts/validate_agent_skills.py` rejects unapproved tools and external hosts, execution enablement, mutation modes, unknown files, symlinks, and drifted safety status. Tests include negative cases.
 
@@ -30,3 +33,7 @@ The `../ecosystem/sources.json` catalog contains **14 external repository refere
 ## Proposed Creative Studio (stacked draft)
 
 Five additional **TEMPLATE_ONLY**, non-executing review skills and a 12-repository quarantined design/animation/3D reference list are defined under [`../creative-studio/`](../creative-studio/README.md). They **do not** install GSAP, Three.js, Blender, Figma plugins, media processors or new permissions. Physical GPU/PC validation remains blocked.
+
+## Experience flagship inspiration (separate application)
+
+Three additional read-only review templates support connected Discover → Plan → Arrive → Explore experiences. A verified offline reference state contract and 12 uninstalled map/motion/test library candidate references are described in [`../experience-design/`](../experience-design/README.md). The actual Wayfarer Journey AI deployment remains a **separate project** and is not modified by this Aetheris change.
