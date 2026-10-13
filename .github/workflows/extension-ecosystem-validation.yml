@@ -1,0 +1,48 @@
+name: External Skills and Extensions Safety
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ecosystem/**'
+      - 'skills/**'
+      - 'scripts/validate_extension_ecosystem.py'
+      - 'scripts/review_external_skill_bundle.py'
+      - 'scripts/validate_agent_skills.py'
+      - 'tests/test_extension_ecosystem.py'
+      - 'tests/test_agent_skills.py'
+      - '.github/workflows/extension-ecosystem-validation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'ecosystem/**'
+      - 'skills/**'
+      - 'scripts/validate_extension_ecosystem.py'
+      - 'scripts/review_external_skill_bundle.py'
+      - 'scripts/validate_agent_skills.py'
+      - 'tests/test_extension_ecosystem.py'
+      - 'tests/test_agent_skills.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  global-extension-quarantine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13.15'
+      - name: Validate no external installation or enabled plugins
+        run: |
+          python scripts/validate_extension_ecosystem.py
+          python scripts/validate_agent_skills.py
+      - name: Adversarial catalog and quarantine tests
+        run: |
+          python -m unittest discover -s tests -p 'test_extension_ecosystem.py' -v
+          python -m unittest discover -s tests -p 'test_agent_skills.py' -v
