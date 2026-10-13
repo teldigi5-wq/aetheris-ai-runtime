@@ -44,7 +44,7 @@ public final class VerifiedOwnerTaskTimeline {
         int start = Math.max(0, source.size() - MAX_HISTORY_EVENTS);
         return source.subList(start, source.size()).stream()
                 .filter(event -> event != null && taskId.equals(event.taskId()))
-                .map(VerifiedOwnerTaskTimeline::sanitize)
+                .map(event -> sanitize(event, Provenance.PERSISTED_JOURNAL_NOT_VERIFIED_OUTCOME))
                 .filter(Objects::nonNull)
                 .toList();
     }
@@ -60,7 +60,7 @@ public final class VerifiedOwnerTaskTimeline {
         if (event == null || !selectedTaskId.equals(event.taskId())) {
             throw unavailable();
         }
-        TimelineUpdate view = sanitize(event);
+        TimelineUpdate view = sanitize(event, Provenance.UNTRUSTED_EVENT_ARGUMENT);
         if (view == null) throw unavailable();
         return view;
     }
@@ -82,7 +82,7 @@ public final class VerifiedOwnerTaskTimeline {
         return new NoSuchElementException("TASK_NOT_AVAILABLE");
     }
 
-    private static TimelineUpdate sanitize(TaskEvent event) {
+    private static TimelineUpdate sanitize(TaskEvent event, Provenance provenance) {
         if (event.taskId() == null || event.timestamp() == null || event.state() == null)
             return null;
         String agent = event.agentId();
@@ -90,9 +90,18 @@ public final class VerifiedOwnerTaskTimeline {
                 !agent.matches("[a-z0-9][a-z0-9-]{0,79}"))) {
             agent = null;
         }
-        return new TimelineUpdate(event.taskId(), event.timestamp(), event.state(), agent);
+        return new TimelineUpdate(event.taskId(), event.timestamp(), event.state(), agent, provenance);
     }
 
-    /** Safe DTO: event text and metadata are NEVER fields in this record. */
-    public record TimelineUpdate(UUID taskId, Instant timestamp, TaskState state, String agentId) {}
+    public enum Provenance {
+        // A saved event is evidence of a recorded state, not proof the tool
+        // action really occurred or that its reported completion was correct.
+        PERSISTED_JOURNAL_NOT_VERIFIED_OUTCOME,
+        // No untrusted input can be labeled as a successful live agent action.
+        UNTRUSTED_EVENT_ARGUMENT
+    }
+
+    /** Safe DTO: message, metadata and tokens are NEVER fields here. */
+    public record TimelineUpdate(UUID taskId, Instant timestamp, TaskState state,
+                                 String agentId, Provenance provenance) {}
 }
