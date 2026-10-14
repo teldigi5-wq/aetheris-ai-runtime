@@ -1,0 +1,101 @@
+name: PostgreSQL Task Sequence Certification
+
+on:
+  pull_request:
+    branches:
+      - security/per-task-commit-sequence-20261013
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/task/**'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/task/VerifiedOwnerCommitSequenceCursorTest.java'
+      - 'docs/security/sql/postgres-owner-task-sequencing-v1.sql'
+      - 'tests/postgresql/**'
+      - '.github/workflows/runtime-postgresql-sequence.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-sequence-and-locks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: aetheris_test
+          POSTGRES_PASSWORD: synthetic-ci-only-password
+          POSTGRES_DB: aetheris_sequence_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aetheris_test -d aetheris_sequence_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Set up JDK 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Run real PostgreSQL task-lock, rollback and signed-owner integration tests
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:5432/aetheris_sequence_test
+          SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+          SPRING_DATASOURCE_USERNAME: aetheris_test
+          SPRING_DATASOURCE_PASSWORD: synthetic-ci-only-password
+          SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+          SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=VerifiedOwnerCommitSequenceCursorTest,VerifiedOwnerTaskJournalOutboxTest \
+            test
+
+  additive-migration-dry-run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: aetheris_test
+          POSTGRES_PASSWORD: synthetic-ci-only-password
+          POSTGRES_DB: aetheris_migration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aetheris_test -d aetheris_migration_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: aetheris_test
+      PGPASSWORD: synthetic-ci-only-password
+      PGDATABASE: aetheris_migration_test
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Ensure PostgreSQL client installed
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+          psql --version
+      - name: Verify additive SQL twice against disposable legacy schema
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f tests/postgresql/pre_migration_fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/security/sql/postgres-owner-task-sequencing-v1.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/security/sql/postgres-owner-task-sequencing-v1.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/postgresql/verify_owner_task_sequence.sql
