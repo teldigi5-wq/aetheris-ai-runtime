@@ -12,7 +12,7 @@ on:
       - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/task/VerifiedOwnerCommitSequenceCursorTest.java'
       - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/task/VerifiedOwnerDeliveryCheckpointTest.java'
       - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerCheckpointHttpController.java'
-      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/api/OwnerCheckpointHttpControllerTest.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/task/OwnerCheckpointHttpControllerTest.java'
       - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/api/OwnerCheckpointHttpDefaultDisabledTest.java'
       - 'orchestrator-service/src/main/resources/application.yml'
       - 'docs/security/sql/postgres-owner-delivery-checkpoint-v2.sql'
