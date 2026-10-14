@@ -60,7 +60,7 @@ class IsolatedOciProbePlanTest {
     @Test
     void rejectAmbiguousMountDelimitersBeforeAnyLaunch() throws Exception {
         Assumptions.assumeTrue(System.getProperty("os.name").toLowerCase().contains("linux"));
-        Path unsafe = Files.createDirectory(root.resolve("comma,src=/"));
+        Path unsafe = Files.createDirectory(root.resolve("comma,src=bad"));
         Files.writeString(unsafe.resolve("probe.sh"), "exit 0\n");
         assertThatThrownBy(() -> IsolatedOciProbePlan.build(unsafe))
                 .isInstanceOf(IllegalArgumentException.class)
