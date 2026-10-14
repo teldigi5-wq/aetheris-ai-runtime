@@ -87,7 +87,7 @@ func run() int {
   _=listener.SetDeadline(deadline)
   peer,err:=listener.AcceptUnix()
   if err!=nil {break}
-  _=peer.SetDeadline(time.Now().Add(400*time.Millisecond))
+  _=peer.SetDeadline(time.Now().Add(900*time.Millisecond))
   uid,uidErr:=unixPeerUID(peer)
   if uidErr!=nil || uid!=unprivilegedVerifierUID {
    peer.Close()
