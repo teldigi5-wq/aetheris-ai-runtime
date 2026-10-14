@@ -89,13 +89,14 @@ func killFixedContainer(id string) error {
 
 func run() int {
  if os.Getenv("GITHUB_ACTIONS")!="true" ||
-  os.Getenv("AETHERIS_STAGE45_WATCH_CI")!="true" || len(os.Args)!=7 {
+  os.Getenv("AETHERIS_STAGE45_WATCH_CI")!="true" || len(os.Args)!=8 {
   fmt.Println("HOST_WATCH_CI_ONLY")
   return 90
  }
  pubfile,heartbeatFile:=os.Args[1],os.Args[2]
  worker,job,container:=os.Args[3],os.Args[4],os.Args[5]
  epoch,parseErr:=strconv.ParseUint(os.Args[6],10,64)
+ stateDir:=os.Args[7]
  if !ident.MatchString(worker) || !jobID.MatchString(job) ||
   !containerDigest.MatchString(container) || parseErr!=nil || epoch<1 {
   return 91
@@ -104,18 +105,33 @@ func run() int {
  ctx,cancel:=context.WithTimeout(context.Background(),2*time.Second)
  observed,err:=observedContainer(ctx,container)
  cancel()
- if err!=nil || observed!=container+":true:"+pidPart(observed) {
-  // Explicit match below rejects wrong Docker container identity/PID.
-  if err!=nil || !strings.HasPrefix(observed,container+":true:") {
-   return 92
-  }
+ if err!=nil || pidPart(observed)=="" ||
+    observed!=container+":true:"+pidPart(observed) {
+  return 92
  }
  der,err:=os.ReadFile(pubfile)
- if err!=nil || len(der)>256 {return 93}
+ if err!=nil || len(der)>256 {
+  return terminateObserved(container,"TRUST_KEY_UNAVAILABLE")
+ }
  parsed,err:=x509.ParsePKIXPublicKey(der)
  pub,ok:=parsed.(ed25519.PublicKey)
- if err!=nil || !ok {return 94}
- var seen uint64
+ if err!=nil || !ok {
+  return terminateObserved(container,"TRUST_KEY_INVALID")
+ }
+ // Hold an exclusive advisory directory lock for the entire watch
+ // lifetime. This and the high-water journal live outside the Docker
+ // container; only the synthetic CI host controls the directory.
+ holder,err:=lockWatchState(stateDir)
+ if err!=nil {return terminateObserved(container,"WATCH_STATE_LOCK_UNAVAILABLE")}
+ defer holder.Close()
+ saved,err:=loadWatchState(stateDir,worker,job,container,epoch,
+  publicFingerprint(der))
+ if err!=nil {return terminateObserved(container,"WATCH_STATE_INVALID")}
+ if saved.state=="STOP" {return terminateObserved(container,"PRIOR_TERMINAL_STOP")}
+ seen:=saved.sequence
+ // Restart requires a NEW signed sequence; a previous valid frame
+ // cannot be replayed to resurrect an old watch window.
+ acceptedInThisProcess:=false
  reason:="HEARTBEAT_UNAVAILABLE_OR_EXPIRED"
  start:=time.Now()
  for {
@@ -123,7 +139,20 @@ func run() int {
   if readErr!=nil {break}
   beat,valid:=verifyHeartbeat(pub,b,worker,job,container,epoch,seen,time.Now().Unix())
   if valid!=nil {break}
-  seen=beat.sequence
+  if beat.sequence==seen && !acceptedInThisProcess {
+   reason="RESTART_REPLAYED_HEARTBEAT"
+   break
+  }
+  if beat.sequence>seen {
+   if err:=persistWatchState(stateDir,worker,job,container,epoch,
+    publicFingerprint(der),beat,saved);err!=nil {
+    reason="WATCH_STATE_PERSIST_FAILED"
+    break
+   }
+   saved=savedHeartbeat{beat.sequence,beat.state}
+   seen=beat.sequence
+  }
+  acceptedInThisProcess=true
   if beat.state=="STOP" {reason="SIGNED_STOP_OBSERVED";break}
   // Even constant valid ACTIVE heartbeat cannot defeat a fixed total
   // synthetic CI runtime budget. No unbounded watchdog loops.
@@ -132,6 +161,16 @@ func run() int {
   }
   time.Sleep(80*time.Millisecond)
  }
+ fmt.Println("SYNTHETIC_HOST_WATCH_KILL_REASON="+reason)
+ if err:=killFixedContainer(container);err!=nil {
+  fmt.Println("SYNTHETIC_HOST_WATCH_TERMINATION_UNVERIFIED")
+  return 95
+ }
+ fmt.Println("SYNTHETIC_HOST_WATCH_TERMINATION_OBSERVED")
+ return 0
+}
+
+func terminateObserved(container,reason string) int {
  fmt.Println("SYNTHETIC_HOST_WATCH_KILL_REASON="+reason)
  if err:=killFixedContainer(container);err!=nil {
   fmt.Println("SYNTHETIC_HOST_WATCH_TERMINATION_UNVERIFIED")
