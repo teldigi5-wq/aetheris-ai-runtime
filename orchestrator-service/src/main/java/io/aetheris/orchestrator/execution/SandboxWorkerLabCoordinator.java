@@ -73,7 +73,7 @@ public final class SandboxWorkerLabCoordinator {
      */
     public synchronized UUID dispatch(SignedJob signed) {
         if (stopLatched || gate.isStopped()) throw new SecurityException("SANDBOX_STOP_LATCHED");
-        if (emergencyStop.getAsBoolean()) {
+        if (stopRequested()) {
             stopAll();
             throw new SecurityException("SANDBOX_STOP_SIGNAL_ACTIVE");
         }
@@ -85,7 +85,7 @@ public final class SandboxWorkerLabCoordinator {
 
         FixedProfileBackend.RunningHandle handle = null;
         try {
-            if (stopLatched || emergencyStop.getAsBoolean()) {
+            if (stopLatched || stopRequested()) {
                 stopAll();
                 throw new SecurityException("SANDBOX_STOP_SIGNAL_ACTIVE");
             }
@@ -95,7 +95,7 @@ public final class SandboxWorkerLabCoordinator {
                 throw new IllegalStateException("SYNTHETIC_BACKEND_NOT_RUNNING");
             }
             active.put(id, new Active(claims, handle));
-            if (emergencyStop.getAsBoolean()) {
+            if (stopRequested()) {
                 stopAll();
                 throw new SecurityException("SANDBOX_STOP_SIGNAL_ACTIVE");
             }
@@ -124,7 +124,7 @@ public final class SandboxWorkerLabCoordinator {
      */
     public synchronized void reconcile() {
         if (stopLatched) return;
-        if (gate.isStopped() || emergencyStop.getAsBoolean()) {
+        if (gate.isStopped() || stopRequested()) {
             stopAll();
             return;
         }
@@ -142,7 +142,20 @@ public final class SandboxWorkerLabCoordinator {
             } catch (RuntimeException denied) {
                 authorized = false;
             }
-            if (!authorized) terminateSingle(entry.getKey());
+            if (!authorized) {
+                try {
+                    terminateSingle(entry.getKey());
+                } catch (RuntimeException unableToKill) {
+                    // Never leave other jobs running under a coordinator that
+                    // cannot prove a revoked job has stopped.
+                    try {
+                        stopAll();
+                    } catch (RuntimeException secondary) {
+                        unableToKill.addSuppressed(secondary);
+                    }
+                    throw new SecurityException("SANDBOX_REVOKED_KILL_UNCONFIRMED", unableToKill);
+                }
+            }
         }
     }
 
@@ -186,6 +199,23 @@ public final class SandboxWorkerLabCoordinator {
         }
         active.remove(id);
         gate.complete(id);
+    }
+
+    /**
+     * Unknown STOP state must fail closed. This only helps when a caller
+     * explicitly invokes dispatch/reconcile; it is not an event listener.
+     */
+    private boolean stopRequested() {
+        try {
+            return emergencyStop.getAsBoolean();
+        } catch (RuntimeException unreadable) {
+            try {
+                stopAll();
+            } catch (RuntimeException cleanupError) {
+                unreadable.addSuppressed(cleanupError);
+            }
+            throw new SecurityException("SANDBOX_STOP_SIGNAL_UNAVAILABLE", unreadable);
+        }
     }
 
     public synchronized boolean isStopped() { return stopLatched || gate.isStopped(); }
