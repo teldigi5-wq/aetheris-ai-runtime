@@ -85,22 +85,38 @@ class StandaloneStopWorkerLabProcessTest {
             assertThat(separateWorker.waitFor(10, TimeUnit.SECONDS)).isTrue();
             assertThat(separateWorker.exitValue()).isZero();
             Path marker = root.resolve("STOP_LATCHED");
-            assertThat(Files.readString(marker)).isEqualTo("STOPPED:5\n");
+            assertThat(Files.readString(marker))
+                    .isEqualTo("STOPPED:5:" + request.nonce() + "\n");
             assertThat(Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS)).isTrue();
             assertThat(Files.getPosixFilePermissions(marker))
                     .isEqualTo(PosixFilePermissions.fromString("rw-------"));
             assertThat(Files.exists(socket)).isFalse();
 
-            // The same worker process cannot be restarted into an accepting
-            // state with the durable synthetic STOP marker still present.
+            // Recovery-only STOP worker can acknowledge ONLY the same persisted
+            // nonce/epoch, never a new STOP or any RUN operation.
             Process restarted = startWorker(root, workerId, controllerPub, workerPriv, socket);
             try {
-                assertThat(restarted.waitFor(5, TimeUnit.SECONDS)).isTrue();
-                assertThat(restarted.exitValue()).isNotZero();
+                awaitSocket(restarted, socket);
+                long fresh = Instant.now().getEpochSecond();
+                var mismatch = new SandboxWorkerStopWire.StopRequest(
+                        UUID.randomUUID(), workerId, fresh - 1, fresh + 15, 5);
+                assertThatThrownBy(() -> SandboxWorkerStopWire.requestStop(
+                        socket, mismatch, controller.getPrivate(), worker.getPublic()))
+                        .isInstanceOf(IOException.class);
+                assertThat(Files.readString(marker))
+                        .isEqualTo("STOPPED:5:" + request.nonce() + "\n");
+                var retry = new SandboxWorkerStopWire.StopRequest(
+                        request.nonce(), workerId, fresh - 1, fresh + 15, 5);
+                var recovered = SandboxWorkerStopWire.requestStop(
+                        socket, retry, controller.getPrivate(), worker.getPublic());
+                assertThat(recovered.nonce()).isEqualTo(request.nonce());
+                assertThat(recovered.status()).isEqualTo(SandboxWorkerStopWire.STOP_STATUS);
+                assertThat(restarted.waitFor(10, TimeUnit.SECONDS)).isTrue();
+                assertThat(restarted.exitValue()).isZero();
                 assertThat(Files.exists(socket)).isFalse();
-                assertThat(Files.readString(marker)).isEqualTo("STOPPED:5\n");
             } finally {
                 restarted.destroyForcibly();
+                if (restarted.isAlive()) restarted.waitFor(2, TimeUnit.SECONDS);
             }
         } finally {
             separateWorker.destroyForcibly();

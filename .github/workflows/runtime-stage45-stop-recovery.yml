@@ -1,0 +1,101 @@
+name: Runtime Stage 45.5.3 STOP Recovery and Deadlines
+
+on:
+  pull_request:
+    branches:
+      - security/stage45-durable-stop-ipc-outbox-20261014
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/execution/BoundedUnixStopTransport.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/execution/DurableStopMarkerLab.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/execution/SandboxWorkerStopWire.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/execution/StandaloneStopWorkerLabMain.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/execution/BoundedUnixStopTransportTest.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/execution/DurableStopLostAckRecoveryTest.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/execution/StandaloneStopWorkerLabProcessTest.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/execution/DurableStopIpcBridgeProcessTest.java'
+      - 'docs/security/stage45-stop-receipt-recovery.md'
+      - '.github/workflows/runtime-stage45-stop-recovery.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  stop-recovery-adversarial-h2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact pull-request revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Install Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Test bounded partial frames, receipt loss, restart and immutable STOP
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=BoundedUnixStopTransportTest,DurableStopLostAckRecoveryTest,StandaloneStopWorkerLabProcessTest,DurableStopIpcBridgeProcessTest,DurableStopIpcBridgeLabJpaTest test
+
+  stop-recovery-postgresql:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: synthetic-stop-recovery-ci-only
+          POSTGRES_DB: aetheris_stop_recovery_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aetheris_stop_recovery_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    steps:
+      - name: Checkout exact pull-request revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Install Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Real disposable PostgreSQL 16 STOP outbox/worker IPC recovery
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:5432/aetheris_stop_recovery_ci
+          SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: synthetic-stop-recovery-ci-only
+          SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dspring.datasource.url="$SPRING_DATASOURCE_URL" \
+            -Dspring.datasource.driver-class-name="$SPRING_DATASOURCE_DRIVER_CLASS_NAME" \
+            -Dspring.datasource.username="$SPRING_DATASOURCE_USERNAME" \
+            -Dspring.datasource.password="$SPRING_DATASOURCE_PASSWORD" \
+            -Dspring.jpa.hibernate.ddl-auto=create-drop \
+            -Dtest=DurableStopLostAckRecoveryTest,DurableStopIpcBridgeProcessTest,DurableStopIpcBridgeLabJpaTest test
+
+  complete-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact pull-request revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Install Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Run complete Java regression
+        run: ./mvnw -B -f orchestrator-service/pom.xml test

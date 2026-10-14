@@ -172,13 +172,8 @@ public final class SandboxWorkerStopWire {
      * This has no session timeout or production peer-credential assurance.
      */
     public static SignedFrame exchange(Path socket, SignedFrame request) throws IOException {
-        try (SocketChannel channel = SocketChannel.open(StandardProtocolFamily.UNIX)) {
-            channel.connect(UnixDomainSocketAddress.of(socket));
-            var out = new DataOutputStream(Channels.newOutputStream(channel));
-            var in = new DataInputStream(Channels.newInputStream(channel));
-            writeFrame(out, request);
-            return readFrame(in);
-        }
+        return BoundedUnixStopTransport.exchange(
+                socket, request, java.time.Duration.ofMillis(2500));
     }
 
     /**
@@ -188,21 +183,15 @@ public final class SandboxWorkerStopWire {
     public static StopReceipt requestStop(Path socket, StopRequest request,
                                           PrivateKey controllerKey,
                                           PublicKey pinnedWorkerKey) throws IOException {
-        try (SocketChannel channel = SocketChannel.open(StandardProtocolFamily.UNIX)) {
-            channel.connect(UnixDomainSocketAddress.of(socket));
-            var out = new DataOutputStream(Channels.newOutputStream(channel));
-            var in = new DataInputStream(Channels.newInputStream(channel));
-            writeFrame(out, sign(requestBytes(request), controllerKey));
-            SignedFrame response = readFrame(in);
-            if (!verified(response, pinnedWorkerKey))
-                throw new SecurityException("WORKER_STOP_RECEIPT_SIGNATURE_INVALID");
-            StopReceipt receipt = parseReceipt(response.message());
-            if (!receipt.nonce().equals(request.nonce())
-                    || !receipt.workerId().equals(request.workerId())
-                    || receipt.epoch() != request.epoch())
-                throw new SecurityException("WORKER_STOP_RECEIPT_BINDING_INVALID");
-            return receipt;
-        }
+        SignedFrame response = exchange(socket, sign(requestBytes(request), controllerKey));
+        if (!verified(response, pinnedWorkerKey))
+            throw new SecurityException("WORKER_STOP_RECEIPT_SIGNATURE_INVALID");
+        StopReceipt receipt = parseReceipt(response.message());
+        if (!receipt.nonce().equals(request.nonce())
+                || !receipt.workerId().equals(request.workerId())
+                || receipt.epoch() != request.epoch())
+            throw new SecurityException("WORKER_STOP_RECEIPT_BINDING_INVALID");
+        return receipt;
     }
 
     private interface Writer { void write(DataOutputStream out) throws IOException; }
