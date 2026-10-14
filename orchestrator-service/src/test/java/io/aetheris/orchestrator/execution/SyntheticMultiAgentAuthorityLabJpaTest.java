@@ -41,6 +41,7 @@ class SyntheticMultiAgentAuthorityLabJpaTest {
         final AtomicBoolean emergency = new AtomicBoolean(false);
         final Map<UUID,SyntheticMultiAgentAuthorityLab.AgentGrant> grants =
                 new ConcurrentHashMap<>();
+        final Map<String,String> workerNames = new ConcurrentHashMap<>();
         final KeyPair signer;
         final DurableSandboxAdmissionLab admission;
         final SyntheticMultiAgentAuthorityLab lab;
@@ -68,7 +69,9 @@ class SyntheticMultiAgentAuthorityLabJpaTest {
                     verifier,t.transactions,Clock.systemUTC(),
                     grants::get,emergency::get);
         }
-        Job prepare(String agent,String worker) throws Exception {
+        Job prepare(String agent,String alias) throws Exception {
+            String worker=workerNames.computeIfAbsent(alias,
+                    key -> "ci_"+UUID.randomUUID().toString().replace("-",""));
             if(fences.findById(worker).isEmpty()) {
                 var f=new SandboxWorkerFenceEntity(worker);
                 f.armSyntheticFixture();
@@ -181,7 +184,7 @@ class SyntheticMultiAgentAuthorityLabJpaTest {
         assertThatThrownBy(() -> f.lab.reserveForAgent(b.signed(),b.agent()))
                 .isInstanceOf(SecurityException.class);
         f.emergency.set(false);
-        assertThat(f.admission.stopWorker("workerA").epoch()).isEqualTo(2);
+        assertThat(f.admission.stopWorker(a.worker()).epoch()).isEqualTo(2);
         assertThat(f.lab.inspectExisting(a.signed().claims().jobId()).mustTerminate()).isTrue();
         assertThat(f.quota().getJobs()).isEqualTo(1); // STOP is not proof of child exit
     }
