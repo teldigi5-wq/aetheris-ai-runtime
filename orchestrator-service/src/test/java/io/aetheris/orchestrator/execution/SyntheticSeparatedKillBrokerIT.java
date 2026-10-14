@@ -45,7 +45,8 @@ class SyntheticSeparatedKillBrokerIT {
                            Path publisherPublic, Path verifierPrivate,
                            Path brokerPublic, Path pulseFile, Path journalDir,
                            Path socket, DurableSandboxAdmissionLab db,
-                           SyntheticSupervisorPulseLab issuer) {}
+                           SyntheticSupervisorPulseLab issuer,
+                           String publisherPin,String brokerPin) {}
 
     private Fixture setup(String name) throws Exception {
         if (!"true".equals(System.getenv("GITHUB_ACTIONS"))
@@ -117,7 +118,8 @@ class SyntheticSeparatedKillBrokerIT {
         var issuer=new SyntheticSupervisorPulseLab(fences,reservations,pulses,
                 transactions,Clock.systemUTC(),pulseSigner.getPrivate());
         return new Fixture(worker,job,container,pub,verifierPrivate,brokerPub,
-                root.resolve(name+"-pulse.txt"),journal,root.resolve(name+".sock"),db,issuer);
+                root.resolve(name+"-pulse.txt"),journal,root.resolve(name+".sock"),
+                db,issuer,publicKeyPin(pub),publicKeyPin(brokerPub));
     }
 
     @Test
@@ -236,7 +238,8 @@ class SyntheticSeparatedKillBrokerIT {
         if(!Files.isRegularFile(binary))throw new SecurityException("BROKER_BINARY_MISSING");
         var builder=new ProcessBuilder(binary.toString(),f.socket().toString(),
                 f.brokerPublic().toString(),f.worker(),f.job().jobId().toString(),
-                f.container(),"1",Integer.toString(deathlineSeconds))
+                f.container(),"1",Integer.toString(deathlineSeconds),
+                f.brokerPin())
                 .redirectErrorStream(true);
         builder.environment().put("AETHERIS_STAGE45_BROKER_CI","true");
         return builder.start();
@@ -258,7 +261,8 @@ class SyntheticSeparatedKillBrokerIT {
                 accessible.toString(),f.publisherPublic().toString(),f.pulseFile().toString(),
                 f.verifierPrivate().toString(),f.socket().toString(),
                 f.worker(),f.job().jobId().toString(),f.container(),"1",
-                f.journalDir().toString()).redirectErrorStream(true).start();
+                f.journalDir().toString(),
+                f.publisherPin()).redirectErrorStream(true).start();
     }
 
     private static void waitSocketAndLimitToVerifier(Path socket) throws Exception {
@@ -271,6 +275,12 @@ class SyntheticSeparatedKillBrokerIT {
             Thread.sleep(40);
         }
         throw new AssertionError("Fixed OCI kill broker did not bind private socket");
+    }
+
+    private static String publicKeyPin(Path file) throws Exception {
+        var digest=java.security.MessageDigest.getInstance("SHA-256")
+                .digest(Files.readAllBytes(file));
+        return java.util.HexFormat.of().formatHex(digest);
     }
 
     private static void privileged(List<String> args) throws Exception {
