@@ -5,8 +5,8 @@ package main
 
 import (
  "context"
- "crypto/ed25519"
- "crypto/x509"
+ "crypto/rand"
+ "encoding/hex"
  "errors"
  "fmt"
  "io"
@@ -55,7 +55,7 @@ func unixPeerUID(connection *net.UnixConn) (uint32,error) {
 
 func run() int {
  if os.Getenv("GITHUB_ACTIONS")!="true" ||
-  os.Getenv("AETHERIS_STAGE45_BROKER_CI")!="true" || len(os.Args)!=8 {
+  os.Getenv("AETHERIS_STAGE45_BROKER_CI")!="true" || len(os.Args)!=9 {
   return 90
  }
  socketPath,keyFile:=os.Args[1],os.Args[2]
@@ -68,11 +68,11 @@ func run() int {
  // Last argument is a fixed CI-only deathline in seconds (2..12).
  maxSeconds,e:=strconv.Atoi(os.Args[7])
  if e!=nil || maxSeconds<2 || maxSeconds>12 {return 91}
- pubDER,e:=os.ReadFile(keyFile)
- if e!=nil || len(pubDER)>256 {return 92}
- parsed,e:=x509.ParsePKIXPublicKey(pubDER)
- public,ok:=parsed.(ed25519.PublicKey)
- if e!=nil || !ok {return 92}
+ // Pin the exact Ed25519 public-key DER digest independently of
+ // the on-disk file. Symlink/hardlink/substituted keys cannot silently
+ // become a new broker signing authority.
+ public,e:=parsePinnedEdPublic(keyFile,os.Args[8])
+ if e!=nil {return 92}
  if !strings.HasSuffix(socketPath,".sock") || len(socketPath)>100 {return 92}
  // The harness provisions a private parent directory and sets group
  // ownership of the socket to the unprivileged verifier.
@@ -89,12 +89,24 @@ func run() int {
   if err!=nil {break}
   _=peer.SetDeadline(time.Now().Add(400*time.Millisecond))
   uid,uidErr:=unixPeerUID(peer)
+  if uidErr!=nil || uid!=unprivilegedVerifierUID {
+   peer.Close()
+   continue
+  }
+  var challengeBytes [32]byte
+  if _,err:=rand.Read(challengeBytes[:]);err!=nil {
+   peer.Close()
+   reason="BROKER_CHALLENGE_ENTROPY_UNAVAILABLE"
+   break
+  }
+  challenge:=hex.EncodeToString(challengeBytes[:])
+  _,writeErr:=peer.Write([]byte(challenge+"\n"))
+  if writeErr!=nil {peer.Close();continue}
   data,readErr:=io.ReadAll(io.LimitReader(peer,1025))
   peer.Close()
-  if uidErr!=nil || uid!=unprivilegedVerifierUID ||
-   readErr!=nil || len(data)>1024 {continue}
-  if err:=verifyStopRequest(public,data,worker,job,container,epoch,time.Now().Unix());err!=nil {
-   continue // invalid request cannot retarget broker; deadman still active
+  if readErr!=nil || len(data)>1024 {continue}
+  if err:=verifyStopRequest(public,data,worker,job,container,epoch,challenge,time.Now().Unix());err!=nil {
+   continue // captured signed STOP from another connection is invalid
   }
   reason="AUTHENTICATED_UNPRIVILEGED_STOP"
   break
