@@ -236,7 +236,8 @@ class SyntheticSeparatedKillBrokerIT {
         if(!Files.isRegularFile(binary))throw new SecurityException("BROKER_BINARY_MISSING");
         var builder=new ProcessBuilder(binary.toString(),f.socket().toString(),
                 f.brokerPublic().toString(),f.worker(),f.job().jobId().toString(),
-                f.container(),"1",Integer.toString(deathlineSeconds))
+                f.container(),"1",Integer.toString(deathlineSeconds),
+                publicKeyPin(f.brokerPublic()))
                 .redirectErrorStream(true);
         builder.environment().put("AETHERIS_STAGE45_BROKER_CI","true");
         return builder.start();
@@ -258,7 +259,8 @@ class SyntheticSeparatedKillBrokerIT {
                 accessible.toString(),f.publisherPublic().toString(),f.pulseFile().toString(),
                 f.verifierPrivate().toString(),f.socket().toString(),
                 f.worker(),f.job().jobId().toString(),f.container(),"1",
-                f.journalDir().toString()).redirectErrorStream(true).start();
+                f.journalDir().toString(),
+                publicKeyPin(f.publisherPublic())).redirectErrorStream(true).start();
     }
 
     private static void waitSocketAndLimitToVerifier(Path socket) throws Exception {
@@ -271,6 +273,12 @@ class SyntheticSeparatedKillBrokerIT {
             Thread.sleep(40);
         }
         throw new AssertionError("Fixed OCI kill broker did not bind private socket");
+    }
+
+    private static String publicKeyPin(Path file) throws Exception {
+        var digest=java.security.MessageDigest.getInstance("SHA-256")
+                .digest(Files.readAllBytes(file));
+        return java.util.HexFormat.of().formatHex(digest);
     }
 
     private static void privileged(List<String> args) throws Exception {
