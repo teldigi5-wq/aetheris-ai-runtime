@@ -78,6 +78,10 @@ public class SandboxJobReservationEntity {
     public UUID getNonce() { return nonce; }
     public UUID getTaskId() { return taskId; }
     public String getWorkerId() { return workerId; }
+    public String getOwnerId() { return ownerId; }
+    public String getProjectId() { return projectId; }
+    public String getApprovalId() { return approvalId; }
+    public Instant getExpiresAt() { return expiresAt; }
     public long getStopEpoch() { return stopEpoch; }
     public boolean isRevoked() { return revoked; }
 }
