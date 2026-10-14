@@ -47,8 +47,22 @@ public class WorkspaceSandboxService {
             if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
                 throw new IllegalArgumentException("Workspace file is not a regular, unlinked file");
             long size = Files.size(path);
-            if (size > maxFileBytes) throw new IllegalArgumentException("Workspace file exceeds the configured read limit");
-            return new WorkspaceFileResult(root.relativize(path).toString(), size, Files.readString(path, StandardCharsets.UTF_8));
+            if (maxFileBytes < 1 || maxFileBytes > 16L * 1024 * 1024 ||
+                    size > maxFileBytes) {
+                throw new IllegalArgumentException("Workspace file exceeds the configured read limit");
+            }
+            // Check again at open and bound bytes read, so a last-component
+            // symlink replacement cannot make Files.readString follow out.
+            byte[] content;
+            try (SeekableByteChannel channel = Files.newByteChannel(path,
+                    Set.<OpenOption>of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS));
+                 java.io.InputStream input = java.nio.channels.Channels.newInputStream(channel)) {
+                content = input.readNBytes((int) maxFileBytes + 1);
+            }
+            if (content.length > maxFileBytes)
+                throw new IllegalArgumentException("Workspace file exceeds the configured read limit");
+            return new WorkspaceFileResult(root.relativize(path).toString(),
+                    content.length, new String(content, StandardCharsets.UTF_8));
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to read workspace file", exception);
         }
