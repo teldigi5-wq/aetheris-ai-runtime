@@ -143,13 +143,8 @@ public final class StandaloneStopWorkerLabMain {
         try (FileChannel file = FileChannel.open(path,
                 Set.of(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE),
                 PosixFilePermissions.asFileAttribute(PRIVATE_FILE))) {
-            while (ByteBuffer.wrap(content).hasRemaining()) {
-                // Use one maintained buffer so short writes don't loop on a
-                // fresh cursor position. In practice the marker is tiny.
-                ByteBuffer buffer = ByteBuffer.wrap(content);
-                while (buffer.hasRemaining()) file.write(buffer);
-                break;
-            }
+            ByteBuffer buffer = ByteBuffer.wrap(content);
+            while (buffer.hasRemaining()) file.write(buffer);
             file.force(true);
         }
     }
