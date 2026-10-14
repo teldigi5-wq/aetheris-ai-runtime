@@ -3,6 +3,7 @@ name: Runtime Owner-bound Memory AEAD Verification
 on:
   pull_request:
     branches:
+      - security/owner-bound-keyring-stage44-20261014
       - security/owner-bound-memory-aead-stage44-20261014
       - security/sandbox-cyber-defense-hardening-20261014
       - main
@@ -13,6 +14,8 @@ on:
       - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/memory/**'
       - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/Phase9MemoryProductionIntegrationTest.java'
       - 'docs/security/stage44-owner-bound-memory-aead.md'
+      - 'docs/security/stage44-keyring-rotation-readiness.md'
+      - 'docs/security/stage44-memory-envelope-inventory.md'
       - '.github/workflows/runtime-owner-bound-memory-aead.yml'
 
 permissions:
@@ -36,7 +39,7 @@ jobs:
       - name: Verify authenticated row encryption, persistence and legacy migration compatibility
         run: |
           ./mvnw -B -f orchestrator-service/pom.xml \
-            -Dtest=OwnerBoundMemoryAeadTest,OwnerBoundMemoryKeyringTest,OwnerBoundMemoryPersistenceIntegrationTest,Phase9MemoryProductionIntegrationTest,AeadFieldProtectorTest test
+            -Dtest=MemoryEnvelopeInventoryServiceTest,MemoryEnvelopeInventoryJpaIntegrationTest,OwnerBoundMemoryAeadTest,OwnerBoundMemoryKeyringTest,OwnerBoundMemoryPersistenceIntegrationTest,Phase9MemoryProductionIntegrationTest,AeadFieldProtectorTest test
 
   complete-orchestrator-regression:
     runs-on: ubuntu-24.04
