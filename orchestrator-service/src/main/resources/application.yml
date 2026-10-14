@@ -16,6 +16,13 @@ management:
         enabled: true
 
 aetheris:
+  memory:
+    # Stage 44 controlled pilot ONLY. Default-off retains historical v1 writes.
+    # Provision an independent 32-byte Base64 data key outside source control.
+    # Migration, key rotation, metadata and backups are NOT certified yet.
+    owner-bound-aead-enabled: ${AETHERIS_MEMORY_OWNER_BOUND_AEAD_ENABLED:false}
+    owner-bound-key-b64: ${AETHERIS_MEMORY_OWNER_BOUND_KEY_B64:}
+    owner-bound-key-id: ${AETHERIS_MEMORY_OWNER_BOUND_KEY_ID:}
   # The new owner checkpoint HTTP adapter stays absent unless this exact
   # explicit opt-in is enabled. Does NOT affect the task/mission quarantine.
   owner-checkpoint-http:
