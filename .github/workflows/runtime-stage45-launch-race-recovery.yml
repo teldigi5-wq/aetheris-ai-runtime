@@ -1,0 +1,123 @@
+name: Runtime Stage 45.5.8 Launch/STOP Race and Recovery Lab
+
+on:
+  pull_request:
+    branches:
+      - security/stage45-persistent-inworker-stop-20261014
+      - main
+    paths:
+      - 'tests/sandbox/stage45_lease_guard.go'
+      - 'tests/sandbox/stage45_stop_tombstone.go'
+      - 'tests/sandbox/stage45_prestart_gate.go'
+      - 'tests/sandbox/stage45_prestart_gate_test.go'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/execution/InWorkerCancellationFaultsIT.java'
+      - 'docs/security/stage45-launch-race-recovery.md'
+      - '.github/workflows/runtime-stage45-launch-race-recovery.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-fault-injection-postgres-oci:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: synthetic-stage45-race-only
+          POSTGRES_DB: aetheris_stage45_race_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aetheris_stage45_race_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    env:
+      AETHERIS_STAGE45_INWORKER_CI: 'true'
+    steps:
+      - name: Checkout exact PR commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Verify Go and disposable Docker runtime
+        run: |
+          go version
+          docker info --format '{{.ServerVersion}}'
+      - name: Run signed lease, durable one-shot and prestart race Go tests
+        run: |
+          go test -v tests/sandbox/stage45_lease_guard.go \
+            tests/sandbox/stage45_stop_tombstone.go \
+            tests/sandbox/stage45_prestart_gate.go \
+            tests/sandbox/stage45_lease_guard_test.go \
+            tests/sandbox/stage45_stop_tombstone_test.go \
+            tests/sandbox/stage45_prestart_gate_test.go
+      - name: Build fixed OCI Go guard with one-shot launch claim
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" \
+            -o "$RUNNER_TEMP/stage45-lease-guard" \
+            tests/sandbox/stage45_lease_guard.go \
+            tests/sandbox/stage45_stop_tombstone.go \
+            tests/sandbox/stage45_prestart_gate.go
+          chmod 755 "$RUNNER_TEMP/stage45-lease-guard"
+      - name: Pull immutable synthetic BusyBox image
+        run: docker pull ghcr.io/containerd/busybox@sha256:907ca53d7e2947e849b839b1cd258c98fd3916c60f2e6e70c30edbf741ab6754
+      - name: Exercise prelaunch STOP, lost publisher, expiry and host crash recovery on OCI
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:5432/aetheris_stage45_race_ci
+          SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: synthetic-stage45-race-only
+          SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dspring.datasource.url="$SPRING_DATASOURCE_URL" \
+            -Dspring.datasource.driver-class-name="$SPRING_DATASOURCE_DRIVER_CLASS_NAME" \
+            -Dspring.datasource.username="$SPRING_DATASOURCE_USERNAME" \
+            -Dspring.datasource.password="$SPRING_DATASOURCE_PASSWORD" \
+            -Dspring.jpa.hibernate.ddl-auto=create-drop \
+            -Daetheris.stage45.guard.bin="$RUNNER_TEMP/stage45-lease-guard" \
+            -Dtest=InWorkerCancellationFaultsIT,InWorkerSignedLeaseLifecycleIT,WorkerSideFenceVerifierLabJpaTest test
+
+  fixed-profile-and-fence-regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact PR commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Fixed OCI isolation and persistent STOP mount policy
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=InWorkerSignedLeaseOciPlanTest,SyntheticOciSleepProfilePlanTest,IsolatedOciProbePlanTest test
+
+  complete-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact PR commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Run entire Java test suite
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
