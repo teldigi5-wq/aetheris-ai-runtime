@@ -23,6 +23,8 @@ aetheris:
     owner-bound-aead-enabled: ${AETHERIS_MEMORY_OWNER_BOUND_AEAD_ENABLED:false}
     owner-bound-key-b64: ${AETHERIS_MEMORY_OWNER_BOUND_KEY_B64:}
     owner-bound-key-id: ${AETHERIS_MEMORY_OWNER_BOUND_KEY_ID:}
+    # Pilot-only retained read keys, comma-separated ID:Base64; never commit secrets.
+    owner-bound-previous-keys: ${AETHERIS_MEMORY_OWNER_BOUND_PREVIOUS_KEYS:}
   # The new owner checkpoint HTTP adapter stays absent unless this exact
   # explicit opt-in is enabled. Does NOT affect the task/mission quarantine.
   owner-checkpoint-http:
