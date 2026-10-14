@@ -3,6 +3,7 @@ name: Runtime Owner-bound Memory AEAD Verification
 on:
   pull_request:
     branches:
+      - security/memory-envelope-inventory-stage44-20261014
       - security/owner-bound-keyring-stage44-20261014
       - security/owner-bound-memory-aead-stage44-20261014
       - security/sandbox-cyber-defense-hardening-20261014
@@ -16,6 +17,9 @@ on:
       - 'docs/security/stage44-owner-bound-memory-aead.md'
       - 'docs/security/stage44-keyring-rotation-readiness.md'
       - 'docs/security/stage44-memory-envelope-inventory.md'
+      - 'docs/security/stage44-memory-migration-preflight.md'
+      - 'tests/postgresql/memory_backup_restore_fixture.sql'
+      - 'tests/postgresql/verify_memory_snapshot_restore.sh'
       - '.github/workflows/runtime-owner-bound-memory-aead.yml'
 
 permissions:
@@ -39,7 +43,7 @@ jobs:
       - name: Verify authenticated row encryption, persistence and legacy migration compatibility
         run: |
           ./mvnw -B -f orchestrator-service/pom.xml \
-            -Dtest=MemoryEnvelopeInventoryServiceTest,MemoryEnvelopeInventoryJpaIntegrationTest,OwnerBoundMemoryAeadTest,OwnerBoundMemoryKeyringTest,OwnerBoundMemoryPersistenceIntegrationTest,Phase9MemoryProductionIntegrationTest,AeadFieldProtectorTest test
+            -Dtest=MemoryMigrationPreflightTest,MemoryEnvelopeInventoryServiceTest,MemoryEnvelopeInventoryJpaIntegrationTest,OwnerBoundMemoryAeadTest,OwnerBoundMemoryKeyringTest,OwnerBoundMemoryPersistenceIntegrationTest,Phase9MemoryProductionIntegrationTest,AeadFieldProtectorTest test
 
   complete-orchestrator-regression:
     runs-on: ubuntu-24.04
@@ -57,3 +61,34 @@ jobs:
           cache: maven
       - name: Run all Java tests
         run: ./mvnw -B -f orchestrator-service/pom.xml test
+
+  synthetic-postgresql-backup-restore:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: aetheris_memory_ci_source
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aetheris_memory_ci_source"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    env:
+      AETHERIS_SYNTHETIC_RESTORE_TEST: 'true'
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: synthetic-ci-only
+      PGDATABASE: aetheris_memory_ci_source
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Verify synthetic PostgreSQL backup, isolated restore, and corruption detection
+        run: bash tests/postgresql/verify_memory_snapshot_restore.sh
