@@ -60,6 +60,20 @@ class StandaloneStopWorkerLabProcessTest {
                     .isInstanceOf(IOException.class);
             assertThat(Files.exists(root.resolve("STOP_LATCHED"))).isFalse();
 
+            // A legitimate controller signature is insufficient if the
+            // short lease expired or the worker audience does not match.
+            var expired = new SandboxWorkerStopWire.StopRequest(
+                    UUID.randomUUID(), workerId, now - 20, now - 1, 5);
+            assertThatThrownBy(() -> SandboxWorkerStopWire.requestStop(
+                    socket, expired, controller.getPrivate(), worker.getPublic()))
+                    .isInstanceOf(IOException.class);
+            var otherWorker = new SandboxWorkerStopWire.StopRequest(
+                    UUID.randomUUID(), "unrelatedWorker", now - 1, now + 15, 5);
+            assertThatThrownBy(() -> SandboxWorkerStopWire.requestStop(
+                    socket, otherWorker, controller.getPrivate(), worker.getPublic()))
+                    .isInstanceOf(IOException.class);
+            assertThat(Files.exists(root.resolve("STOP_LATCHED"))).isFalse();
+
             var receipt = SandboxWorkerStopWire.requestStop(
                     socket, request, controller.getPrivate(), worker.getPublic());
             assertThat(receipt.nonce()).isEqualTo(request.nonce());
