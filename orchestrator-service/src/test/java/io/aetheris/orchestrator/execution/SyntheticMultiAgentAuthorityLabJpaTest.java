@@ -6,6 +6,7 @@ import io.aetheris.orchestrator.execution.SignedSandboxJobGate.SignedJob;
 import io.aetheris.orchestrator.execution.SignedSandboxJobGate.TrustedContext;
 import io.aetheris.orchestrator.task.TaskControlService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -183,6 +184,44 @@ class SyntheticMultiAgentAuthorityLabJpaTest {
         assertThat(f.admission.stopWorker("workerA").epoch()).isEqualTo(2);
         assertThat(f.lab.inspectExisting(a.signed().claims().jobId()).mustTerminate()).isTrue();
         assertThat(f.quota().getJobs()).isEqualTo(1); // STOP is not proof of child exit
+    }
+
+    @Test
+    @EnabledIfEnvironmentVariable(named="AETHERIS_STAGE45_MULTIAGENT_PG_CI",matches="true")
+    void competingAgentClaimsCannotOverbookSharedPostgresQuota() throws Exception {
+        Fixture f=new Fixture(this);
+        Job a=f.prepare("research_agent","workerA");
+        Job b=f.prepare("security_agent","workerB");
+        Job c=f.prepare("design_agent","workerC");
+        var pool=java.util.concurrent.Executors.newFixedThreadPool(3);
+        try {
+            var ready=new java.util.concurrent.CountDownLatch(3);
+            var start=new java.util.concurrent.CountDownLatch(1);
+            var futures=new java.util.ArrayList<java.util.concurrent.Future<Boolean>>();
+            for (Job j : java.util.List.of(a,b,c)) {
+                futures.add(pool.submit(() -> {
+                    ready.countDown();
+                    if (!start.await(5,java.util.concurrent.TimeUnit.SECONDS))
+                        throw new AssertionError("Synthetic concurrency barrier expired");
+                    try {
+                        f.lab.reserveForAgent(j.signed(),j.agent());
+                        return true;
+                    } catch (RuntimeException denied) { return false; }
+                }));
+            }
+            assertThat(ready.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            int accepted=0;
+            for (var future : futures)
+                if (future.get(12,java.util.concurrent.TimeUnit.SECONDS)) accepted++;
+            assertThat(accepted).isBetween(1,2);
+            assertThat(f.quota().getJobs()).isEqualTo(accepted);
+            assertThat(f.quota().getCpuMilli()).isEqualTo(accepted*500);
+            assertThat(f.quota().getMemoryMiB()).isEqualTo(accepted*128);
+            assertThat(f.quota().getProcessCount()).isEqualTo(accepted*32);
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test
