@@ -1,0 +1,68 @@
+name: Runtime Stage 45 OCI Isolation Verification
+
+on:
+  pull_request:
+    branches:
+      - security/memory-migration-preflight-stage44-20261014
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/execution/**'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/execution/**'
+      - 'tests/sandbox/**'
+      - 'docs/security/stage45-oci-sandbox-certification.md'
+      - '.github/workflows/runtime-stage45-oci-isolation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-oci-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Verify pinned OCI policy and existing symlink defenses
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=IsolatedOciProbePlanTest,WorkspaceContainmentHardeningTest test
+
+  os-enforced-synthetic-container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      AETHERIS_STAGE45_SYNTHETIC_CI: 'true'
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Assert host Docker daemon available on ephemeral runner
+        run: docker info --format '{{.ServerVersion}}'
+      - name: Test read-only mount, blocked egress, capability removal, noexec tmpfs and secret isolation
+        run: bash tests/sandbox/stage45_oci_isolation_probe.sh
+
+  complete-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Run complete Java regression
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
