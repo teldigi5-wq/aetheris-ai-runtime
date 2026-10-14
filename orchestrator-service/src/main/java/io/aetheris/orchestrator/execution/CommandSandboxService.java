@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 public class CommandSandboxService {
 
     private final WorkspaceSandboxService workspace;
+    private final boolean commandExecutionEnabled;
     private final Set<String> allowedCommands;
     private final Duration defaultTimeout;
     private final int maxOutputChars;
@@ -27,14 +28,21 @@ public class CommandSandboxService {
             WorkspaceSandboxService workspace,
             @Value("${aetheris.execution.allowed-commands:git,mvn,npm,node,java,javac}") String allowedCommands,
             @Value("${aetheris.execution.command-timeout-seconds:30}") long timeoutSeconds,
-            @Value("${aetheris.execution.max-command-output-chars:12000}") int maxOutputChars) {
+            @Value("${aetheris.execution.max-command-output-chars:12000}") int maxOutputChars,
+            @Value("${aetheris.execution.command-execution-enabled:false}") boolean commandExecutionEnabled) {
         this.workspace = workspace;
+        this.commandExecutionEnabled = commandExecutionEnabled;
         this.allowedCommands = parseCsv(allowedCommands);
         this.defaultTimeout = Duration.ofSeconds(Math.max(1, timeoutSeconds));
         this.maxOutputChars = Math.max(1000, maxOutputChars);
     }
 
     public CommandExecutionResult execute(List<String> command, String workingDirectory, Integer timeoutSeconds) {
+        // An allowlist of shells, interpreters and build tools is NOT an OS
+        // sandbox. Never spawn a subprocess absent deliberate owner-lab opt-in.
+        if (!commandExecutionEnabled) {
+            throw new IllegalStateException("Command execution is disabled pending isolated runner certification");
+        }
         List<String> safeCommand = normalizeCommand(command);
         Path directory = workspace.resolveDirectory(workingDirectory);
         Duration timeout = timeoutSeconds == null

@@ -32,6 +32,12 @@ aetheris:
     secret: ${AETHERIS_JWT_SECRET:}
     issuer: ${AETHERIS_JWT_ISSUER:aetheris-identity}
     audience: ${AETHERIS_JWT_AUDIENCE:aetheris-api}
+  execution:
+    # NEVER enable raw subprocesses in deployed multi-user environments.
+    # An executable name allowlist is not isolation; only a separate audited
+    # OS/container sandbox with blocked secrets/network is suitable for release.
+    command-execution-enabled: ${AETHERIS_COMMAND_EXECUTION_ENABLED:false}
+    workspace-write-enabled: ${AETHERIS_WORKSPACE_WRITE_ENABLED:false}
   agent-catalog:
     agents:
       - id: executive-planner
@@ -152,6 +158,46 @@ aetheris:
         allowed-tools: [github, ci-cd, artifacts, observability]
         risk-level: HIGH
         preferred-model-class: GENERAL
+        approval-required-for-high-impact-actions: true
+
+      - id: chief-information-security-officer
+        display-name: Chief Information Security Officer
+        division: Cybersecurity
+        mission: Direct defensive security governance, independent risk acceptance, breach readiness and zero-trust reviews; never self-authorize offensive testing or production changes.
+        capabilities: [security-governance, threat-risk-registers, incident-readiness, privacy-engineering, control-assurance]
+        allowed-tools: [audit-log, reports, security-scanners, risk-register]
+        risk-level: HIGH
+        preferred-model-class: SECURITY
+        approval-required-for-high-impact-actions: true
+
+      - id: cryptography-officer
+        display-name: Cryptography and Secrets Security Officer
+        division: Cybersecurity
+        mission: Review TLS, storage encryption, key lifecycle, hardware vaults, backups and token verification using established cryptographic libraries.
+        capabilities: [encryption-review, key-management, tls-hardening, vault-review, rotation-drills]
+        allowed-tools: [reports, audit-log, security-scanners]
+        risk-level: HIGH
+        preferred-model-class: SECURITY
+        approval-required-for-high-impact-actions: true
+
+      - id: detection-engineer
+        display-name: Security Detection Engineering Officer
+        division: Cybersecurity
+        mission: Design defensive telemetry, detection rules, alert triage and false-positive tests without accessing private data unnecessarily.
+        capabilities: [detection-engineering, security-monitoring, alert-triage, rule-testing, evidence-correlation]
+        allowed-tools: [observability, audit-log, reports, security-lab]
+        risk-level: HIGH
+        preferred-model-class: SECURITY
+        approval-required-for-high-impact-actions: true
+
+      - id: threat-hunter
+        display-name: Authorized Threat Hunter
+        division: Cybersecurity
+        mission: Investigate indicators in explicitly authorized logs and sandbox datasets and recommend containment actions for owner approval.
+        capabilities: [defensive-threat-hunting, log-analysis, malware-triage, evidence-preservation]
+        allowed-tools: [observability, security-lab, audit-log, reports]
+        risk-level: HIGH
+        preferred-model-class: SECURITY
         approval-required-for-high-impact-actions: true
 
       - id: security-architect
