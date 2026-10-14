@@ -3,11 +3,14 @@ name: PostgreSQL Task Sequence Certification
 on:
   pull_request:
     branches:
+      - security/postgres-task-sequence-certification-20261014
       - security/per-task-commit-sequence-20261013
       - main
     paths:
       - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/task/**'
       - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/task/VerifiedOwnerCommitSequenceCursorTest.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/task/VerifiedOwnerDeliveryCheckpointTest.java'
+      - 'docs/security/sql/postgres-owner-delivery-checkpoint-v2.sql'
       - 'docs/security/sql/postgres-owner-task-sequencing-v1.sql'
       - 'tests/postgresql/**'
       - '.github/workflows/runtime-postgresql-sequence.yml'
@@ -54,7 +57,7 @@ jobs:
           SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
         run: |
           ./mvnw -B -f orchestrator-service/pom.xml \
-            -Dtest=VerifiedOwnerCommitSequenceCursorTest,VerifiedOwnerTaskJournalOutboxTest \
+            -Dtest=VerifiedOwnerDeliveryCheckpointTest,VerifiedOwnerCommitSequenceCursorTest,VerifiedOwnerTaskJournalOutboxTest \
             test
 
   additive-migration-dry-run:
@@ -99,3 +102,23 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f docs/security/sql/postgres-owner-task-sequencing-v1.sql
           psql -X -v ON_ERROR_STOP=1 -f docs/security/sql/postgres-owner-task-sequencing-v1.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/postgresql/verify_owner_task_sequence.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/security/sql/postgres-owner-delivery-checkpoint-v2.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/security/sql/postgres-owner-delivery-checkpoint-v2.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/postgresql/verify_owner_delivery_checkpoint.sql
+
+  full-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout reviewed revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Set up JDK 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Run full orchestrator tests with H2 fixture
+        run: ./mvnw -B -f orchestrator-service/pom.xml test

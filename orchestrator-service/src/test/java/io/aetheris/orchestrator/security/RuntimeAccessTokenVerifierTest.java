@@ -71,8 +71,17 @@ class RuntimeAccessTokenVerifierTest {
 
     @Test
     void rejectsOtherSignatureTamperingAndUnsignedClaims() {
-        rejected(verifier,currentToken(42L,List.of("orchestrator:read")).replaceFirst(".$","Z"),
-                "orchestrator:read");
+        // Always mutate a significant Base64URL character of the signature,
+        // not the final character (which can already equal the replacement
+        // or have unused padding bits in the final sextet).
+        String jwt = currentToken(42L, List.of("orchestrator:read"));
+        int signatureStart = jwt.lastIndexOf('.') + 1;
+        char firstSignatureCharacter = jwt.charAt(signatureStart);
+        char different = firstSignatureCharacter == 'A' ? 'B' : 'A';
+        String tampered = jwt.substring(0, signatureStart) + different +
+                jwt.substring(signatureStart + 1);
+        assertThat(tampered).isNotEqualTo(jwt);
+        rejected(verifier, tampered, "orchestrator:read");
         rejected(verifier,issue(SECRET_B,42L,"API_CONSUMER",List.of("orchestrator:read"),
                         now().minusSeconds(10),now().plusSeconds(300)),"orchestrator:read");
         rejected(verifier,"eyJhbGciOiJub25lIn0.eyJ1aWQiOjQyfQ.","orchestrator:read");
