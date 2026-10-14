@@ -30,6 +30,7 @@ public final class SignedSandboxJobGate {
     private final PublicKey issuerPublicKey;
     private final Clock clock;
     private final Set<UUID> usedNonces = new HashSet<>();
+    private final Set<UUID> usedJobIds = new HashSet<>();
     private final Set<UUID> activeJobs = new HashSet<>();
     private boolean stopped = false;
 
@@ -125,13 +126,14 @@ public final class SignedSandboxJobGate {
         } catch (GeneralSecurityException ex) {
             throw new SecurityException("JOB_SIGNATURE_INVALID");
         }
-        if (usedNonces.contains(c.nonce()) || activeJobs.contains(c.jobId())) {
+        if (usedNonces.contains(c.nonce()) || usedJobIds.contains(c.jobId())) {
             throw new SecurityException("JOB_REPLAY_DENIED");
         }
         if (usedNonces.size() >= MAX_NONCES || activeJobs.size() >= MAX_ACTIVE) {
             throw new SecurityException("WORKER_CAPACITY_DENIED");
         }
         usedNonces.add(c.nonce());
+        usedJobIds.add(c.jobId());
         activeJobs.add(c.jobId());
         return c.jobId();
     }
