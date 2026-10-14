@@ -70,8 +70,12 @@ public final class StandaloneStopWorkerLabMain {
         java.util.Arrays.fill(secretBytes, (byte) 0);
 
         Path stopMarker = dir.resolve("STOP_LATCHED");
-        if (Files.exists(stopMarker, LinkOption.NOFOLLOW_LINKS))
-            throw new SecurityException("DURABLE_STOP_ALREADY_LATCHED");
+        // Existing STOP is irreversible. A restarted worker may ONLY re-sign
+        // a receipt for this EXACT persisted nonce/epoch, never accept jobs
+        // or a different STOP operation. Malformed markers fail closed.
+        DurableStopMarkerLab.Marker recovered =
+                DurableStopMarkerLab.exists(stopMarker)
+                        ? DurableStopMarkerLab.requireValid(stopMarker) : null;
         if (Files.exists(socket, LinkOption.NOFOLLOW_LINKS))
             throw new SecurityException("SOCKET_ALREADY_EXISTS");
 
@@ -84,9 +88,8 @@ public final class StandaloneStopWorkerLabMain {
             System.out.flush();
             for (int attempts = 0; attempts < 12; attempts++) {
                 try (SocketChannel channel = server.accept()) {
-                    var in = new DataInputStream(Channels.newInputStream(channel));
-                    var out = new DataOutputStream(Channels.newOutputStream(channel));
-                    var frame = SandboxWorkerStopWire.readFrame(in);
+                    var frame = BoundedUnixStopTransport.read(
+                            channel, java.time.Duration.ofMillis(1500));
                     if (!SandboxWorkerStopWire.verified(frame, controllerPublic))
                         throw new SecurityException("CONTROLLER_SIGNATURE_DENIED");
 
@@ -97,21 +100,30 @@ public final class StandaloneStopWorkerLabMain {
                             || request.expiresAt() <= now)
                         throw new SecurityException("WORKER_SCOPE_OR_LEASE_DENIED");
 
-                    // Persist STOP before issuing any acknowledgement. The
-                    // marker remains if the peer closes or the JVM exits.
-                    persistStopMarker(stopMarker, request.epoch());
+                    if (recovered != null) {
+                        if (request.epoch() != recovered.epoch()
+                                || !request.nonce().equals(recovered.nonce()))
+                            throw new SecurityException("STOP_RECOVERY_NONCE_OR_EPOCH_DENIED");
+                    } else {
+                        // Persist STOP before attempting to send its receipt.
+                        // A lost reply leaves the marker intact for a future
+                        // *recovery-only* worker process, never reactivation.
+                        DurableStopMarkerLab.latch(stopMarker, request);
+                    }
                     var receipt = new SandboxWorkerStopWire.StopReceipt(
                             request.nonce(), workerId, request.epoch(),
                             SandboxWorkerStopWire.STOP_STATUS);
-                    SandboxWorkerStopWire.writeFrame(out,
+                    BoundedUnixStopTransport.write(channel,
                             SandboxWorkerStopWire.sign(
-                                    SandboxWorkerStopWire.receiptBytes(receipt), workerPrivate));
+                                    SandboxWorkerStopWire.receiptBytes(receipt), workerPrivate),
+                            java.time.Duration.ofMillis(1500));
                     System.out.println("SYNTHETIC_STOP_FENCE_PERSISTED");
                     return;
                 } catch (IOException | SecurityException rejected) {
                     // Do not leak key bytes, signatures, request data,
                     // filesystem paths or owner metadata into CI logs.
-                    if (Files.exists(stopMarker, LinkOption.NOFOLLOW_LINKS)) return;
+                    if (recovered == null && DurableStopMarkerLab.exists(stopMarker))
+                        return; // after STOP, start a new recovery-only JVM
                     System.err.println("SYNTHETIC_STOP_REQUEST_DENIED");
                 }
             }
@@ -137,15 +149,4 @@ public final class StandaloneStopWorkerLabMain {
         }
     }
 
-    private static void persistStopMarker(Path path, long epoch) throws IOException {
-        byte[] content = ("STOPPED:" + epoch + "\n")
-                .getBytes(java.nio.charset.StandardCharsets.US_ASCII);
-        try (FileChannel file = FileChannel.open(path,
-                Set.of(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE),
-                PosixFilePermissions.asFileAttribute(PRIVATE_FILE))) {
-            ByteBuffer buffer = ByteBuffer.wrap(content);
-            while (buffer.hasRemaining()) file.write(buffer);
-            file.force(true);
-        }
-    }
 }
