@@ -1,6 +1,5 @@
 package io.aetheris.orchestrator.memory;
 
-import io.aetheris.orchestrator.security.AeadFieldProtector;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,13 +33,19 @@ public class MemoryEncryptionService implements AutoCloseable {
     private static final int IV_BYTES = 12;
     private static final int TAG_BITS = 128;
     private final SecretKey legacyKey;
-    private final AeadFieldProtector ownerBound;
+    private final OwnerBoundMemoryKeyring ownerBound;
     private final SecureRandom random = new SecureRandom();
     private final MeterRegistry metrics;
 
     /** For existing direct unit callers only: legacy mode remains unchanged. */
     public MemoryEncryptionService(String encodedKey, MeterRegistry metrics) {
-        this(encodedKey, metrics, false, "", "");
+        this(encodedKey, metrics, false, "", "", "");
+    }
+
+    /** Compatibility for callers exercising Stage 44's original single-key pilot. */
+    public MemoryEncryptionService(String legacyKeyB64, MeterRegistry metrics,
+                                   boolean enabled, String activeKeyB64, String activeKeyId) {
+        this(legacyKeyB64, metrics, enabled, activeKeyB64, activeKeyId, "");
     }
 
     @Autowired
@@ -49,17 +54,17 @@ public class MemoryEncryptionService implements AutoCloseable {
             MeterRegistry metrics,
             @Value("${aetheris.memory.owner-bound-aead-enabled:false}") boolean enabled,
             @Value("${aetheris.memory.owner-bound-key-b64:}") String boundKeyB64,
-            @Value("${aetheris.memory.owner-bound-key-id:}") String boundKeyId) {
+            @Value("${aetheris.memory.owner-bound-key-id:}") String boundKeyId,
+            @Value("${aetheris.memory.owner-bound-previous-keys:}") String previousKeys) {
         this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.legacyKey = parseLegacy(legacyKeyB64);
         if (enabled) {
-            byte[] key = decodeKey(boundKeyB64, "Owner-bound memory key");
-            try {
-                this.ownerBound = new AeadFieldProtector(boundKeyId, key);
-            } finally {
-                Arrays.fill(key, (byte) 0);
-            }
+            this.ownerBound = OwnerBoundMemoryKeyring.fromConfig(
+                    boundKeyId, boundKeyB64, previousKeys);
         } else {
+            if (previousKeys != null && !previousKeys.isBlank()) {
+                throw new IllegalStateException("Retired memory keys require the owner-bound encryption gate");
+            }
             this.ownerBound = null;
         }
     }
