@@ -52,27 +52,29 @@ func verify(pub ed25519.PublicKey, path, worker, job string, initialEpoch uint64
  return lease{epoch, state}, nil
 }
 
-func main() {
- if len(os.Args) != 6 { fmt.Fprintln(os.Stderr, "LAB_FIXED_ARGS_ONLY"); os.Exit(50) }
+func main() { os.Exit(run()) }
+
+func run() int {
+ if len(os.Args) != 6 { fmt.Fprintln(os.Stderr, "LAB_FIXED_ARGS_ONLY"); return 50 }
  keyFile, leaseFile, worker, job := os.Args[1],os.Args[2],os.Args[3],os.Args[4]
  epoch, err := strconv.ParseUint(os.Args[5], 10, 64)
- if err != nil || epoch == 0 { os.Exit(51) }
+ if err != nil || epoch == 0 { return 51 }
  der, err := os.ReadFile(keyFile)
- if err != nil || len(der) > 256 { os.Exit(52) }
+ if err != nil || len(der) > 256 { return 52 }
  key, err := x509.ParsePKIXPublicKey(der)
  public, ok := key.(ed25519.PublicKey)
- if err != nil || !ok { os.Exit(53) }
+ if err != nil || !ok { return 53 }
 
  status, err := verify(public, leaseFile, worker, job, epoch)
  if err != nil || status.state != "ALLOW" {
   fmt.Println("SYNTHETIC_INWORKER_INITIAL_DENIAL")
-  os.Exit(54)
+  return 54
  }
  // Actual nested fixed sleep process tree, spawned ONLY after in-container
  // signature and scope checks. No model-provided command is possible.
  child := exec.Command("/bin/sh", "/workspace/sleep-fixture.sh")
  child.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
- if err := child.Start(); err != nil { os.Exit(55) }
+ if err := child.Start(); err != nil { return 55 }
  fmt.Println("SYNTHETIC_INWORKER_SIGNED_READY")
  stopChildren := func() {
   if child.Process != nil { _ = syscall.Kill(-child.Process.Pid, syscall.SIGKILL) }
@@ -84,12 +86,12 @@ func main() {
   current, err := verify(public, leaseFile, worker, job, epoch)
   if err != nil {
    fmt.Println("SYNTHETIC_INWORKER_DENIED_INVALID_OR_EXPIRED")
-   os.Exit(56)
+   return 56
   }
   if current.state == "STOP" {
    fmt.Println("SYNTHETIC_INWORKER_STOP_OBSERVED")
-   return
+   return 0
   }
-  if current.epoch != epoch { os.Exit(57) }
+  if current.epoch != epoch { return 57 }
  }
 }
