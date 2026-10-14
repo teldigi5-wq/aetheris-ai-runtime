@@ -1,0 +1,85 @@
+// CI-only protocol shared by the unprivileged verifier and fixed-target kill broker.
+// No model/task-provided command, executable, image, Docker subcommand or path.
+package main
+
+import (
+ "crypto/ed25519"
+ "encoding/hex"
+ "errors"
+ "fmt"
+ "strconv"
+ "strings"
+)
+
+const brokerDomain = "AETHERIS45FIXEDKILL1"
+const heartbeatDomain = "AETHERIS45HOSTWATCH1"
+
+type pulse struct {
+ worker, job, container, state string
+ epoch, sequence uint64
+ issued, expires int64
+}
+
+func verifySignedHeartbeat(pub ed25519.PublicKey, frame []byte, worker,job,container string,
+ originalEpoch, minSeq uint64, now int64) (pulse,error) {
+ if len(frame)<50 || len(frame)>1024 {return pulse{},errors.New("pulse size rejected")}
+ lines:=strings.Split(string(frame),"\n")
+ if len(lines)!=3 || lines[2]!="" {return pulse{},errors.New("pulse frame rejected")}
+ sig,err:=hex.DecodeString(lines[1])
+ if err!=nil || len(sig)!=ed25519.SignatureSize ||
+  !ed25519.Verify(pub,[]byte(lines[0]+"\n"),sig) {
+  return pulse{},errors.New("pulse signature rejected")
+ }
+ p:=strings.Split(lines[0],"|")
+ if len(p)!=9 || p[0]!=heartbeatDomain || p[1]!=worker ||
+  p[2]!=job || p[3]!=container {return pulse{},errors.New("pulse identity rejected")}
+ epoch,err:=strconv.ParseUint(p[4],10,64)
+ if err!=nil {return pulse{},errors.New("pulse epoch invalid")}
+ seq,err:=strconv.ParseUint(p[5],10,64)
+ if err!=nil || seq==0 || seq<minSeq {return pulse{},errors.New("pulse replay")}
+ issued,err:=strconv.ParseInt(p[6],10,64)
+ if err!=nil || issued>now || issued<now-5 {return pulse{},errors.New("pulse clock invalid")}
+ expiry,err:=strconv.ParseInt(p[7],10,64)
+ if err!=nil || expiry<=now || expiry-issued>4 {return pulse{},errors.New("pulse expired")}
+ if (p[8]=="ACTIVE"&&epoch!=originalEpoch) ||
+  (p[8]=="STOP"&&epoch<=originalEpoch) ||
+  (p[8]!="ACTIVE"&&p[8]!="STOP") {
+  return pulse{},errors.New("pulse state or epoch rejected")
+ }
+ return pulse{worker,job,container,p[8],epoch,seq,issued,expiry},nil
+}
+
+type stopRequest struct {
+ worker,job,container,reason string
+ epoch uint64
+ issued int64
+}
+
+func signedStopRequest(priv ed25519.PrivateKey, request stopRequest) []byte {
+ payload:=fmt.Sprintf("%s|%s|%s|%s|%d|%d|%s\n",
+  brokerDomain,request.worker,request.job,request.container,
+  request.epoch,request.issued,request.reason)
+ return []byte(payload+hex.EncodeToString(ed25519.Sign(priv,[]byte(payload)))+"\n")
+}
+
+func verifyStopRequest(pub ed25519.PublicKey,frame []byte,worker,job,container string,
+ epoch uint64,now int64) error {
+ if len(frame)<50 || len(frame)>1024 {return errors.New("stop frame size")}
+ lines:=strings.Split(string(frame),"\n")
+ if len(lines)!=3 || lines[2]!="" {return errors.New("stop frame format")}
+ sig,err:=hex.DecodeString(lines[1])
+ if err!=nil || len(sig)!=ed25519.SignatureSize ||
+  !ed25519.Verify(pub,[]byte(lines[0]+"\n"),sig) {return errors.New("stop signature")}
+ p:=strings.Split(lines[0],"|")
+ if len(p)!=7 || p[0]!=brokerDomain || p[1]!=worker ||
+  p[2]!=job || p[3]!=container {return errors.New("stop scope")}
+ e,err:=strconv.ParseUint(p[4],10,64)
+ if err!=nil || e!=epoch {return errors.New("stop epoch")}
+ issued,err:=strconv.ParseInt(p[5],10,64)
+ if err!=nil || issued>now || issued<now-5 {return errors.New("stop issued time")}
+ if p[6]!="SIGNED_STOP" && p[6]!="LEASE_INVALID" &&
+  p[6]!="JOURNAL_INVALID" && p[6]!="RESTART_REPLAY" {
+  return errors.New("unknown stop reason")
+ }
+ return nil
+}
