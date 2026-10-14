@@ -108,8 +108,11 @@ class SyntheticSeparatedKillBrokerIT {
                 verifierSigner.getPublic().getEncoded());
         Files.setPosixFilePermissions(brokerPub,PosixFilePermissions.fromString("rw-------"));
         Path journal=Files.createDirectory(root.resolve(name+"-journal"));
-        privileged(List.of("sudo","-n","chown","65534:65534",journal.toString()));
+        // Configure mode WHILE owned by the CI runner, then hand the
+        // private journal to UID 65534. The unprivileged verifier must
+        // not need runner/root privileges to write its own history.
         Files.setPosixFilePermissions(journal,PosixFilePermissions.fromString("rwx------"));
+        privileged(List.of("sudo","-n","chown","65534:65534",journal.toString()));
 
         var issuer=new SyntheticSupervisorPulseLab(fences,reservations,pulses,
                 transactions,Clock.systemUTC(),pulseSigner.getPrivate());
