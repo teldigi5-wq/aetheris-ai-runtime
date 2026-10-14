@@ -72,6 +72,14 @@ class SyntheticOciWorkerLifecycleIT {
 
         assertThat(controller.reserve(sign(signer, valid))).isEqualTo(valid.jobId());
         assertThat(controller.reservationVisible(valid.jobId())).isTrue();
+        // A separate instance performs a worker-side signed-job + DB fence
+        // check. It is still in the CI controller JVM, not in the OCI image:
+        // production worker trust and cross-process race safety are unproven.
+        var workerVerifier = new WorkerSideFenceVerifierLab(
+                fences, reservations, transactionManager, signer.getPublic(),
+                Clock.systemUTC(),
+                taskId -> taskId.equals(valid.taskId()) ? trusted(valid) : null);
+        assertThat(workerVerifier.check(sign(signer, valid)).epoch()).isEqualTo(1L);
         assertThatThrownBy(() -> controller.reserve(sign(signer, valid)))
                 .isInstanceOf(SecurityException.class)
                 .hasMessageContaining("REPLAY");
@@ -109,7 +117,7 @@ class SyntheticOciWorkerLifecycleIT {
             assertThat(controller.reservationVisible(valid.jobId())).isTrue();
             String container = docker(start);
             created = true;
-            assertThat(container).isNotBlank();
+            assertThat(container).matches("[0-9a-f]{64}");
             awaitReady(name);
             awaitDescendants(name);
             assertThat(docker(List.of("docker", "inspect", "--format",
@@ -121,6 +129,8 @@ class SyntheticOciWorkerLifecycleIT {
             assertThat(receipt.status()).isEqualTo("STOP_PERSISTED_OS_TERMINATION_UNVERIFIED");
             assertThat(receipt.revokedRows()).isEqualTo(1);
             assertThat(controller.reservationVisible(valid.jobId())).isFalse();
+            assertThatThrownBy(() -> workerVerifier.check(sign(signer, valid)))
+                    .isInstanceOf(SecurityException.class).hasMessageContaining("STOP");
             assertThatThrownBy(() -> controller.reserve(sign(signer,
                     claim(workerId, "syntheticOwner", Instant.now().getEpochSecond()))))
                     .isInstanceOf(SecurityException.class).hasMessageContaining("STOP_LATCHED");
@@ -129,6 +139,30 @@ class SyntheticOciWorkerLifecycleIT {
             // This is NOT wired to TaskControlService or production worker.
             docker(List.of("docker", "kill", "--signal=KILL", name));
             awaitStopped(name);
+            // A dedicated synthetic CI supervisor key signs precisely the
+            // observed fixed Docker exit state. This is NOT cryptographic
+            // OS attestation or proof about production agent subprocesses.
+            KeyPair reporter = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+            String exitState = docker(List.of("docker", "inspect", "--format",
+                    "{{.State.Running}}:{{.State.Pid}}:{{.State.ExitCode}}", name));
+            String[] fields = exitState.split(":");
+            assertThat(fields).hasSize(3);
+            assertThat(fields[0]).isEqualTo("false");
+            assertThat(fields[1]).isEqualTo("0");
+            assertThat(fields[2]).isEqualTo("137");
+            var observation = new SyntheticOciExitReceiptLab.Observation(
+                    valid.jobId(), workerId, receipt.epoch(), container,
+                    Instant.now().getEpochSecond(), Integer.parseInt(fields[2]),
+                    Boolean.parseBoolean(fields[0]), Long.parseLong(fields[1]),
+                    true, reservations.findById(valid.jobId()).orElseThrow().isRevoked());
+            var attested = SyntheticOciExitReceiptLab.signObservedExit(
+                    observation, reporter.getPrivate());
+            assertThat(SyntheticOciExitReceiptLab.verify(
+                    attested, reporter.getPublic(), valid.jobId(), workerId,
+                    receipt.epoch(), container, Clock.systemUTC())).isTrue();
+            assertThat(SyntheticOciExitReceiptLab.verify(
+                    attested, signer.getPublic(), valid.jobId(), workerId,
+                    receipt.epoch(), container, Clock.systemUTC())).isFalse();
             assertThat(Files.exists(fixture.resolve("forbidden-write"))).isFalse();
             assertThat(reservations.findById(valid.jobId()).orElseThrow().isRevoked()).isTrue();
             assertThat(fences.findById(workerId).orElseThrow().isStopped()).isTrue();
