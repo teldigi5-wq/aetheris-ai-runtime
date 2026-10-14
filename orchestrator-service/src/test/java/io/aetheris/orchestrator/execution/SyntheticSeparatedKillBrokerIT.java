@@ -132,6 +132,37 @@ class SyntheticSeparatedKillBrokerIT {
         runScenario("silent",false);
     }
 
+    @Test
+    void verifierAbsentTriggersHostBrokerDeadmanWithoutFalseDbStop()
+            throws Exception {
+        Fixture f=setup("deadman");
+        Process broker=null;
+        try {
+            // No unprivileged verifier is launched. The broker must not
+            // treat that absence as an ACTIVE authorization indefinitely.
+            broker=startBroker(f,3);
+            assertThat(broker.waitFor(8,TimeUnit.SECONDS)).isTrue();
+            String logs=new String(broker.getInputStream().readAllBytes());
+            assertThat(broker.exitValue()).as(logs).isZero();
+            assertThat(logs).contains(
+                    "SYNTHETIC_BROKER_KILL_REASON=BROKER_DEADMAN_TIMEOUT",
+                    "SYNTHETIC_BROKER_TERMINATION_OBSERVED");
+            assertThat(docker(List.of("docker","inspect","--format",
+                    "{{.State.Running}}:{{.State.Pid}}:{{.State.ExitCode}}",
+                    f.container()))).isEqualTo("false:0:137");
+            // Liveness enforcement must NEVER forge a successful DB STOP.
+            assertThat(fences.findById(f.worker()).orElseThrow().isStopped()).isFalse();
+            assertThat(reservations.findById(f.job().jobId())
+                    .orElseThrow().isRevoked()).isFalse();
+        } finally {
+            if(broker!=null && broker.isAlive())broker.destroyForcibly();
+            try {docker(List.of("docker","rm","-f",f.container()));}
+            catch(Exception ignored){/* disposable CI cleanup */}
+            privileged(List.of("sudo","-n","chown",
+                    System.getProperty("user.name"),f.journalDir().toString()));
+        }
+    }
+
     private void runScenario(String name,boolean sendStop) throws Exception {
         Fixture f=setup(name);
         Process broker=null,verifier=null;
@@ -195,11 +226,18 @@ class SyntheticSeparatedKillBrokerIT {
     }
 
     private static Process startBroker(Fixture f) throws Exception {
+        return startBroker(f,9);
+    }
+
+    private static Process startBroker(Fixture f,int deathlineSeconds) throws Exception {
+        if(deathlineSeconds<2 || deathlineSeconds>12)
+            throw new IllegalArgumentException("CI broker deathline not bounded");
         Path binary=Path.of(System.getProperty("aetheris.stage45.broker.bin",""));
         if(!Files.isRegularFile(binary))throw new SecurityException("BROKER_BINARY_MISSING");
         var builder=new ProcessBuilder(binary.toString(),f.socket().toString(),
                 f.brokerPublic().toString(),f.worker(),f.job().jobId().toString(),
-                f.container(),"1","9").redirectErrorStream(true);
+                f.container(),"1",Integer.toString(deathlineSeconds))
+                .redirectErrorStream(true);
         builder.environment().put("AETHERIS_STAGE45_BROKER_CI","true");
         return builder.start();
     }
