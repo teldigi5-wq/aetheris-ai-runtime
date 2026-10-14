@@ -105,6 +105,11 @@ class InWorkerSignedLeaseLifecycleIT {
         Files.setPosixFilePermissions(fixture.resolve("sleep-fixture.sh"),
                 PosixFilePermissions.fromString("rw-r--r--"));
 
+        // The CI host owns the dedicated state directory, while group
+        // 65534 gives the non-root OCI worker write access. Neither the
+        // read-only workspace nor the host's credentials are writable.
+        Path tamperState = prepareStateDirectory(temp.resolve("tamper-state"));
+        Path state = prepareStateDirectory(temp.resolve("durable-stop-state"));
         String name = SyntheticOciSleepProfilePlan.containerName(job.jobId());
         boolean created = false;
         try {
@@ -114,12 +119,27 @@ class InWorkerSignedLeaseLifecycleIT {
             String correct = Files.readString(leasePath);
             Files.writeString(leasePath, correct.replace("|ALLOW|", "|STOPX|"));
             String invalidId = docker(InWorkerSignedLeaseOciPlan.build(
-                    fixture, job.jobId(), worker, 1));
+                    fixture, tamperState, job.jobId(), worker, 1));
             created = true;
             assertThat(invalidId).matches("[0-9a-f]{64}");
             awaitStopped(name, 54);
             assertThat(docker(List.of("docker", "logs", name)))
                     .contains("SYNTHETIC_INWORKER_INITIAL_DENIAL")
+                    .doesNotContain("SYNTHETIC_INWORKER_SIGNED_READY");
+            assertThat(Files.exists(tamperState.resolve("terminal.tombstone"))).isTrue();
+            docker(List.of("docker", "rm", "-f", name));
+            created = false;
+
+            // Replaying an otherwise valid old ALLOW must fail because a
+            // previous bad lease has persisted a DENY tombstone on the SAME
+            // worker state mount. No shell children may launch.
+            publish(fixture, job, 1, "ALLOW", leaseIssuer, 25);
+            docker(InWorkerSignedLeaseOciPlan.build(
+                    fixture, tamperState, job.jobId(), worker, 1));
+            created = true;
+            awaitStopped(name, 58);
+            assertThat(docker(List.of("docker", "logs", name)))
+                    .contains("SYNTHETIC_INWORKER_TERMINAL_LATCH_DENIED")
                     .doesNotContain("SYNTHETIC_INWORKER_SIGNED_READY");
             docker(List.of("docker", "rm", "-f", name));
             created = false;
@@ -128,7 +148,7 @@ class InWorkerSignedLeaseLifecycleIT {
             // process verifies it inside OCI without any signing key.
             publish(fixture, job, 1, "ALLOW", leaseIssuer, 25);
             String container = docker(InWorkerSignedLeaseOciPlan.build(
-                    fixture, job.jobId(), worker, 1));
+                    fixture, state, job.jobId(), worker, 1));
             created = true;
             assertThat(container).matches("[0-9a-f]{64}");
             awaitReady(name);
@@ -154,6 +174,23 @@ class InWorkerSignedLeaseLifecycleIT {
             awaitStopped(name, 0);
             assertThat(docker(List.of("docker", "logs", name)))
                     .contains("SYNTHETIC_INWORKER_STOP_OBSERVED");
+            assertThat(Files.exists(state.resolve("terminal.tombstone"))).isTrue();
+
+            // Adversarial rollback: publisher replays an old, signed but
+            // still within-expiry ALLOW. Re-created OCI worker must deny
+            // *before* the fixed sleep script runs, even if STOP lease is
+            // no longer present in /workspace. Persistent marker wins.
+            docker(List.of("docker", "rm", "-f", name));
+            created = false;
+            publish(fixture, job, 1, "ALLOW", leaseIssuer, 25);
+            docker(InWorkerSignedLeaseOciPlan.build(
+                    fixture, state, job.jobId(), worker, 1));
+            created = true;
+            awaitStopped(name, 58);
+            assertThat(docker(List.of("docker", "logs", name)))
+                    .contains("SYNTHETIC_INWORKER_TERMINAL_LATCH_DENIED")
+                    .doesNotContain("SYNTHETIC_INWORKER_SIGNED_READY");
+            assertThat(Files.exists(state.resolve("terminal.tombstone"))).isTrue();
             assertThat(Files.exists(fixture.resolve("forbidden-write"))).isFalse();
             assertThat(reservations.findById(job.jobId()).orElseThrow().isRevoked()).isTrue();
             assertThat(fences.findById(worker).orElseThrow().isStopped()).isTrue();
@@ -163,6 +200,20 @@ class InWorkerSignedLeaseLifecycleIT {
                 catch (Exception ignored) { /* disposable CI cleanup best effort */ }
             }
         }
+    }
+
+    private static Path prepareStateDirectory(Path path) throws Exception {
+        Files.createDirectory(path);
+        // Ephemeral GitHub-hosted CI only: host owner retains directory
+        // access, OCI worker gid 65534 receives *only* this group's
+        // write permissions. No privileged action from runtime code.
+        Process chgrp = new ProcessBuilder("sudo", "-n", "chgrp", "65534",
+                path.toAbsolutePath().toString()).start();
+        if (!chgrp.waitFor(5, TimeUnit.SECONDS) || chgrp.exitValue() != 0)
+            throw new IllegalStateException("Synthetic CI state group setup failed");
+        Files.setPosixFilePermissions(path,
+                PosixFilePermissions.fromString("rwxrwx---"));
+        return path;
     }
 
     private static void publish(Path fixture, JobClaims job, long epoch, String state,
