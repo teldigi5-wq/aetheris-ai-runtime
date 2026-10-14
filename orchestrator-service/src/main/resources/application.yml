@@ -20,6 +20,12 @@ aetheris:
   # explicit opt-in is enabled. Does NOT affect the task/mission quarantine.
   owner-checkpoint-http:
     enabled: ${AETHERIS_OWNER_CHECKPOINT_HTTP_ENABLED:false}
+  # SSE is a separate deliberate opt-in; both this and the checkpoint
+  # HTTP feature must be enabled. NEVER set this for deployed services
+  # before owner/project/session revocation and real PC certification.
+  owner-stream-http:
+    enabled: ${AETHERIS_OWNER_STREAM_HTTP_ENABLED:false}
+    max-duration-seconds: ${AETHERIS_OWNER_STREAM_MAX_SECONDS:20}
   jwt:
     # No default/development JWT signing key: enabling the optional HTTP
     # endpoint without a strong explicitly provisioned key fails startup.
