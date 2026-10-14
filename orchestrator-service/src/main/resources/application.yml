@@ -16,6 +16,16 @@ management:
         enabled: true
 
 aetheris:
+  # The new owner checkpoint HTTP adapter stays absent unless this exact
+  # explicit opt-in is enabled. Does NOT affect the task/mission quarantine.
+  owner-checkpoint-http:
+    enabled: ${AETHERIS_OWNER_CHECKPOINT_HTTP_ENABLED:false}
+  jwt:
+    # No default/development JWT signing key: enabling the optional HTTP
+    # endpoint without a strong explicitly provisioned key fails startup.
+    secret: ${AETHERIS_JWT_SECRET:}
+    issuer: ${AETHERIS_JWT_ISSUER:aetheris-identity}
+    audience: ${AETHERIS_JWT_AUDIENCE:aetheris-api}
   agent-catalog:
     agents:
       - id: executive-planner

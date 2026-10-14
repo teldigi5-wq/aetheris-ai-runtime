@@ -46,7 +46,7 @@ public final class VerifiedOwnerDeliveryCheckpoint {
     }
 
     public CheckpointHandle open(String signedToken, UUID taskId) {
-        long ownerId = verifiedOwner(signedToken);
+        long ownerId = verifiedOwner(signedToken, RuntimeAccessTokenVerifier.WRITE_SCOPE);
         requireOwnerTask(taskId, ownerId);
         OwnerTaskCheckpointEntity record = new OwnerTaskCheckpointEntity(
                 UUID.randomUUID(), ownerId, taskId, Instant.now());
@@ -61,7 +61,7 @@ public final class VerifiedOwnerDeliveryCheckpoint {
      * No event message or serialized metadata is loaded.
      */
     public ReplayBatch resume(String signedToken, UUID checkpointId, int limit) {
-        long ownerId = verifiedOwner(signedToken);
+        long ownerId = verifiedOwner(signedToken, RuntimeAccessTokenVerifier.READ_SCOPE);
         if (limit < 1 || limit > MAX_PAGE || checkpointId == null) throw unavailable();
         OwnerTaskCheckpointEntity checkpoint = requireCheckpoint(checkpointId, ownerId);
         requireOwnerTask(checkpoint.getTaskId(), ownerId);
@@ -85,7 +85,7 @@ public final class VerifiedOwnerDeliveryCheckpoint {
      */
     public Acknowledgement acknowledge(String signedToken, UUID checkpointId,
                                        UUID eventId) {
-        long ownerId = verifiedOwner(signedToken);
+        long ownerId = verifiedOwner(signedToken, RuntimeAccessTokenVerifier.WRITE_SCOPE);
         if (checkpointId == null || eventId == null) throw unavailable();
         return writeTransaction.execute(status -> {
             OwnerTaskCheckpointEntity checkpoint = checkpoints.lockById(checkpointId)
@@ -110,9 +110,8 @@ public final class VerifiedOwnerDeliveryCheckpoint {
         });
     }
 
-    private long verifiedOwner(String signedToken) {
-        return verifier.verify(signedToken, RuntimeAccessTokenVerifier.READ_SCOPE)
-                .identityAccountId();
+    private long verifiedOwner(String signedToken, String requiredScope) {
+        return verifier.verify(signedToken, requiredScope).identityAccountId();
     }
 
     private OwnerTaskCheckpointEntity requireCheckpoint(UUID checkpointId, long ownerId) {
