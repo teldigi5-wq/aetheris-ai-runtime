@@ -149,8 +149,10 @@ class SyntheticSeparatedKillBrokerIT {
             assertThat(broker.waitFor(10,TimeUnit.SECONDS)).isTrue();
             String verifierLogs=new String(verifier.getInputStream().readAllBytes());
             String brokerLogs=new String(broker.getInputStream().readAllBytes());
-            assertThat(verifier.exitValue()).isZero();
-            assertThat(broker.exitValue()).isZero();
+            assertThat(verifier.exitValue())
+                    .as("unprivileged verifier output: "+verifierLogs).isZero();
+            assertThat(broker.exitValue())
+                    .as("fixed broker output: "+brokerLogs).isZero();
             assertThat(verifierLogs).contains(sendStop
                     ? "SYNTHETIC_UNPRIVILEGED_STOP_REQUESTED=SIGNED_STOP"
                     : "SYNTHETIC_UNPRIVILEGED_STOP_REQUESTED=LEASE_INVALID");
@@ -174,6 +176,11 @@ class SyntheticSeparatedKillBrokerIT {
             if(broker!=null && broker.isAlive())broker.destroyForcibly();
             try {docker(List.of("docker","rm","-f",f.container()));}
             catch(Exception ignored){/* disposable CI teardown */}
+            // Restore directory OWNERSHIP after both detached OS processes
+            // have ended, so JUnit can clean up private nonroot state.
+            // Never expose the verifier journal to the runtime or agent.
+            privileged(List.of("sudo","-n","chown",
+                    System.getProperty("user.name"),f.journalDir().toString()));
         }
     }
 
@@ -200,9 +207,17 @@ class SyntheticSeparatedKillBrokerIT {
     private static Process startVerifier(Fixture f) throws Exception {
         Path binary=Path.of(System.getProperty("aetheris.stage45.verifier.bin",""));
         if(!Files.isRegularFile(binary))throw new SecurityException("VERIFIER_BINARY_MISSING");
+        // The GitHub Actions RUNNER_TEMP directory can be private to the
+        // runner UID. Copy only the fixed CI verifier executable into
+        // the traversable, isolated JUnit fixture before dropping UID.
+        Path accessible=f.publisherPublic().resolveSibling(
+                f.job().jobId()+"-fixed-verifier");
+        Files.copy(binary,accessible);
+        Files.setPosixFilePermissions(accessible,
+                PosixFilePermissions.fromString("rwxr-xr-x"));
         return new ProcessBuilder("sudo","-n","-u","nobody","env",
                 "GITHUB_ACTIONS=true","AETHERIS_STAGE45_BROKER_CI=true",
-                binary.toString(),f.publisherPublic().toString(),f.pulseFile().toString(),
+                accessible.toString(),f.publisherPublic().toString(),f.pulseFile().toString(),
                 f.verifierPrivate().toString(),f.socket().toString(),
                 f.worker(),f.job().jobId().toString(),f.container(),"1",
                 f.journalDir().toString()).redirectErrorStream(true).start();
