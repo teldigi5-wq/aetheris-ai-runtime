@@ -59,6 +59,12 @@ func run() int {
  keyFile, leaseFile, worker, job := os.Args[1],os.Args[2],os.Args[3],os.Args[4]
  epoch, err := strconv.ParseUint(os.Args[5], 10, 64)
  if err != nil || epoch == 0 { return 51 }
+ // Irreversible local decision checked BEFORE an old ALLOW can authorize
+ // even the harmless fixed-profile child on container/JVM restart.
+ if terminalPresent(stateDirectory) {
+  fmt.Println("SYNTHETIC_INWORKER_TERMINAL_LATCH_DENIED")
+  return 58
+ }
  der, err := os.ReadFile(keyFile)
  if err != nil || len(der) > 256 { return 52 }
  key, err := x509.ParsePKIXPublicKey(der)
@@ -67,9 +73,13 @@ func run() int {
 
  status, err := verify(public, leaseFile, worker, job, epoch)
  if err != nil || status.state != "ALLOW" {
+  // Broken/forged signed lease is fail-closed even across restarts.
+  if persistTerminal(stateDirectory,worker,job,"DENY",epoch) != nil { return 59 }
   fmt.Println("SYNTHETIC_INWORKER_INITIAL_DENIAL")
   return 54
  }
+ // A concurrent prior stop before child spawn must also refuse start.
+ if terminalPresent(stateDirectory) { return 58 }
  // Actual nested fixed sleep process tree, spawned ONLY after in-container
  // signature and scope checks. No model-provided command is possible.
  child := exec.Command("/bin/sh", "/workspace/sleep-fixture.sh")
@@ -83,15 +93,22 @@ func run() int {
  defer stopChildren()
  for {
   time.Sleep(100*time.Millisecond)
+  if terminalPresent(stateDirectory) { return 58 }
   current, err := verify(public, leaseFile, worker, job, epoch)
   if err != nil {
+   if persistTerminal(stateDirectory,worker,job,"DENY",epoch) != nil { return 59 }
    fmt.Println("SYNTHETIC_INWORKER_DENIED_INVALID_OR_EXPIRED")
    return 56
   }
   if current.state == "STOP" {
+   // Persist STOP with fsync BEFORE ending fixed child process group.
+   if persistTerminal(stateDirectory,worker,job,"STOP",current.epoch) != nil { return 59 }
    fmt.Println("SYNTHETIC_INWORKER_STOP_OBSERVED")
    return 0
   }
-  if current.epoch != epoch { return 57 }
+  if current.epoch != epoch {
+   if persistTerminal(stateDirectory,worker,job,"DENY",epoch) != nil { return 59 }
+   return 57
+  }
  }
 }
