@@ -49,14 +49,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_aetheris_task_event_sequence
   ON aetheris_task_events (task_id, commit_sequence)
   WHERE commit_sequence IS NOT NULL;
 
-ALTER TABLE aetheris_tasks
-  ADD CONSTRAINT ck_aetheris_task_journal_seq_positive
-  CHECK (last_journal_sequence IS NULL OR last_journal_sequence >= 1)
-  NOT VALID;
-
-ALTER TABLE aetheris_task_events
-  ADD CONSTRAINT ck_aetheris_event_commit_seq_positive
-  CHECK (commit_sequence IS NULL OR commit_sequence >= 1)
-  NOT VALID;
+-- PostgreSQL lacks ADD CONSTRAINT IF NOT EXISTS; use guarded DDL so a
+-- reviewed rerun is idempotent and cannot duplicate the constraints.
+DO $migration$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'ck_aetheris_task_journal_seq_positive'
+      AND conrelid = 'aetheris_tasks'::regclass
+  ) THEN
+    ALTER TABLE aetheris_tasks
+      ADD CONSTRAINT ck_aetheris_task_journal_seq_positive
+      CHECK (last_journal_sequence IS NULL OR last_journal_sequence >= 1) NOT VALID;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'ck_aetheris_event_commit_seq_positive'
+      AND conrelid = 'aetheris_task_events'::regclass
+  ) THEN
+    ALTER TABLE aetheris_task_events
+      ADD CONSTRAINT ck_aetheris_event_commit_seq_positive
+      CHECK (commit_sequence IS NULL OR commit_sequence >= 1) NOT VALID;
+  END IF;
+END;
+$migration$;
 
 COMMIT;
