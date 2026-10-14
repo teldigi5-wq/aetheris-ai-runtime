@@ -60,7 +60,7 @@ public class SyntheticAgentQuotaEntity {
         if(jobs>=MAX_JOBS || cpuMilli>MAX_CPU_MILLI-cpu
                 || memoryMiB>MAX_MEMORY_MIB-memory
                 || processCount>MAX_PROCESSES-pids)
-            throw new SecurityException("AGENT_SHARED_QUOTA_EXCEEDED");
+            throw new SecurityException("MULTIAGENT_SHARED_QUOTA_EXCEEDED");
         jobs=Math.addExact(jobs,1);
         cpuMilli=Math.addExact(cpuMilli,cpu);
         memoryMiB=Math.addExact(memoryMiB,memory);
