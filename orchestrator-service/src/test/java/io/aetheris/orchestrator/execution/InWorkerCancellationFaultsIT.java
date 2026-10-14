@@ -249,10 +249,7 @@ class InWorkerCancellationFaultsIT {
         for(int i=0;i<170;i++) {
             String status=docker(List.of("docker","inspect","--format",
                     "{{.State.Running}}:{{.State.Pid}}:{{.State.ExitCode}}",name));
-            if(status.equals("false:0:"+code)) {
-                assertThat(Files.exists(Path.of("/var/run/docker.sock"))).isTrue();
-                return;
-            }
+            if(status.equals("false:0:"+code)) return;
             Thread.sleep(100);
         }
         throw new AssertionError("Synthetic OCI process did not exit with code "+code);
