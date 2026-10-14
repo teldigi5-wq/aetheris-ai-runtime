@@ -68,6 +68,11 @@ class VerifiedOwnerDeliveryCheckpointTest {
 
     private static String owner(long uid) {
         return jwt(uid, RuntimeAccessTokenVerifier.DEFAULT_AUDIENCE,
+                List.of("orchestrator:read", "orchestrator:write"));
+    }
+
+    private static String readOnly(long uid) {
+        return jwt(uid, RuntimeAccessTokenVerifier.DEFAULT_AUDIENCE,
                 List.of("orchestrator:read"));
     }
 
@@ -143,6 +148,24 @@ class VerifiedOwnerDeliveryCheckpointTest {
         assertThatThrownBy(()->service.resume(owner(101L),other.checkpointId(),10))
                 .isInstanceOf(NoSuchElementException.class).hasMessage("TASK_NOT_AVAILABLE");
         assertThat(checkpoints.findById(handle.checkpointId()).orElseThrow().getLastSequence())
+                .isZero();
+    }
+
+    @Test
+    void readonlySignedPrincipalCanResumeButCannotCreateOrAdvanceCheckpoint() {
+        TaskEntity task = task(101L, null);
+        UUID event = record(task.getId(), Instant.now(), "qa-engineer");
+        var service = checkpointService();
+        var handle = service.open(owner(101L), task.getId());
+        assertThat(service.resume(readOnly(101L), handle.checkpointId(), 10).events())
+                .extracting(VerifiedOwnerDeliveryCheckpoint.SafeUpdate::eventId)
+                .containsExactly(event);
+        assertThatThrownBy(() -> service.open(readOnly(101L), task.getId()))
+                .isInstanceOf(RuntimeAccessTokenVerifier.RejectedToken.class);
+        assertThatThrownBy(() -> service.acknowledge(
+                readOnly(101L), handle.checkpointId(), event))
+                .isInstanceOf(RuntimeAccessTokenVerifier.RejectedToken.class);
+        assertThat(service.resume(owner(101L), handle.checkpointId(), 10).lastAcknowledged())
                 .isZero();
     }
 
