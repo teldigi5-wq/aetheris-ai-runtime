@@ -36,7 +36,7 @@ jobs:
       - name: Verify sandbox escape attempts and defensive SOC catalog
         run: |
           ./mvnw -B -f orchestrator-service/pom.xml \
-            -Dtest=WorkspaceContainmentHardeningTest,AgentCatalogIntegrationTest test
+            -Dtest=WorkspaceContainmentHardeningTest,AeadFieldProtectorTest,AgentCatalogIntegrationTest test
 
   complete-orchestrator-regression:
     runs-on: ubuntu-24.04
