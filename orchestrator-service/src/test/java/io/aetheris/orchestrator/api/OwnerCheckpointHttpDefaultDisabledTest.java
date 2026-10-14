@@ -30,6 +30,13 @@ class OwnerCheckpointHttpDefaultDisabledTest {
     }
 
     @Test
+    void ownerSseStreamIsAbsentWhenBothFeaturesAreDisabled() throws Exception {
+        mvc.perform(get("/api/orchestrator/owner-checkpoints/00000000-0000-4000-8000-000000000001/stream")
+                .header("Authorization", "Bearer forged.value.signature"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void originalTaskAndMissionQuarantineStillRunsEvenWithoutTheOptionalController() throws Exception {
         mvc.perform(get("/api/orchestrator/live/events"))
                 .andExpect(status().isForbidden());
