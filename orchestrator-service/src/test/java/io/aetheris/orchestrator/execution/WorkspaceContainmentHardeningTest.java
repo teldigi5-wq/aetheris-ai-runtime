@@ -28,11 +28,9 @@ class WorkspaceContainmentHardeningTest {
     @Test
     void permitsOrdinaryBoundedReadAndExplicitOptInWrite() {
         var workspace = sandbox(true);
-        workspace.write("nested/notes.txt", "safe
-");
+        workspace.write("nested/notes.txt", "safe\n");
         var read = workspace.read("nested/notes.txt");
-        assertThat(read.content()).isEqualTo("safe
-");
+        assertThat(read.content()).isEqualTo("safe\n");
         assertThat(read.size()).isEqualTo(5);
         assertThat(workspace.resolveDirectory("nested")).isDirectory();
         assertThatThrownBy(() -> workspace.read("../unrelated.txt"))
@@ -67,7 +65,7 @@ class WorkspaceContainmentHardeningTest {
             Files.createSymbolicLink(linkToFile, secret);
             Files.createSymbolicLink(linkToDir, outside);
         } catch (UnsupportedOperationException | java.nio.file.FileSystemException ex) {
-            Assumptions.abort("Filesystem cannot create symlink for this test");
+            Assumptions.assumeTrue(false, "Filesystem cannot create symlink for this test");
         }
         assertThatThrownBy(() -> workspace.read("linked-secret.txt"))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -90,7 +88,7 @@ class WorkspaceContainmentHardeningTest {
         try {
             Files.createSymbolicLink(link,outside);
         } catch (UnsupportedOperationException | java.nio.file.FileSystemException ex) {
-            Assumptions.abort("Filesystem cannot create symlink for this test");
+            Assumptions.assumeTrue(false, "Filesystem cannot create symlink for this test");
         }
         assertThatThrownBy(() -> new WorkspaceSandboxService(link.toString(), false, 4096))
                 .isInstanceOf(IllegalArgumentException.class)
