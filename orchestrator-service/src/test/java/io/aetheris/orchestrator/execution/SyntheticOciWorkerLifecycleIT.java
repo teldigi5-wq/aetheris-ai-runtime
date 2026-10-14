@@ -76,7 +76,13 @@ class SyntheticOciWorkerLifecycleIT {
                 .isInstanceOf(SecurityException.class)
                 .hasMessageContaining("REPLAY");
 
+        // The container runs as uid 65534 and must be able to traverse
+        // temporary fixture paths, but only the test host can write them.
+        Files.setPosixFilePermissions(directory,
+                java.nio.file.attribute.PosixFilePermissions.fromString("rwxr-xr-x"));
         Path fixture = Files.createDirectory(directory.resolve("fixed"));
+        Files.setPosixFilePermissions(fixture,
+                java.nio.file.attribute.PosixFilePermissions.fromString("rwxr-xr-x"));
         Files.writeString(fixture.resolve("sleep-fixture.sh"), """
                 #!/bin/sh
                 set -eu
@@ -92,6 +98,8 @@ class SyntheticOciWorkerLifecycleIT {
                 echo SYNTHETIC_SIGNED_WORKLOAD_READY
                 wait
                 """);
+        Files.setPosixFilePermissions(fixture.resolve("sleep-fixture.sh"),
+                java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--"));
         String name = SyntheticOciSleepProfilePlan.containerName(valid.jobId());
         boolean created = false;
         try {
