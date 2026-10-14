@@ -45,7 +45,8 @@ class SyntheticSeparatedKillBrokerIT {
                            Path publisherPublic, Path verifierPrivate,
                            Path brokerPublic, Path pulseFile, Path journalDir,
                            Path socket, DurableSandboxAdmissionLab db,
-                           SyntheticSupervisorPulseLab issuer) {}
+                           SyntheticSupervisorPulseLab issuer,
+                           String publisherPin,String brokerPin) {}
 
     private Fixture setup(String name) throws Exception {
         if (!"true".equals(System.getenv("GITHUB_ACTIONS"))
@@ -117,7 +118,8 @@ class SyntheticSeparatedKillBrokerIT {
         var issuer=new SyntheticSupervisorPulseLab(fences,reservations,pulses,
                 transactions,Clock.systemUTC(),pulseSigner.getPrivate());
         return new Fixture(worker,job,container,pub,verifierPrivate,brokerPub,
-                root.resolve(name+"-pulse.txt"),journal,root.resolve(name+".sock"),db,issuer);
+                root.resolve(name+"-pulse.txt"),journal,root.resolve(name+".sock"),
+                db,issuer,publicKeyPin(pub),publicKeyPin(brokerPub));
     }
 
     @Test
@@ -237,7 +239,7 @@ class SyntheticSeparatedKillBrokerIT {
         var builder=new ProcessBuilder(binary.toString(),f.socket().toString(),
                 f.brokerPublic().toString(),f.worker(),f.job().jobId().toString(),
                 f.container(),"1",Integer.toString(deathlineSeconds),
-                publicKeyPin(f.brokerPublic()))
+                f.brokerPin())
                 .redirectErrorStream(true);
         builder.environment().put("AETHERIS_STAGE45_BROKER_CI","true");
         return builder.start();
@@ -260,7 +262,7 @@ class SyntheticSeparatedKillBrokerIT {
                 f.verifierPrivate().toString(),f.socket().toString(),
                 f.worker(),f.job().jobId().toString(),f.container(),"1",
                 f.journalDir().toString(),
-                publicKeyPin(f.publisherPublic())).redirectErrorStream(true).start();
+                f.publisherPin()).redirectErrorStream(true).start();
     }
 
     private static void waitSocketAndLimitToVerifier(Path socket) throws Exception {
