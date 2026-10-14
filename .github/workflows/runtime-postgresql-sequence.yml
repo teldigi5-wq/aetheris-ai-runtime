@@ -3,6 +3,7 @@ name: PostgreSQL Task Sequence Certification
 on:
   pull_request:
     branches:
+      - security/durable-owner-delivery-ack-20261014
       - security/postgres-task-sequence-certification-20261014
       - security/per-task-commit-sequence-20261013
       - main
@@ -10,6 +11,10 @@ on:
       - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/task/**'
       - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/task/VerifiedOwnerCommitSequenceCursorTest.java'
       - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/task/VerifiedOwnerDeliveryCheckpointTest.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerCheckpointHttpController.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/api/OwnerCheckpointHttpControllerTest.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/api/OwnerCheckpointHttpDefaultDisabledTest.java'
+      - 'orchestrator-service/src/main/resources/application.yml'
       - 'docs/security/sql/postgres-owner-delivery-checkpoint-v2.sql'
       - 'docs/security/sql/postgres-owner-task-sequencing-v1.sql'
       - 'tests/postgresql/**'
@@ -57,7 +62,7 @@ jobs:
           SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
         run: |
           ./mvnw -B -f orchestrator-service/pom.xml \
-            -Dtest=VerifiedOwnerDeliveryCheckpointTest,VerifiedOwnerCommitSequenceCursorTest,VerifiedOwnerTaskJournalOutboxTest \
+            -Dtest=OwnerCheckpointHttpControllerTest,OwnerCheckpointHttpDefaultDisabledTest,VerifiedOwnerDeliveryCheckpointTest,VerifiedOwnerCommitSequenceCursorTest,VerifiedOwnerTaskJournalOutboxTest \
             test
 
   additive-migration-dry-run:
