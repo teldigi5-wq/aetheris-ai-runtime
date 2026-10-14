@@ -5,7 +5,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
-import java.security.MessageDigest;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.Signature;
@@ -136,7 +135,7 @@ public final class SyntheticStopAuditWitnessLab {
     public static String canonicalText(Witness witness) {
         return new String(canonical(witness.workerId(), witness.jobId(),
                 witness.stoppedEpoch(), witness.reservedEpoch(), witness.witnessedAt()),
-                StandardCharsets.US_ASCII) + witness.signatureHex() + "\n";
+                StandardCharsets.US_ASCII).stripTrailing() + "|" + witness.signatureHex() + "\n";
     }
 
     public static Witness parseCanonicalText(String data) {
