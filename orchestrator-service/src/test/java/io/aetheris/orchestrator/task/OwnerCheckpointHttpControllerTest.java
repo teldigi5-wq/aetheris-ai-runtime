@@ -210,6 +210,15 @@ class OwnerCheckpointHttpControllerTest {
     }
 
     @Test
+    void ownerSseRemainsAbsentIfCheckpointHttpEnabledButStreamFlagOff() throws Exception {
+        TaskEntity a = task(101L);
+        UUID checkpoint = createCheckpoint(a, writer(101L));
+        mvc.perform(get(BASE + "/{checkpointId}/stream", checkpoint)
+                        .header("Authorization", read(101L)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void legacyGlobalTaskAndMissionRoutesRemainQuarantinedEvenWithValidSignedToken() throws Exception {
         for (String uri : List.of("/api/orchestrator/tasks",
                 "/api/orchestrator/live/events", "/api/orchestrator/missions")) {

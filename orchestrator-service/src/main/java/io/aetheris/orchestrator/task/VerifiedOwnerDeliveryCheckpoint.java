@@ -78,6 +78,37 @@ public final class VerifiedOwnerDeliveryCheckpoint {
     }
 
     /**
+     * Internal-only live delivery page for a short-lived, already verified
+     * principal. Re-checks expiration/read scope AND current database owner
+     * on each poll. The HTTP adapter must never serialize this principal.
+     *
+     * A connection-local cursor avoids repeating already-sent frames, while
+     * the durable checkpoint is never advanced without a client ACK. After
+     * reconnect the client intentionally replays unacknowledged frames.
+     */
+    public ReplayBatch streamPage(
+            RuntimeAccessTokenVerifier.VerifiedPrincipal principal,
+            UUID checkpointId, long connectionLastSent, int limit) {
+        if (principal == null || !principal.hasScope(RuntimeAccessTokenVerifier.READ_SCOPE)
+                || !Instant.now().isBefore(principal.expiresAt())) {
+            throw new RuntimeAccessTokenVerifier.RejectedToken();
+        }
+        if (checkpointId == null || connectionLastSent < 0
+                || limit < 1 || limit > 20) throw unavailable();
+        OwnerTaskCheckpointEntity checkpoint =
+                requireCheckpoint(checkpointId, principal.identityAccountId());
+        requireOwnerTask(checkpoint.getTaskId(), principal.identityAccountId());
+        long since = Math.max(checkpoint.getLastSequence(), connectionLastSent);
+        List<TaskJournalSequencedRow> rows = journal.sequencedPageAfter(
+                checkpoint.getTaskId(), since, PageRequest.of(0, limit + 1));
+        boolean more = rows.size() > limit;
+        List<SafeUpdate> events = rows.subList(0, Math.min(rows.size(), limit))
+                .stream().map(VerifiedOwnerDeliveryCheckpoint::redact).toList();
+        return new ReplayBatch(checkpointId, checkpoint.getLastSequence(),
+                List.copyOf(events), more, "OUTBOX_SEQUENCED_ONLY_ACK_NOT_ATTESTED");
+    }
+
+    /**
      * ACK must be for precisely the next sequenced event in this task.
      * A forged jump can never skip pending events. A repeated ACK of the
      * exact last event is idempotent; older, foreign and future IDs fail.
