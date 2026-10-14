@@ -20,10 +20,16 @@ class InWorkerSignedLeaseOciPlanTest {
         return dir;
     }
 
+    private Path fixtureDir() throws Exception {
+        Path fixture = root.resolve("fixture");
+        if (!Files.exists(fixture)) Files.createDirectory(fixture);
+        return fixture;
+    }
+
     private void fixture() throws Exception {
         for (var file : List.of("sleep-fixture.sh", "stage45-lease-guard",
                 "issuer.pub", "lease.txt")) {
-            Files.writeString(root.resolve(file), "synthetic");
+            Files.writeString(fixtureDir().resolve(file), "synthetic");
         }
     }
 
@@ -32,7 +38,7 @@ class InWorkerSignedLeaseOciPlanTest {
         Assumptions.assumeTrue(System.getProperty("os.name").toLowerCase().contains("linux"));
         fixture();
         UUID job = UUID.randomUUID();
-        var args = InWorkerSignedLeaseOciPlan.build(root, state(), job, "syntheticWorker", 1);
+        var args = InWorkerSignedLeaseOciPlan.build(fixtureDir(), state(), job, "syntheticWorker", 1);
         assertThat(args).contains(
                 "--mount=type=bind,source=" + state().toAbsolutePath()
                         + ",target=/aetheris-state",
@@ -56,12 +62,12 @@ class InWorkerSignedLeaseOciPlanTest {
         var link = root.resolve("state-link");
         Files.createSymbolicLink(link, real);
         assertThatThrownBy(() -> InWorkerSignedLeaseOciPlan.build(
-                root, link, UUID.randomUUID(), "worker", 1))
+                fixtureDir(), link, UUID.randomUUID(), "worker", 1))
                 .isInstanceOf(IllegalArgumentException.class);
         Files.setPosixFilePermissions(real,
                 java.nio.file.attribute.PosixFilePermissions.fromString("rwxrwxrwx"));
         assertThatThrownBy(() -> InWorkerSignedLeaseOciPlan.build(
-                root, real, UUID.randomUUID(), "worker", 1))
+                fixtureDir(), real, UUID.randomUUID(), "worker", 1))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("World-writable");
     }
@@ -71,15 +77,15 @@ class InWorkerSignedLeaseOciPlanTest {
         Assumptions.assumeTrue(System.getProperty("os.name").toLowerCase().contains("linux"));
         fixture();
         assertThatThrownBy(() -> InWorkerSignedLeaseOciPlan.build(
-                root, state(), UUID.randomUUID(), "../worker", 1))
+                fixtureDir(), state(), UUID.randomUUID(), "../worker", 1))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> InWorkerSignedLeaseOciPlan.build(
-                root, state(), UUID.randomUUID(), "worker", 0))
+                fixtureDir(), state(), UUID.randomUUID(), "worker", 0))
                 .isInstanceOf(IllegalArgumentException.class);
-        Files.delete(root.resolve("issuer.pub"));
-        Files.createSymbolicLink(root.resolve("issuer.pub"), root.resolve("lease.txt"));
+        Files.delete(fixtureDir().resolve("issuer.pub"));
+        Files.createSymbolicLink(fixtureDir().resolve("issuer.pub"), fixtureDir().resolve("lease.txt"));
         assertThatThrownBy(() -> InWorkerSignedLeaseOciPlan.build(
-                root, state(), UUID.randomUUID(), "worker", 1))
+                fixtureDir(), state(), UUID.randomUUID(), "worker", 1))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }
