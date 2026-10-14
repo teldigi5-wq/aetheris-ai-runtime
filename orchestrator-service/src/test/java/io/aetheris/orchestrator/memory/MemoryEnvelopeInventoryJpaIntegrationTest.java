@@ -52,7 +52,7 @@ class MemoryEnvelopeInventoryJpaIntegrationTest {
 
             var report = inventory.inspect();
             assertThat(report.complete()).isTrue();
-            assertThat(report.scannedRows()).isEqualTo(countAfterSetup);
+            assertThat(report.scannedRows()).isEqualTo(Math.toIntExact(countAfterSetup));
             assertThat(report.boundV2Headers()).isGreaterThanOrEqualTo(1);
             assertThat(report.legacyV1Headers()).isGreaterThanOrEqualTo(1);
             assertThat(report.sensitiveWithoutEncryption()).isGreaterThanOrEqualTo(1);
