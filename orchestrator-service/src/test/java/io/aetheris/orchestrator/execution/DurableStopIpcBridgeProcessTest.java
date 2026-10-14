@@ -34,7 +34,7 @@ class DurableStopIpcBridgeProcessTest {
     @Autowired PlatformTransactionManager tx;
 
     @Test
-    void disconnectedWorkerThenSeparateJvmReceivesDbStopAndRestartRefusesRun() throws Exception {
+    void disconnectedWorkerThenSeparateJvmReceivesDbStopAndRestartIsRecoveryOnly() throws Exception {
         String workerId = "ci_" + UUID.randomUUID().toString().replace("-", "");
         var fence = new SandboxWorkerFenceEntity(workerId);
         fence.armSyntheticFixture();
@@ -70,20 +70,29 @@ class DurableStopIpcBridgeProcessTest {
             assertThat(acknowledged.epoch()).isEqualTo(offline.epoch());
             assertThat(outbox.findById(workerId).orElseThrow().isAcknowledged()).isTrue();
             assertThat(Files.readString(dir.resolve("STOP_LATCHED")))
-                    .isEqualTo("STOPPED:" + offline.epoch() + "\n");
+                    .isEqualTo("STOPPED:" + offline.epoch() + ":"
+                            + outbox.findById(workerId).orElseThrow().getNonce() + "\n");
             assertThat(process.waitFor(10, TimeUnit.SECONDS)).isTrue();
             assertThat(process.exitValue()).isZero();
 
             Process restarted = workerProcess(dir, workerId,
                     controllerPublic, workerPrivate, socket);
             try {
-                assertThat(restarted.waitFor(5, TimeUnit.SECONDS)).isTrue();
-                assertThat(restarted.exitValue()).isNotZero();
-                assertThat(Files.exists(socket, LinkOption.NOFOLLOW_LINKS)).isFalse();
+                waitForSocket(restarted, socket);
+                long now = Clock.systemUTC().instant().getEpochSecond();
+                var repeat = new SandboxWorkerStopWire.StopRequest(
+                        outbox.findById(workerId).orElseThrow().getNonce(),
+                        workerId, now - 1, now + 15, offline.epoch());
+                var receipt = SandboxWorkerStopWire.requestStop(
+                        socket, repeat, controller.getPrivate(), worker.getPublic());
+                assertThat(receipt.epoch()).isEqualTo(offline.epoch());
+                assertThat(restarted.waitFor(10, TimeUnit.SECONDS)).isTrue();
+                assertThat(restarted.exitValue()).isZero();
                 assertThat(reconnected.snapshot(workerId).state())
                         .isEqualTo("SIGNED_WORKER_MARKER_ACKNOWLEDGED_NO_OS_EXIT");
             } finally {
                 restarted.destroyForcibly();
+                if (restarted.isAlive()) restarted.waitFor(2, TimeUnit.SECONDS);
             }
         } finally {
             process.destroyForcibly();
