@@ -1,0 +1,102 @@
+name: Runtime Stage 45.5.4 Signed OCI Synthetic Lifecycle
+
+on:
+  pull_request:
+    branches:
+      - security/stage45-stop-receipt-recovery-20261014
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/execution/SyntheticOciSleepProfilePlan.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/execution/SyntheticOciSleepProfilePlanTest.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/execution/SyntheticOciWorkerLifecycleIT.java'
+      - 'docs/security/stage45-synthetic-oci-worker-lifecycle.md'
+      - '.github/workflows/runtime-stage45-synthetic-oci-lifecycle.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  real-oci-synthetic-lifecycle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci-only-synthetic-oci
+          POSTGRES_DB: aetheris_synthetic_worker_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aetheris_synthetic_worker_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    env:
+      AETHERIS_STAGE45_OCI_LIFECYCLE_CI: 'true'
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Check ephemeral Docker engine availability
+        run: docker info --format '{{.ServerVersion}}'
+      - name: Pull fixed digest image before network-disabled container launch
+        run: docker pull ghcr.io/containerd/busybox@sha256:907ca53d7e2947e849b839b1cd258c98fd3916c60f2e6e70c30edbf741ab6754
+      - name: Signed owner grant, PostgreSQL STOP and real synthetic process-tree lifecycle
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:5432/aetheris_synthetic_worker_ci
+          SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: ci-only-synthetic-oci
+          SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dspring.datasource.url="$SPRING_DATASOURCE_URL" \
+            -Dspring.datasource.driver-class-name="$SPRING_DATASOURCE_DRIVER_CLASS_NAME" \
+            -Dspring.datasource.username="$SPRING_DATASOURCE_USERNAME" \
+            -Dspring.datasource.password="$SPRING_DATASOURCE_PASSWORD" \
+            -Dspring.jpa.hibernate.ddl-auto=create-drop \
+            -Dtest=SyntheticOciWorkerLifecycleIT test
+
+  fixed-plan-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Verify fixed unprivileged OCI plan and earlier defenses
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=SyntheticOciSleepProfilePlanTest,IsolatedOciProbePlanTest,WorkspaceContainmentHardeningTest test
+
+  complete-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Run complete regular Java regression
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
