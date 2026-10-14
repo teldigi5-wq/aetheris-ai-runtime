@@ -62,10 +62,21 @@ if [[ "$ready" != 1 ]]; then
   exit 1
 fi
 
-before="$(docker top "$cid" -eo pid,comm)"
-sleep_count="$(printf '%s\n' "$before" | grep -c 'sleep' || true)"
-if [[ "$sleep_count" -lt 2 ]]; then
-  echo "FAIL: synthetic process descendants were not observed" >&2
+# BusyBox applets may show "busybox" (not "sleep") in ps comm.
+# Count distinct live PID rows rather than infer process identity from
+# an executable label, and require PID 1 plus at least two descendants.
+descendants_observed=0
+for _ in $(seq 1 30); do
+  before="$(docker top "$cid" -eo pid,ppid,comm)"
+  process_count="$(printf '%s\n' "$before" | awk 'NR>1 && NF>0 {n++} END {print n+0}')"
+  if [[ "$process_count" -ge 3 ]]; then
+    descendants_observed=1
+    break
+  fi
+  sleep 0.2
+done
+if [[ "$descendants_observed" != 1 ]]; then
+  echo "FAIL: expected synthetic parent and descendant PID rows" >&2
   exit 1
 fi
 
