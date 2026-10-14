@@ -81,7 +81,7 @@ func run() int {
  // A deterministic CI hold can intercept STOP during the narrow
  // pre-spawn window. Re-verify authenticated STOP/lease after releasing
  // the hold, not just at initial permission admission.
- if result := prestartDecision(public,leaseFile,worker,job,epoch); result != 0 {
+ if result := prestartDecision(public,leaseFile,stateDirectory,worker,job,epoch); result != 0 {
   return result
  }
  if restartDenied(stateDirectory) { return 58 }
