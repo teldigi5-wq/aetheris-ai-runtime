@@ -211,6 +211,41 @@ class SandboxWorkerLabCoordinatorTest {
     }
 
     @Test
+    void revokedJobRefusingToDieTriggersGlobalStopForOtherOwners() throws Exception {
+        var f = new Fixture();
+        var revoked = claims("ownerA");
+        var other = claims("ownerB");
+        f.coordinator.dispatch(f.approved(revoked));
+        f.coordinator.dispatch(f.approved(other));
+        f.running.get(revoked.jobId()).refuseStop = true;
+        f.authorizations.remove(revoked.taskId());
+
+        assertThatThrownBy(f.coordinator::reconcile)
+                .isInstanceOf(SecurityException.class)
+                .hasMessageContaining("REVOKED_KILL_UNCONFIRMED");
+        assertThat(f.coordinator.isStopped()).isTrue();
+        assertThat(f.running.get(other.jobId()).alive).isFalse();
+        assertThat(f.running.get(revoked.jobId()).alive).isTrue();
+        assertThat(f.coordinator.activeCount()).isEqualTo(1);
+    }
+
+    @Test
+    void unavailableStopSignalLatchesStopInsteadOfContinuingWork() throws Exception {
+        var issuer = signingKeys();
+        var gate = new SignedSandboxJobGate(issuer.getPublic(), TIME);
+        var coordinator = new SandboxWorkerLabCoordinator(
+                gate,
+                c -> { throw new AssertionError("authority must not be consulted"); },
+                c -> { throw new AssertionError("backend must not launch"); },
+                () -> { throw new IllegalStateException("stop transport unavailable"); });
+        var c = claims("ownerA");
+        assertThatThrownBy(() -> coordinator.dispatch(signed(issuer, c)))
+                .isInstanceOf(SecurityException.class)
+                .hasMessageContaining("STOP_SIGNAL_UNAVAILABLE");
+        assertThat(coordinator.isStopped()).isTrue();
+    }
+
+    @Test
     void forgedSignatureFailsBeforeInvokingBackend() throws Exception {
         var f = new Fixture();
         var badSigner = signingKeys();
