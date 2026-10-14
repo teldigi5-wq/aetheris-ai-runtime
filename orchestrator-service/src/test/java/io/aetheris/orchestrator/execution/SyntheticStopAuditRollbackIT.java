@@ -137,6 +137,34 @@ class SyntheticStopAuditRollbackIT {
     }
 
     @Test
+    void restoringOnlyTheOlderStopEpochIsDetected() throws Exception {
+        Fixture f=setup();
+        var checkpoint=stopAndWitness(f);
+        assertThat(jdbc.update("UPDATE aetheris_sandbox_worker_fence "
+                + "SET epoch = 1 WHERE worker_id = ?",f.worker())).isEqualTo(1);
+        var decision=f.audit().verifyRecovery(
+                SyntheticStopAuditFileLab.readAnchored(checkpoint.anchor()),
+                f.signer().getPublic(),f.worker(),f.job().jobId());
+        assertThat(decision.verdict())
+                .isEqualTo(SyntheticStopAuditWitnessLab.Verdict.DATABASE_ROLLBACK_OR_REVOCATION_LOST);
+        assertThat(decision.mustTerminate()).isTrue();
+    }
+
+    @Test
+    void restoringOnlyRevocationFlagIsDetected() throws Exception {
+        Fixture f=setup();
+        var checkpoint=stopAndWitness(f);
+        assertThat(jdbc.update("UPDATE aetheris_sandbox_job_reservations "
+                + "SET revoked = false WHERE job_id = ?", f.job().jobId())).isEqualTo(1);
+        var decision=f.audit().verifyRecovery(
+                SyntheticStopAuditFileLab.readAnchored(checkpoint.anchor()),
+                f.signer().getPublic(),f.worker(),f.job().jobId());
+        assertThat(decision.verdict())
+                .isEqualTo(SyntheticStopAuditWitnessLab.Verdict.DATABASE_ROLLBACK_OR_REVOCATION_LOST);
+        assertThat(decision.mustTerminate()).isTrue();
+    }
+
+    @Test
     void missingDeletedAndCorruptedAuditFileCannotCertifySafeRecovery()
             throws Exception {
         Fixture f=setup();
@@ -144,7 +172,7 @@ class SyntheticStopAuditRollbackIT {
         Path file=checkpoint.anchor().recordPath();
         assertThatThrownBy(() -> Files.writeString(file, "forged-audit",
                 StandardOpenOption.CREATE_NEW)).isInstanceOf(java.nio.file.FileAlreadyExistsException.class);
-        Files.writeString(file,"corrupted",StandardOpenOption.TRUNCATE_EXISTING);
+        Files.writeString(file,"corrupted",StandardOpenOption.WRITE,StandardOpenOption.TRUNCATE_EXISTING);
         assertThatThrownBy(() -> SyntheticStopAuditFileLab.readAnchored(
                 checkpoint.anchor())).isInstanceOf(SecurityException.class);
         assertThat(f.audit().verifyRecovery(null,f.signer().getPublic(),
@@ -152,7 +180,7 @@ class SyntheticStopAuditRollbackIT {
                 .isEqualTo(SyntheticStopAuditWitnessLab.Verdict.MISSING_WITNESS);
         Files.delete(file);
         assertThatThrownBy(() -> SyntheticStopAuditFileLab.readAnchored(
-                checkpoint.anchor())).isInstanceOf(java.nio.file.NoSuchFileException.class);
+                checkpoint.anchor())).isInstanceOf(SecurityException.class);
     }
 
     @Test
