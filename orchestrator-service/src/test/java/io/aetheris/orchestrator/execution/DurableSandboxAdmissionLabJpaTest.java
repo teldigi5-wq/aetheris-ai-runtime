@@ -110,10 +110,12 @@ class DurableSandboxAdmissionLabJpaTest {
         f.armLabWorker();
         var a = f.claims("ownerA");
         f.freshInstance().reserve(f.approved(a));
-        var b = f.claims("ownerA");
-        b = new JobClaims(b.jobId(), b.taskId(), a.nonce(), b.ownerId(), b.projectId(),
-                b.workerId(), b.approvalGrantId(), b.profile(), b.issuedAt(), b.expiresAt(),
-                b.cpuMilli(), b.memoryMiB(), b.processLimit());
+        var candidate = f.claims("ownerA");
+        var b = new JobClaims(candidate.jobId(), candidate.taskId(), a.nonce(),
+                candidate.ownerId(), candidate.projectId(), candidate.workerId(),
+                candidate.approvalGrantId(), candidate.profile(), candidate.issuedAt(),
+                candidate.expiresAt(), candidate.cpuMilli(), candidate.memoryMiB(),
+                candidate.processLimit());
         var replay = f.approved(b);
         assertThatThrownBy(() -> f.freshInstance().reserve(replay))
                 .isInstanceOf(SecurityException.class).hasMessageContaining("REPLAY");
