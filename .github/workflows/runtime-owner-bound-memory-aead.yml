@@ -3,6 +3,7 @@ name: Runtime Owner-bound Memory AEAD Verification
 on:
   pull_request:
     branches:
+      - security/owner-bound-memory-aead-stage44-20261014
       - security/sandbox-cyber-defense-hardening-20261014
       - main
     paths:
@@ -35,7 +36,7 @@ jobs:
       - name: Verify authenticated row encryption, persistence and legacy migration compatibility
         run: |
           ./mvnw -B -f orchestrator-service/pom.xml \
-            -Dtest=OwnerBoundMemoryAeadTest,OwnerBoundMemoryPersistenceIntegrationTest,Phase9MemoryProductionIntegrationTest,AeadFieldProtectorTest test
+            -Dtest=OwnerBoundMemoryAeadTest,OwnerBoundMemoryKeyringTest,OwnerBoundMemoryPersistenceIntegrationTest,Phase9MemoryProductionIntegrationTest,AeadFieldProtectorTest test
 
   complete-orchestrator-regression:
     runs-on: ubuntu-24.04
