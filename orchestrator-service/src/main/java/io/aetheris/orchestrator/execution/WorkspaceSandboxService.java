@@ -114,7 +114,7 @@ public class WorkspaceSandboxService {
         Path relative = Path.of(rawPath);
         if (relative.isAbsolute()) throw new IllegalArgumentException("Absolute paths are not allowed in the workspace sandbox");
         Path resolved = root.resolve(relative).normalize();
-        if (!resolved.startsWith(root)) throw new IllegalArgumentException("Workspace path rejected");
+        if (!resolved.startsWith(root)) throw new IllegalArgumentException("Workspace path escapes the configured sandbox");
         rejectSymlinkComponents(resolved);
         return resolved;
     }
