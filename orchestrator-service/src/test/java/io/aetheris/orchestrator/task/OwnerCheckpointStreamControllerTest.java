@@ -95,7 +95,6 @@ class OwnerCheckpointStreamControllerTest {
                         .header("Authorization",token(101L,"orchestrator:read")))
                 .andExpect(request().asyncStarted())
                 .andExpect(status().isOk())
-                .andExpect(header().string("Cache-Control","no-store"))
                 .andReturn();
         // Insert after subscription; backdated timestamp must still arrive
         // because the sequenced journal uses DB commit order, not eventAt.
@@ -104,7 +103,9 @@ class OwnerCheckpointStreamControllerTest {
         // Lease ends after two seconds in the explicit test-only context.
         Thread.sleep(2700);
         MockHttpServletResponse response=mvc.perform(asyncDispatch(start))
-                .andExpect(status().isOk()).andReturn().getResponse();
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control","no-store"))
+                .andReturn().getResponse();
         String frames=response.getContentAsString();
         assertThat(frames).contains("event:task-recorded")
                 .contains("id:"+mine)
