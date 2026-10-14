@@ -10,6 +10,7 @@ import (
  "crypto/x509"
  "encoding/hex"
  "errors"
+ "io"
  "os"
  "syscall"
 )
@@ -32,7 +33,7 @@ func readBoundedKeyFile(path string, private bool) ([]byte,error) {
   return nil,errors.New("private key owner or file mode denied")
  }
  b:=make([]byte,int(stat.Size))
- n,err:=f.Read(b)
+ n,err:=io.ReadFull(f,b)
  if err!=nil || n!=len(b) {return nil,errors.New("key read incomplete")}
  return b,nil
 }
