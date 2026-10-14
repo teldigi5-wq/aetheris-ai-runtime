@@ -167,6 +167,21 @@ public final class SandboxWorkerStopWire {
     }
 
     /**
+     * Test-only transport for an ALREADY SIGNED control frame. Returns the
+     * opaque response for independent verification by the durable bridge.
+     * This has no session timeout or production peer-credential assurance.
+     */
+    public static SignedFrame exchange(Path socket, SignedFrame request) throws IOException {
+        try (SocketChannel channel = SocketChannel.open(StandardProtocolFamily.UNIX)) {
+            channel.connect(UnixDomainSocketAddress.of(socket));
+            var out = new DataOutputStream(Channels.newOutputStream(channel));
+            var in = new DataInputStream(Channels.newInputStream(channel));
+            writeFrame(out, request);
+            return readFrame(in);
+        }
+    }
+
+    /**
      * Test-only synchronous client, with independent verification of the
      * worker's signed, bound receipt. No agent API exposes this method.
      */
