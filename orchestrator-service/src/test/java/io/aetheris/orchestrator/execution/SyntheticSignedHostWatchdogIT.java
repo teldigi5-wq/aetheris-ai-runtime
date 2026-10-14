@@ -43,7 +43,7 @@ class SyntheticSignedHostWatchdogIT {
     @Autowired PlatformTransactionManager transactions;
 
     private record Fixture(String worker, JobClaims job, String containerName,
-                           Path publicFile, Path heartbeatFile,
+                           Path publicFile, Path heartbeatFile, Path stateDirectory,
                            KeyPair publisher, DurableSandboxAdmissionLab db,
                            SyntheticSupervisorPulseLab issuer) {}
 
@@ -91,9 +91,11 @@ class SyntheticSignedHostWatchdogIT {
         Path publicKey=Files.write(root.resolve(tag+"-public.der"),publisher.getPublic().getEncoded());
         Files.setPosixFilePermissions(publicKey,PosixFilePermissions.fromString("rw-------"));
         Path heartbeat=root.resolve(tag+"-heartbeat.txt");
+        Path stateDirectory=Files.createDirectory(root.resolve(tag+"-watch-state"));
+        Files.setPosixFilePermissions(stateDirectory,PosixFilePermissions.fromString("rwx------"));
         var issuer=new SyntheticSupervisorPulseLab(fences,reservations,pulses,
                 transactions,Clock.systemUTC(),publisher.getPrivate());
-        return new Fixture(worker,job,container,publicKey,heartbeat,publisher,db,issuer);
+        return new Fixture(worker,job,container,publicKey,heartbeat,stateDirectory,publisher,db,issuer);
     }
 
     @Test
@@ -157,6 +159,73 @@ class SyntheticSignedHostWatchdogIT {
         }
     }
 
+    @Test
+    void abruptWatchdogCrashRequiresFreshSignedSequenceInsteadOfOldActiveReplay()
+            throws Exception {
+        Fixture f=setup("restart-replay");
+        Process first=null, restarted=null;
+        try {
+            publish(f,"ACTIVE",1);
+            first=startWatchdog(f);
+            awaitStateWritten(f.stateDirectory().resolve("watch.state"));
+            assertThat(first.isAlive()).isTrue();
+            // The CI host kills ONLY the watchdog, not the OCI worker.
+            // Its latest signed ACTIVE heartbeat is still unexpired.
+            first.destroyForcibly();
+            assertThat(first.waitFor(3,TimeUnit.SECONDS)).isTrue();
+            assertThat(docker(List.of("docker","inspect","--format",
+                    "{{.State.Running}}",f.containerName()))).isEqualTo("true");
+
+            restarted=startWatchdog(f);
+            assertThat(restarted.waitFor(8,TimeUnit.SECONDS)).isTrue();
+            String logs=new String(restarted.getInputStream().readAllBytes());
+            assertThat(restarted.exitValue()).isZero();
+            assertThat(logs).contains(
+                    "SYNTHETIC_HOST_WATCH_KILL_REASON=RESTART_REPLAYED_HEARTBEAT",
+                    "SYNTHETIC_HOST_WATCH_TERMINATION_OBSERVED");
+            assertStopped(f.containerName());
+            // Database was not stopped. The watcher performed a conservative
+            // liveness kill, and may NEVER sign a revocation/STOP receipt.
+            assertThat(fences.findById(f.worker()).orElseThrow().isStopped()).isFalse();
+        } finally {
+            if(first!=null && first.isAlive()) first.destroyForcibly();
+            if(restarted!=null && restarted.isAlive()) restarted.destroyForcibly();
+            remove(f.containerName());
+        }
+    }
+
+    @Test
+    void corruptedHostHighWaterCannotBeIgnoredToContinueRunning()
+            throws Exception {
+        Fixture f=setup("corrupt-state");
+        Process watcher=null;
+        try {
+            publish(f,"ACTIVE",1);
+            Files.writeString(f.stateDirectory().resolve("watch.state"),"corrupted-counter");
+            Files.setPosixFilePermissions(f.stateDirectory().resolve("watch.state"),
+                    PosixFilePermissions.fromString("rw-------"));
+            watcher=startWatchdog(f);
+            assertThat(watcher.waitFor(8,TimeUnit.SECONDS)).isTrue();
+            String logs=new String(watcher.getInputStream().readAllBytes());
+            assertThat(watcher.exitValue()).isZero();
+            assertThat(logs).contains(
+                    "SYNTHETIC_HOST_WATCH_KILL_REASON=WATCH_STATE_INVALID",
+                    "SYNTHETIC_HOST_WATCH_TERMINATION_OBSERVED");
+            assertStopped(f.containerName());
+        } finally {
+            if(watcher!=null && watcher.isAlive()) watcher.destroyForcibly();
+            remove(f.containerName());
+        }
+    }
+
+    private static void awaitStateWritten(Path file) throws Exception {
+        for(int i=0;i<60;i++) {
+            if(Files.isRegularFile(file) && Files.size(file)>10) return;
+            Thread.sleep(25);
+        }
+        throw new AssertionError("CI watchdog did not durably persist heartbeat");
+    }
+
     private static void assertThatThrownByActiveAfterStop(Fixture f) {
         org.assertj.core.api.Assertions.assertThatThrownBy(
                 () -> f.issuer().publish(f.job().jobId(),f.worker(),
@@ -180,7 +249,7 @@ class SyntheticSignedHostWatchdogIT {
         if(!Files.isRegularFile(binary))throw new SecurityException("SYNTHETIC_WATCHDOG_BINARY_MISSING");
         var builder=new ProcessBuilder(binary.toString(),f.publicFile().toString(),
                 f.heartbeatFile().toString(),f.worker(),f.job().jobId().toString(),
-                f.containerName(),"1").redirectErrorStream(true);
+                f.containerName(),"1",f.stateDirectory().toString()).redirectErrorStream(true);
         builder.environment().put("AETHERIS_STAGE45_WATCH_CI","true");
         return builder.start();
     }
