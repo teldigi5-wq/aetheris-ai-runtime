@@ -18,9 +18,10 @@ func TestPinnedBrokerRequestVerifiesSignatureScopeAndShortDeadline(t *testing.T)
  badPub,_,_:=ed25519.GenerateKey(rand.Reader)
  container:=strings.Repeat("a",64)
  now:=time.Now().Unix()
- request:=stopRequest{fixedWorker,fixedJob,container,"SIGNED_STOP",1,now}
+ challenge:=strings.Repeat("c",64)
+ request:=stopRequest{fixedWorker,fixedJob,container,"SIGNED_STOP",challenge,1,now}
  frame:=signedStopRequest(priv,request)
- if err:=verifyStopRequest(pub,frame,fixedWorker,fixedJob,container,1,now);err!=nil {t.Fatal(err)}
+ if err:=verifyStopRequest(pub,frame,fixedWorker,fixedJob,container,1,challenge,now);err!=nil {t.Fatal(err)}
  for _,tc:=range []struct{w,j,c string;e uint64;at int64;p ed25519.PublicKey}{
   {"wrongWorker",fixedJob,container,1,now,pub},
   {fixedWorker,"22222222-2222-2222-2222-222222222222",container,1,now,pub},
@@ -29,12 +30,16 @@ func TestPinnedBrokerRequestVerifiesSignatureScopeAndShortDeadline(t *testing.T)
   {fixedWorker,fixedJob,container,1,now+7,pub},
   {fixedWorker,fixedJob,container,1,now,badPub},
  }{
-  if err:=verifyStopRequest(tc.p,frame,tc.w,tc.j,tc.c,tc.e,tc.at);err==nil{
+  if err:=verifyStopRequest(tc.p,frame,tc.w,tc.j,tc.c,tc.e,challenge,tc.at);err==nil{
    t.Fatal("re-targeted or expired stop accepted")
   }
  }
+ // An intercepted fresh STOP request for a different connection
+ // cannot answer that connection's independently generated challenge.
+ if err:=verifyStopRequest(pub,frame,fixedWorker,fixedJob,container,1,
+  strings.Repeat("d",64),now);err==nil {t.Fatal("captured STOP replayed across challenge")}
  modified:=append([]byte(nil),frame...);modified[12]^=1
- if err:=verifyStopRequest(pub,modified,fixedWorker,fixedJob,container,1,now);err==nil{
+ if err:=verifyStopRequest(pub,modified,fixedWorker,fixedJob,container,1,challenge,now);err==nil{
   t.Fatal("tampered stop signature accepted")
  }
 }
