@@ -33,27 +33,9 @@ func brokerDocker(args ...string) (string,error) {
  return strings.TrimSpace(string(output)),nil
 }
 
-func brokerObserved(id string) (string,error) {
- return brokerDocker("inspect","--format","{{.Id}}:{{.State.Running}}:{{.State.Pid}}",id)
-}
-
+// Restricted wrapper; all hostile/faulty Docker outputs fail closed.
 func brokerKillAndVerify(id string) error {
- before,err:=brokerObserved(id)
- if err!=nil || !strings.HasPrefix(before,id+":true:") {
-  return errors.New("pinned container identity/running state missing")
- }
- rawPid:=strings.TrimPrefix(before,id+":true:")
- pid,err:=strconv.ParseUint(rawPid,10,64)
- if err!=nil || pid==0 {return errors.New("unverifiable container PID")}
- if _,err:=brokerDocker("kill","--signal=KILL",id);err!=nil {
-  return errors.New("Docker kill failed")
- }
- for i:=0;i<15;i++ {
-  state,e:=brokerObserved(id)
-  if e==nil && state==id+":false:0" {return nil}
-  time.Sleep(50*time.Millisecond)
- }
- return errors.New("container exit not observed")
+ return brokerTerminatePinned(id,brokerDocker)
 }
 
 func unixPeerUID(connection *net.UnixConn) (uint32,error) {
