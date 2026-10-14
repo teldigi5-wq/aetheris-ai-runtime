@@ -1,0 +1,99 @@
+name: Runtime Stage 45.5.15 STOP Witness and Rollback Laboratory
+
+on:
+  pull_request:
+    branches:
+      - security/stage45-signer-key-custody-20261014
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/execution/SyntheticStopAuditWitnessLab.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/execution/SyntheticStopAuditFileLab.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/execution/SyntheticStopAuditRollbackIT.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/execution/SyntheticStopAuditWitnessCodecTest.java'
+      - 'docs/security/stage45-stop-audit-rollback.md'
+      - '.github/workflows/runtime-stage45-stop-audit-rollback.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-witness-protocol:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact PR revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Signed witness codec, existing durable STOP and supervisor policies
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=SyntheticStopAuditWitnessCodecTest,SyntheticHostStopFenceLabJpaTest,SyntheticSupervisorPulseLabJpaTest test
+
+  disposable-postgres-rollback-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: stage45-audit-synthetic-only
+          POSTGRES_DB: aetheris_stage45_audit_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aetheris_stage45_audit_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    env:
+      AETHERIS_STAGE45_AUDIT_CI: 'true'
+    steps:
+      - name: Checkout exact PR revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Prove STOP audit witness denies simulated PostgreSQL rollback
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:5432/aetheris_stage45_audit_ci
+          SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: stage45-audit-synthetic-only
+          SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dspring.datasource.url="$SPRING_DATASOURCE_URL" \
+            -Dspring.datasource.driver-class-name="$SPRING_DATASOURCE_DRIVER_CLASS_NAME" \
+            -Dspring.datasource.username="$SPRING_DATASOURCE_USERNAME" \
+            -Dspring.datasource.password="$SPRING_DATASOURCE_PASSWORD" \
+            -Dspring.jpa.hibernate.ddl-auto=create-drop \
+            -Dtest=SyntheticStopAuditRollbackIT test
+
+  complete-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact PR revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Entire Java regression
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
