@@ -24,9 +24,12 @@ public class DurableMemoryService {
         String owner=require(ownerId,"ownerId");
         Objects.requireNonNull(request,"request");
         MemoryScope scope=request.scope()==null?MemoryScope.PROJECT:request.scope();
-        MemoryEncryptionService.ProtectedPayload protectedPayload=encryption.protect(require(request.content(),"content"),request.sensitive());
+        UUID recordId=UUID.randomUUID();
+        String projectId=request.projectId()==null?null:request.projectId().trim();
+        MemoryEncryptionService.ProtectedPayload protectedPayload=encryption.protect(
+                require(request.content(),"content"),request.sensitive(),recordId,owner,scope,projectId);
         MemoryRecordEntity record=new MemoryRecordEntity(
-                UUID.randomUUID(),owner,scope,request.projectId(),require(request.key(),"key"),
+                recordId,owner,scope,projectId,require(request.key(),"key"),
                 protectedPayload.payload(),protectedPayload.encrypted(),request.sensitive(),request.tags(),
                 request.provenanceType(),request.provenanceReference(),request.expiresAt());
         records.save(record);
@@ -49,7 +52,9 @@ public class DurableMemoryService {
                 .orElseThrow(()->miss("Unknown memory record"));
         authorize(record,ownerId,projectId);
         Objects.requireNonNull(request,"request");
-        MemoryEncryptionService.ProtectedPayload protectedPayload=encryption.protect(require(request.content(),"content"),record.isSensitive());
+        MemoryEncryptionService.ProtectedPayload protectedPayload=encryption.protect(
+                require(request.content(),"content"),record.isSensitive(),record.getId(),
+                record.getOwnerId(),record.getScope(),record.getProjectId());
         record.update(record.getScope(),record.getProjectId(),record.getMemoryKey(),protectedPayload.payload(),protectedPayload.encrypted(),
                 record.isSensitive(),request.tags()==null?record.getTags():request.tags(),record.getProvenanceType(),
                 request.provenanceReference()==null?record.getProvenanceReference():request.provenanceReference(),request.expiresAt());
@@ -123,7 +128,8 @@ public class DurableMemoryService {
     }
 
     private MemoryView view(MemoryRecordEntity record){
-        String content=encryption.reveal(record.getPayload(),record.isEncrypted());
+        String content=encryption.reveal(record.getPayload(),record.isEncrypted(),record.getId(),
+                record.getOwnerId(),record.getScope(),record.getProjectId());
         return new MemoryView(record.getId(),record.getScope(),record.getProjectId(),record.getMemoryKey(),content,
                 record.isSensitive(),record.getTags(),record.getProvenanceType(),record.getProvenanceReference(),
                 record.getCreatedAt(),record.getUpdatedAt(),record.getExpiresAt());
