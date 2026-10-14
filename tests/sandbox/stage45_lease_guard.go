@@ -61,7 +61,7 @@ func run() int {
  if err != nil || epoch == 0 { return 51 }
  // Irreversible local decision checked BEFORE an old ALLOW can authorize
  // even the harmless fixed-profile child on container/JVM restart.
- if terminalPresent(stateDirectory) {
+ if restartDenied(stateDirectory) {
   fmt.Println("SYNTHETIC_INWORKER_TERMINAL_LATCH_DENIED")
   return 58
  }
@@ -78,8 +78,17 @@ func run() int {
   fmt.Println("SYNTHETIC_INWORKER_INITIAL_DENIAL")
   return 54
  }
- // A concurrent prior stop before child spawn must also refuse start.
- if terminalPresent(stateDirectory) { return 58 }
+ // A deterministic CI hold can intercept STOP during the narrow
+ // pre-spawn window. Re-verify authenticated STOP/lease after releasing
+ // the hold, not just at initial permission admission.
+ if result := prestartDecision(public,leaseFile,worker,job,epoch); result != 0 {
+  return result
+ }
+ if restartDenied(stateDirectory) { return 58 }
+ // Claim single-use launch on persistent storage BEFORE starting any
+ // child; a crash/restart can never reuse an earlier ALLOW with this
+ // same intact host mount, even without a delivered STOP.
+ if err := oneShotLaunch(stateDirectory,worker,job,epoch); err != nil { return 59 }
  // Actual nested fixed sleep process tree, spawned ONLY after in-container
  // signature and scope checks. No model-provided command is possible.
  child := exec.Command("/bin/sh", "/workspace/sleep-fixture.sh")
