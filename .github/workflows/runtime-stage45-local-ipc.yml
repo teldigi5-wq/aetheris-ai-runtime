@@ -1,0 +1,54 @@
+name: Runtime Stage 45.5 Local Worker Transport Lab
+
+on:
+  pull_request:
+    branches:
+      - security/stage45-durable-stop-replay-ledger-20261014
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/execution/SandboxWorkerStopWire.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/execution/StandaloneStopWorkerLabMain.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/execution/SandboxWorkerStopWireTest.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/execution/StandaloneStopWorkerLabProcessTest.java'
+      - 'docs/security/stage45-local-worker-ipc.md'
+      - '.github/workflows/runtime-stage45-local-ipc.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  linux-local-ipc-adversarial:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Verify independent signed STOP server, spoof denial, restart fencing
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=SandboxWorkerStopWireTest,StandaloneStopWorkerLabProcessTest,SignedSandboxJobGateTest,SandboxWorkerLabCoordinatorTest test
+
+  complete-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact PR revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Run full orchestrator Java regression
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
