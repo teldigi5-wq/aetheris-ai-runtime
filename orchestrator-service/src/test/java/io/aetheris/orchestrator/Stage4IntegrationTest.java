@@ -38,7 +38,9 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@SpringBootTest
+// Controlled CI-only fixture exercises legacy 'java -version'; deployed
+// runtime still defaults to command execution disabled.
+@SpringBootTest(properties = "aetheris.execution.command-execution-enabled=true")
 class Stage4IntegrationTest {
 
     @Autowired WorkspaceSandboxService workspace;
