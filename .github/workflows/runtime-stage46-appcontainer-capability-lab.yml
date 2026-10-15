@@ -1,4 +1,4 @@
-name: Runtime Stage 46.14 Windows AppContainer Synthetic Capability Lab
+name: Runtime Stage 46.14 Windows AppContainer Synthetic Capability Lab (Network Egress Unverified)
 
 on:
   pull_request:
@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 jobs:
-  windows-native-appcontainer-file-and-network-denial:
+  windows-native-appcontainer-file-and-bounded-loopback-probe:
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
@@ -24,7 +24,7 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Verify native AppContainer, file read refusal, loopback denial and kill
+      - name: Verify AppContainer identity, file denial, bounded loopback outcome and kill
         shell: pwsh
         run: |
           pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsAppContainerLab.ps1
@@ -152,5 +152,7 @@ jobs:
                   "InternetOpen", "HttpSendRequest")
           assert not any(s in c for s in banned), "UNAUTHORIZED_RUNTIME_ENTRY"
           assert "RUNNER_TEMP" in test
+          assert "LOOPBACK_NOT_CONNECTED_NETWORK_EGRESS_NOT_CERTIFIED" in c
+          assert "LOOPBACK_TIMEOUT_NETWORK_POLICY_INCONCLUSIVE" in c
           print("STAGE46_14_FIXED_NATIVE_APP_CONTAINER_NO_DEVICE")
           PY
