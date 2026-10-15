@@ -83,6 +83,9 @@ jobs:
             throw 'UNTRUSTED_SYNTHETIC_VOICE_BYPASS'
           }
           Write-Host 'STAGE46_UNTRUSTED_CI_BYPASS_DENIED'
+          # The child deliberately exited 1; a successful assertion must
+          # return 0 instead of inheriting its LASTEXITCODE.
+          exit 0
 
   fixed-no-go-release-policy:
     runs-on: ubuntu-24.04
