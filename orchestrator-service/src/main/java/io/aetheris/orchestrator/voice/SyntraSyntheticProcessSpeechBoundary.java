@@ -233,6 +233,9 @@ public final class SyntraSyntheticProcessSpeechBoundary implements AutoCloseable
             revoke();
             return result(Outcome.STOP_LATCHED, 0);
         } catch (IOException | RuntimeException failed) {
+            // STOP may destroy a child while stdin is being written; this
+            // is an expected cancellation, not a worker authenticity error.
+            if (latched.get()) return result(Outcome.STOP_LATCHED, 0);
             revoke();
             return result(Outcome.WORKER_REJECTED_LATCHED, 0);
         } finally {
