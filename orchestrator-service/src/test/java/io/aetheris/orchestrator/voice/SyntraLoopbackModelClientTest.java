@@ -192,4 +192,62 @@ class SyntraLoopbackModelClientTest {
         assertThat(tags).hasValue(0);
         assertThat(chats).hasValue(0);
     }
+    @Test void inventoryInspectionIsReadOnlyAndNeverStartsInference() throws Exception {
+        try(var client=adapter()){
+            var models=client.listInstalledModels();
+            assertThat(models).hasSize(1);
+            assertThat(models.get(0).name()).isEqualTo("qwen3:4b");
+            assertThat(models.get(0).diskBytes()).isEqualTo(2_300_000_000L);
+            assertThat(models.get(0).sha256Digest()).isEqualTo("a".repeat(64));
+            var review=client.reviewSelectedModel();
+            assertThat(review.model()).isEqualTo("qwen3:4b");
+            assertThat(review.gpuCertified()).isFalse();
+            assertThat(review.loadCertified()).isFalse();
+            assertThat(chats).hasValue(0);
+        }
+    }
+
+    @Test void midSessionModelDigestReplacementStopsFurtherInference() throws Exception {
+        try(var client=adapter()){
+            client.reply("Explain arrays");
+            assertThat(chats).hasValue(1);
+            tagsBody="{\\"models\\":[{\\"name\\":\\"qwen3:4b\\",\\"size\\":2300000000,\\"digest\\":\\"" + "b".repeat(64) + "\\"}]}";
+            assertThatThrownBy(()->client.reply("Continue"))
+                .isInstanceOf(SyntraLoopbackModelClient.ModelUnavailableException.class)
+                .hasMessage("LOCAL_MODEL_DIGEST_CHANGED_SESSION_DENIED");
+            assertThat(chats).hasValue(1);
+        }
+    }
+
+    @Test void malformedMissingMetadataAndDuplicateEntriesNeverStartChat() throws Exception {
+        for(String invalid:new String[]{
+            "{\\"models\\":[{\\"name\\":\\"qwen3:4b\\"}]}",
+            "{\\"models\\":[{\\"name\\":\\"qwen3:4b\\",\\"size\\":-1,\\"digest\\":\\"" + "a".repeat(64) + "\\"}]}",
+            "{\\"models\\":[{\\"name\\":\\"../../escape\\",\\"size\\":2,\\"digest\\":\\"" + "a".repeat(64) + "\\"}]}",
+            "{\\"models\\":[{\\"name\\":\\"qwen3:4b\\",\\"size\\":2,\\"digest\\":\\"invalid\\"}]}",
+            "{\\"models\\":[{\\"name\\":\\"qwen3:4b\\",\\"size\\":2,\\"digest\\":\\"" + "a".repeat(64) + "\\"},{\\"name\\":\\"qwen3:4b\\",\\"size\\":2,\\"digest\\":\\"" + "a".repeat(64) + "\\"}]}"
+        }) {
+            tagsBody=invalid;
+            try(var client=adapter()){
+                assertThatThrownBy(()->client.reply("hello"))
+                    .isInstanceOf(SyntraLoopbackModelClient.ModelUnavailableException.class);
+            }
+        }
+        assertThat(chats).hasValue(0);
+    }
+
+    @Test void consoleListsModelsAndRamAdvisoryWithoutLoadingWeights() throws Exception {
+        var out=new StringWriter();
+        try(var client=adapter()) {
+            SyntraLocalTextCompanion.run(new StringReader(
+                "models\\nmodel info\\nhi syntra\\nmodels\\nmodel info\\nquit\\n"),
+                out,()->false,client);
+        }
+        assertThat(out.toString()).contains("DENIED: typed wake and explicit local-model opt-in required");
+        assertThat(out.toString()).contains("INSTALLED LOCAL MODELS: 1");
+        assertThat(out.toString()).contains("MODEL REVIEW: qwen3:4b");
+        assertThat(out.toString()).contains("GPU/VRAM: UNVERIFIED; loading/performance: NOT_CERTIFIED");
+        assertThat(chats).hasValue(0);
+    }
+
 }
