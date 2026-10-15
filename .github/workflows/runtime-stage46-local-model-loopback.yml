@@ -1,0 +1,90 @@
+name: Runtime Stage 46.2 Loopback Local Model Integration
+
+on:
+  pull_request:
+    branches:
+      - feature/stage46-local-text-companion-20261015
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraLoopbackModelClient.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraLocalTextCompanion.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/voice/SyntraLoopbackModelClientTest.java'
+      - 'docs/runtime/stage46-local-model-loopback.md'
+      - '.github/workflows/runtime-stage46-local-model-loopback.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  fake-local-ollama-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact PR revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Real localhost HTTP client against fake Ollama, previous text/consent STOP tests
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=SyntraLoopbackModelClientTest,SyntraLocalTextCompanionTest,SyntheticVoiceOwnerConsentLabTest,SyntheticVoiceTaskControlReviewTest test
+      - name: Verify default no-model Java console does not require model dependencies
+        run: |
+          printf 'status\nhi syntra\nask what is Java\nquit\n' \
+            | java -cp orchestrator-service/target/classes \
+              io.aetheris.orchestrator.voice.SyntraLocalTextCompanion \
+            > "$RUNNER_TEMP/stage46-default-no-model.txt"
+          grep -F 'network NOT USED' "$RUNNER_TEMP/stage46-default-no-model.txt"
+          grep -F 'DENIED: typed wake and explicit local-model opt-in required' "$RUNNER_TEMP/stage46-default-no-model.txt"
+          echo STAGE46_DEFAULT_HAS_NO_MODEL_SOCKET
+
+  model-no-go-and-safety-invariants:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact PR revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Stage 45 production release remains NO_GO
+        run: |
+          python3 -m unittest discover -s tools/security -p test_stage45_pre_pilot_gate.py -v
+          python3 tools/security/stage45_pre_pilot_gate.py > "$RUNNER_TEMP/no-go.json"
+          python3 - "$RUNNER_TEMP/no-go.json" <<'PY'
+          import json,sys
+          report=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert report['decision']=='NO_GO'
+          assert report['agent_command_execution_authorized'] is False
+          assert report['desktop_actions_authorized'] is False
+          assert report['production_pilot_authorized'] is False
+          assert len(report['release_blockers'])==13
+          print('STAGE46_LOCAL_MODEL_STILL_NO_GO')
+          PY
+
+  full-java-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact PR revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Full orchestrator Java suite
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+      - name: Unchanged host agent Java suite
+        run: ./mvnw -B -f workstation-agent/pom.xml test
