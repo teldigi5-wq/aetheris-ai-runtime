@@ -20,6 +20,13 @@ public final class SyntraSyntheticJobProbeMain {
         switch (args[0]) {
             case "EXIT" -> { return; }
             case "FAIL" -> { System.exit(17); return; }
+            case "CHECK_ENV" -> {
+                if (System.getenv("SYNTRA_SYNTHETIC_SECRET_SENTINEL") != null ||
+                        System.getenv("GITHUB_TOKEN") != null ||
+                        System.getenv("OPENAI_API_KEY") != null)
+                    System.exit(23);
+                return;
+            }
             case "STALL" -> Thread.sleep(60_000L);
             case "TRY_CHILD" -> {
                 // Only attempts to launch the exact same fixed inert Java
