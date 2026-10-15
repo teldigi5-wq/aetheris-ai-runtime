@@ -6,12 +6,14 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <fwpmu.h>
-#include <fwperr.h>
 #include <cstdio>
 #pragma comment(lib, "fwpuclnt.lib")
 #pragma comment(lib, "rpcrt4.lib")
 
 namespace {
+// Documented WFP error 0x80320013 (FWP_E_NET_EVENTS_DISABLED).
+// Avoid reliance on non-portable Windows SDK header fwperr.h.
+constexpr DWORD kNetEventsDisabled = 0x80320013UL;
 struct WfpEngine {
     HANDLE value = nullptr;
     ~WfpEngine() { if (value) FwpmEngineClose0(value); }
@@ -60,7 +62,7 @@ int wmain(int argc, wchar_t** argv) {
     UINT32 returned = 0;
     status = FwpmNetEventEnum0(engine.value, enumerator.value, kMaxSnapshotEvents,
                                 &events, &returned);
-    if (status == FWP_E_NET_EVENTS_DISABLED) {
+    if (status == kNetEventsDisabled) {
         std::puts("STAGE46_17_WFP_EVENT_LOGGING_DISABLED");
     } else if (status != ERROR_SUCCESS || returned > kMaxSnapshotEvents) {
         std::puts("STAGE46_17_WFP_SNAPSHOT_UNAVAILABLE");
