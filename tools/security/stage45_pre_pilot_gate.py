@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-import re
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,8 +25,7 @@ LAB_EVIDENCE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     (
         "stop_and_owner_quotas",
         "orchestrator-service/src/main/java/io/aetheris/orchestrator/execution/SyntheticMultiAgentAuthorityLab.java",
-        ("NON-EXECUTING", "MULTIAGENT_SHARED_QUOTA_EXCEEDED" if False else "MULTIAGENT_EMERGENCY_STOP",
-         "MULTIAGENT_CLAIM_MISSING"),
+        ("NON-EXECUTING", "MULTIAGENT_EMERGENCY_STOP", "MULTIAGENT_CLAIM_MISSING"),
     ),
     (
         "signed_stop_rollback",
