@@ -40,7 +40,6 @@ namespace SyntraStage4612Lab {
         private const int ERROR_PRIVILEGE_NOT_HELD = 1314;
         private const uint TOKEN_DUPLICATE = 0x0002;
         private const uint DISABLE_MAX_PRIVILEGE = 0x00000001;
-        private const uint LUA_TOKEN = 0x00000004;
         private const uint SE_PRIVILEGE_ENABLED = 0x00000002;
         private const int TOKEN_PRIVILEGES_INFORMATION = 3;
 
@@ -347,7 +346,7 @@ namespace SyntraStage4612Lab {
                         out callerToken), "PARENT_TOKEN_QUERY_FAILED");
                     evidence.ParentEnabledPrivilegeCount = EnabledPrivilegeCount(callerToken);
                     Require(CreateRestrictedToken(callerToken,
-                        DISABLE_MAX_PRIVILEGE | LUA_TOKEN, 0, IntPtr.Zero,
+                        DISABLE_MAX_PRIVILEGE, 0, IntPtr.Zero,
                         0, IntPtr.Zero, 0, IntPtr.Zero, out reducedToken),
                         "PRIVILEGE_REDUCED_TOKEN_CREATE_FAILED");
                     evidence.PrivilegeReducedTokenCreated = true;
