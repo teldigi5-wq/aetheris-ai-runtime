@@ -46,7 +46,6 @@ public final class SyntraLoopbackModelClient implements AutoCloseable {
     private final URI base;
     private final ObjectMapper json = new ObjectMapper();
     private final Deque<Turn> history = new ArrayDeque<>();
-    private boolean installedModelChecked;
     private String pinnedDigest;
     private static final int MAX_MODEL_ENTRIES = 128;
     private static final long MAX_DISK_BYTES = 200L * 1024 * 1024 * 1024;
@@ -202,7 +201,6 @@ public final class SyntraLoopbackModelClient implements AutoCloseable {
             history.clear();
             throw new ModelUnavailableException("LOCAL_MODEL_DIGEST_CHANGED_SESSION_DENIED");
         }
-        installedModelChecked = true;
     }
 
     private JsonNode invokeJson(String path,String payload,Duration timeout) throws Exception {
@@ -253,7 +251,6 @@ public final class SyntraLoopbackModelClient implements AutoCloseable {
     /** Session-local conversation history is never saved to disk. */
     @Override public synchronized void close() {
         history.clear();
-        installedModelChecked=false;
         pinnedDigest=null;
     }
 
