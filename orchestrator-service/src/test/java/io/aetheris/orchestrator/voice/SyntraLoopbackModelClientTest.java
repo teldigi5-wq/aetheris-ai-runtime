@@ -32,6 +32,7 @@ class SyntraLoopbackModelClientTest {
     private volatile int chatStatus;
     private volatile String responseType;
     private volatile AtomicBoolean stopDuringChat;
+    private volatile long artificialChatDelayMillis;
 
     @BeforeEach void startLoopback() throws Exception {
         tags.set(0);
@@ -43,6 +44,7 @@ class SyntraLoopbackModelClientTest {
         chatStatus=200;
         responseType="application/json";
         stopDuringChat=null;
+        artificialChatDelayMillis=0;
         server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
         server.createContext("/api/tags",e->{
             tags.incrementAndGet();
@@ -53,6 +55,8 @@ class SyntraLoopbackModelClientTest {
             try {
                 request.set(JSON.readTree(e.getRequestBody()));
                 if(stopDuringChat!=null) stopDuringChat.set(true);
+                if(artificialChatDelayMillis>0)
+                    Thread.sleep(artificialChatDelayMillis);
             } catch(Exception parseFailure){
                 respond(e,400,"{}");
                 return;
@@ -340,6 +344,24 @@ class SyntraLoopbackModelClientTest {
             assertThat(out.toString()).contains("MODEL RETRY RESET");
             assertThat(out.toString()).doesNotContain("Launched", "Executed desktop");
             assertThat(chats).hasValue(1);
+        }
+    }
+
+    @Test void slowLoopbackInferenceTimesOutAndNeverAddsChatHistory() throws Exception {
+        artificialChatDelayMillis=550;
+        try(var local=new SyntraLoopbackModelClient(
+                "qwen3:4b",server.getAddress().getPort(),
+                java.time.Duration.ofMillis(150))){
+            assertThatThrownBy(()->local.reply("Do not run apps"))
+                .isInstanceOf(SyntraLoopbackModelClient.ModelUnavailableException.class)
+                .hasMessage("LOCAL_MODEL_UNAVAILABLE");
+            var health=local.health();
+            assertThat(health.completedReplies()).isZero();
+            assertThat(health.consecutiveFailures()).isEqualTo(1);
+            assertThat(health.retainedTurns()).isZero();
+            assertThat(health.lastAttemptSucceeded()).isFalse();
+            assertThat(health.lastAttemptMillis()).isGreaterThanOrEqualTo(100L);
+            assertThat(health.loadingOrGpuCertified()).isFalse();
         }
     }
 
