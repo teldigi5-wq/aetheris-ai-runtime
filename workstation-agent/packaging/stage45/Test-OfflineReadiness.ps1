@@ -62,6 +62,11 @@ try {
 
     $before=(Get-FileHash -LiteralPath $jarFile).Hash
     $response=(& pwsh -NoProfile -NonInteractive -File $scriptFile -BundleDirectory $bundle -ExpectedSha256 $digest -WorkspaceRoots $root -SyntheticCI | ConvertFrom-Json)
+    if ($LASTEXITCODE -ne 0) {
+        $denial='unknown'
+        if ($null -ne $response.PSObject.Properties['reason']) {$denial=$response.reason}
+        throw ("Synthetic CLI denied review-only fixture with code: "+$denial)
+    }
     Require ($LASTEXITCODE -eq 0) 'synthetic CLI readiness exits zero'
     Require ($response.platformEvidence -eq 'CI_SYNTHETIC_NOT_WINDOWS_CERTIFIED') 'no false physical certification'
     Require (-not $response.installed -and -not $response.daemonStarted -and -not $response.startupShortcutCreated -and -not $response.wslInvoked) 'no installation or actions'
