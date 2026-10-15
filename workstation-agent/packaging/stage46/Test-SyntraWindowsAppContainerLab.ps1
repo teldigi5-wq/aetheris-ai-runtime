@@ -54,8 +54,7 @@ if ($afterRun -ne $expected) { throw 'STAGE46_15_WORKER_CHANGED_DURING_EXECUTION
 if ($labExit -ne 0) { throw 'STAGE46_14_APP_CONTAINER_KERNEL_TEST_FAILED' }
 $markers = @($observedLines |
     ForEach-Object { $_.Trim() } |
-    Where-Object { $_ -match '^STAGE46_1[45]_[A-Z0-9_]+
- } |
+    Where-Object { $_.StartsWith('STAGE46_14_') -or $_.StartsWith('STAGE46_15_') } |
     Sort-Object -Unique)
 # The unsigned synthetic fixture is *not* an approved publisher.
 Write-Host 'STAGE46_15_SHA256_STABLE_TAMPERED_COPY_REJECTED'
