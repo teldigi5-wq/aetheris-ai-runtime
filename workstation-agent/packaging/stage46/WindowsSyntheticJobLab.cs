@@ -26,10 +26,23 @@ namespace SyntraStage4612Lab {
         public ulong JobMemoryLimit { get; internal set; }
         public uint CpuHardCapRate { get; internal set; }
         public bool KillOnJobClose { get; internal set; }
+        public bool PrivilegeReducedTokenCreated { get; internal set; }
+        public bool PrivilegeReducedTokenUsedForChild { get; internal set; }
+        public bool UsedReducedTokenAlternateLaunch { get; internal set; }
+        public int ChildEnabledPrivilegeCount { get; internal set; }
+        public int ParentEnabledPrivilegeCount { get; internal set; }
     }
 
     public static class WindowsSyntheticJobLab {
         private const uint CREATE_SUSPENDED = 0x4;
+        private const uint TOKEN_QUERY = 0x0008;
+        private const uint TOKEN_ASSIGN_PRIMARY = 0x0001;
+        private const int ERROR_PRIVILEGE_NOT_HELD = 1314;
+        private const uint TOKEN_DUPLICATE = 0x0002;
+        private const uint DISABLE_MAX_PRIVILEGE = 0x00000001;
+        private const uint SE_PRIVILEGE_ENABLED = 0x00000002;
+        private const int TOKEN_PRIVILEGES_INFORMATION = 3;
+
         private const uint CREATE_NO_WINDOW = 0x08000000;
         private const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
         private const uint WAIT_OBJECT_0 = 0;
@@ -108,6 +121,37 @@ namespace SyntraStage4612Lab {
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr GetCurrentProcess();
+        [DllImport("advapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CreateRestrictedToken(IntPtr existingToken, uint flags,
+            uint disableSidCount, IntPtr sidsToDisable,
+            uint deletePrivilegeCount, IntPtr privilegesToDelete,
+            uint restrictedSidCount, IntPtr restrictingSids, out IntPtr restrictedToken);
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, EntryPoint = "CreateProcessAsUserW", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CreateProcessAsUser(IntPtr token, string application,
+            StringBuilder commandLine, IntPtr processAttributes, IntPtr threadAttributes,
+            [MarshalAs(UnmanagedType.Bool)] bool inheritHandles, uint creationFlags,
+            IntPtr environment, string currentDirectory, ref STARTUPINFO startup,
+            out PROCESS_INFORMATION process);
+        // The alternative remains restricted to the exact same reduced token.
+        // It is permitted ONLY if CreateProcessAsUser reports Win32 1314.
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode,
+            EntryPoint = "CreateProcessWithTokenW", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CreateProcessWithToken(IntPtr token,
+            uint logonFlags, string application, StringBuilder commandLine,
+            uint creationFlags, IntPtr environment, string currentDirectory,
+            ref STARTUPINFO startup, out PROCESS_INFORMATION process);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetTokenInformation(IntPtr token, int tokenInfoClass,
+            IntPtr output, uint outputLength, out uint returnLength);
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern uint ResumeThread(IntPtr thread);
         [DllImport("kernel32.dll", SetLastError = true)]
@@ -150,6 +194,30 @@ namespace SyntraStage4612Lab {
             } finally { Marshal.FreeHGlobal(buffer); }
         }
 
+        // Strictly read-only privilege evidence. This does NOT establish an
+        // AppContainer, restricted filesystem DACLs or denied network access.
+        private static int EnabledPrivilegeCount(IntPtr token) {
+            uint bytes;
+            GetTokenInformation(token, TOKEN_PRIVILEGES_INFORMATION,
+                IntPtr.Zero, 0, out bytes);
+            if (bytes < 4 || bytes > 65536)
+                throw new InvalidOperationException("INVALID_TOKEN_PRIVILEGE_LENGTH");
+            IntPtr buffer = Marshal.AllocHGlobal((int)bytes);
+            try {
+                Require(GetTokenInformation(token, TOKEN_PRIVILEGES_INFORMATION,
+                    buffer, bytes, out bytes), "TOKEN_PRIVILEGE_QUERY_FAILED");
+                uint count = (uint)Marshal.ReadInt32(buffer);
+                if (count > 1000 || (ulong)4 + (ulong)count * 12 > (ulong)bytes)
+                    throw new InvalidOperationException("INVALID_TOKEN_PRIVILEGE_LAYOUT");
+                int enabled = 0;
+                for (int i = 0; i < (int)count; i++) {
+                    int attr = Marshal.ReadInt32(buffer, 4 + i * 12 + 8);
+                    if (((uint)attr & SE_PRIVILEGE_ENABLED) != 0) enabled++;
+                }
+                return enabled;
+            } finally { Marshal.FreeHGlobal(buffer); }
+        }
+
         private static string SafePath(string value, string kind) {
             if (string.IsNullOrWhiteSpace(value) || value.Contains("\"") ||
                 value.Contains("\0") || value.Contains("\r") || value.Contains("\n"))
@@ -165,6 +233,19 @@ namespace SyntraStage4612Lab {
         /// </summary>
         public static JobEvidence Run(string trustedJavaExe, string builtClassesDir,
                                       string mode, int maxWaitMillis) {
+            return RunInternal(trustedJavaExe, builtClassesDir, mode, maxWaitMillis, false);
+        }
+
+        // Stage 46.13: explicit CI-only reduced-privilege identity variation.
+        // Windows Job policy and fixed probe remain identical to Stage 46.12.
+        // NO filesystem/network sandbox or production token attestation.
+        public static JobEvidence RunPrivilegeReduced(string trustedJavaExe,
+            string builtClassesDir, string mode, int maxWaitMillis) {
+            return RunInternal(trustedJavaExe, builtClassesDir, mode, maxWaitMillis, true);
+        }
+
+        private static JobEvidence RunInternal(string trustedJavaExe, string builtClassesDir,
+                                      string mode, int maxWaitMillis, bool useReducedToken) {
             if (Environment.OSVersion.Platform != PlatformID.Win32NT)
                 throw new PlatformNotSupportedException("WINDOWS_JOB_LAB_ONLY");
             if (mode != "EXIT" && mode != "STALL" &&
@@ -193,6 +274,8 @@ namespace SyntraStage4612Lab {
             string environment = "SystemRoot=" + root + "\0WINDIR=" + root + "\0\0";
             IntPtr environmentPtr = Marshal.StringToHGlobalUni(environment);
             IntPtr job = IntPtr.Zero;
+            IntPtr callerToken = IntPtr.Zero;
+            IntPtr reducedToken = IntPtr.Zero;
             PROCESS_INFORMATION pi = new PROCESS_INFORMATION();
             bool processCreated = false;
             bool assigned = false;
@@ -257,13 +340,67 @@ namespace SyntraStage4612Lab {
                 var commandLine = new StringBuilder("\"" + java +
                     "\" -Xms16m -Xmx64m -cp \"" + classes + "\" " + FIXED_MAIN +
                     " " + mode);
-                Require(CreateProcess(java, commandLine, IntPtr.Zero,
-                    IntPtr.Zero, false,
-                    CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
-                    environmentPtr, null, ref startup, out pi),
-                    "SYNTHETIC_CHILD_START_FAILED");
+                if (useReducedToken) {
+                    Require(OpenProcessToken(GetCurrentProcess(),
+                        TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY,
+                        out callerToken), "PARENT_TOKEN_QUERY_FAILED");
+                    evidence.ParentEnabledPrivilegeCount = EnabledPrivilegeCount(callerToken);
+                    Require(CreateRestrictedToken(callerToken,
+                        DISABLE_MAX_PRIVILEGE, 0, IntPtr.Zero,
+                        0, IntPtr.Zero, 0, IntPtr.Zero, out reducedToken),
+                        "PRIVILEGE_REDUCED_TOKEN_CREATE_FAILED");
+                    evidence.PrivilegeReducedTokenCreated = true;
+                    int reducedEnabled = EnabledPrivilegeCount(reducedToken);
+                    if (reducedEnabled > 1 ||
+                        reducedEnabled > evidence.ParentEnabledPrivilegeCount)
+                        throw new InvalidOperationException("REDUCED_TOKEN_PRIVILEGES_NOT_REDUCED");
+                    bool restrictedStarted = CreateProcessAsUser(reducedToken, java, commandLine,
+                        IntPtr.Zero, IntPtr.Zero, false,
+                        CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+                        environmentPtr, null, ref startup, out pi);
+                    if (!restrictedStarted) {
+                        int launchError = Marshal.GetLastWin32Error();
+                        if (launchError != ERROR_PRIVILEGE_NOT_HELD)
+                            throw new Win32Exception(launchError,
+                                "STAGE46_13_REDUCED_TOKEN_CREATEPROCESSASUSER_WIN32_" +
+                                launchError.ToString());
+                        // Security invariant: this alternate API still receives
+                        // the SAME reduced token, never the original token.
+                        var freshCommandLine = new StringBuilder(commandLine.ToString());
+                        restrictedStarted = CreateProcessWithToken(reducedToken, 0, java,
+                            freshCommandLine,
+                            CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+                            environmentPtr, null, ref startup, out pi);
+                        if (!restrictedStarted) {
+                            int alternativeError = Marshal.GetLastWin32Error();
+                            throw new Win32Exception(alternativeError,
+                                "STAGE46_13_REDUCED_TOKEN_ALTERNATE_WIN32_" +
+                                alternativeError.ToString());
+                        }
+                        evidence.UsedReducedTokenAlternateLaunch = true;
+                    }
+                    evidence.PrivilegeReducedTokenUsedForChild = true;
+                } else {
+                    Require(CreateProcess(java, commandLine, IntPtr.Zero,
+                        IntPtr.Zero, false,
+                        CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+                        environmentPtr, null, ref startup, out pi),
+                        "SYNTHETIC_CHILD_START_FAILED");
+                }
                 processCreated = true;
                 evidence.Pid = pi.dwProcessId;
+                if (useReducedToken) {
+                    IntPtr childToken;
+                    Require(OpenProcessToken(pi.hProcess, TOKEN_QUERY, out childToken),
+                        "REDUCED_CHILD_TOKEN_QUERY_FAILED");
+                    try {
+                        evidence.ChildEnabledPrivilegeCount = EnabledPrivilegeCount(childToken);
+                        if (evidence.ChildEnabledPrivilegeCount > 1 ||
+                            evidence.ChildEnabledPrivilegeCount > evidence.ParentEnabledPrivilegeCount)
+                            throw new InvalidOperationException(
+                                "REDUCED_CHILD_TOKEN_PRIVILEGES_NOT_VERIFIED");
+                    } finally { CloseHandle(childToken); }
+                }
                 Require(AssignProcessToJobObject(job, pi.hProcess),
                     "ASSIGN_SUSPENDED_CHILD_TO_JOB_FAILED");
                 evidence.AssignedWhileSuspended = true;
@@ -311,6 +448,8 @@ namespace SyntraStage4612Lab {
                     if (pi.hThread != IntPtr.Zero) CloseHandle(pi.hThread);
                     if (pi.hProcess != IntPtr.Zero) CloseHandle(pi.hProcess);
                 }
+                if (reducedToken != IntPtr.Zero) CloseHandle(reducedToken);
+                if (callerToken != IntPtr.Zero) CloseHandle(callerToken);
                 Marshal.FreeHGlobal(environmentPtr);
             }
         }

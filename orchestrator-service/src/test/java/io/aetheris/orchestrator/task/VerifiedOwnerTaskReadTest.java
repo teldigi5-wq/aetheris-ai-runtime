@@ -9,8 +9,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.reflect.RecordComponent;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -85,7 +87,14 @@ class VerifiedOwnerTaskReadTest {
                 .hasMessage("TASK_NOT_AVAILABLE");
 
         var safe = reader.get(ownerA, a.getId());
-        assertThat(safe.toString()).doesNotContain("SECRET_COMMAND", "owner@example", "101");
+        // Verify the exact safe DTO shape rather than searching for the
+        // short account ID "101": random UUIDs may legitimately contain 101.
+        // A future owner or command field must fail this schema assertion.
+        assertThat(Arrays.stream(VerifiedOwnerTaskRead.TaskStatusView.class.getRecordComponents())
+                .map(RecordComponent::getName).toList())
+                .containsExactly("taskId", "state", "agentId", "updatedAt");
+        assertThat(safe.toString()).doesNotContain(
+                "SECRET_COMMAND", "owner@example", "ownerUserId=", "commandText=");
         assertThat(safe.agentId()).isNull();
     }
 
