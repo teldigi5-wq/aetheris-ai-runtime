@@ -28,6 +28,7 @@ namespace SyntraStage4612Lab {
         public bool KillOnJobClose { get; internal set; }
         public bool PrivilegeReducedTokenCreated { get; internal set; }
         public bool PrivilegeReducedTokenUsedForChild { get; internal set; }
+        public bool UsedReducedTokenAlternateLaunch { get; internal set; }
         public int ChildEnabledPrivilegeCount { get; internal set; }
         public int ParentEnabledPrivilegeCount { get; internal set; }
     }
@@ -35,6 +36,8 @@ namespace SyntraStage4612Lab {
     public static class WindowsSyntheticJobLab {
         private const uint CREATE_SUSPENDED = 0x4;
         private const uint TOKEN_QUERY = 0x0008;
+        private const uint TOKEN_ASSIGN_PRIMARY = 0x0001;
+        private const int ERROR_PRIVILEGE_NOT_HELD = 1314;
         private const uint TOKEN_DUPLICATE = 0x0002;
         private const uint DISABLE_MAX_PRIVILEGE = 0x00000001;
         private const uint LUA_TOKEN = 0x00000004;
@@ -137,6 +140,15 @@ namespace SyntraStage4612Lab {
             [MarshalAs(UnmanagedType.Bool)] bool inheritHandles, uint creationFlags,
             IntPtr environment, string currentDirectory, ref STARTUPINFO startup,
             out PROCESS_INFORMATION process);
+        // The alternative remains restricted to the exact same reduced token.
+        // It is permitted ONLY if CreateProcessAsUser reports Win32 1314.
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode,
+            EntryPoint = "CreateProcessWithTokenW", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CreateProcessWithToken(IntPtr token,
+            uint logonFlags, string application, StringBuilder commandLine,
+            uint creationFlags, IntPtr environment, string currentDirectory,
+            ref STARTUPINFO startup, out PROCESS_INFORMATION process);
         [DllImport("advapi32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool GetTokenInformation(IntPtr token, int tokenInfoClass,
@@ -330,7 +342,8 @@ namespace SyntraStage4612Lab {
                     "\" -Xms16m -Xmx64m -cp \"" + classes + "\" " + FIXED_MAIN +
                     " " + mode);
                 if (useReducedToken) {
-                    Require(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE,
+                    Require(OpenProcessToken(GetCurrentProcess(),
+                        TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY,
                         out callerToken), "PARENT_TOKEN_QUERY_FAILED");
                     evidence.ParentEnabledPrivilegeCount = EnabledPrivilegeCount(callerToken);
                     Require(CreateRestrictedToken(callerToken,
@@ -342,11 +355,31 @@ namespace SyntraStage4612Lab {
                     if (reducedEnabled > 1 ||
                         reducedEnabled > evidence.ParentEnabledPrivilegeCount)
                         throw new InvalidOperationException("REDUCED_TOKEN_PRIVILEGES_NOT_REDUCED");
-                    Require(CreateProcessAsUser(reducedToken, java, commandLine,
+                    bool restrictedStarted = CreateProcessAsUser(reducedToken, java, commandLine,
                         IntPtr.Zero, IntPtr.Zero, false,
                         CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
-                        environmentPtr, null, ref startup, out pi),
-                        "PRIVILEGE_REDUCED_CHILD_LAUNCH_FAILED");
+                        environmentPtr, null, ref startup, out pi);
+                    if (!restrictedStarted) {
+                        int launchError = Marshal.GetLastWin32Error();
+                        if (launchError != ERROR_PRIVILEGE_NOT_HELD)
+                            throw new Win32Exception(launchError,
+                                "STAGE46_13_REDUCED_TOKEN_CREATEPROCESSASUSER_WIN32_" +
+                                launchError.ToString());
+                        // Security invariant: this alternate API still receives
+                        // the SAME reduced token, never the original token.
+                        var freshCommandLine = new StringBuilder(commandLine.ToString());
+                        restrictedStarted = CreateProcessWithToken(reducedToken, 0, java,
+                            freshCommandLine,
+                            CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+                            environmentPtr, null, ref startup, out pi);
+                        if (!restrictedStarted) {
+                            int alternativeError = Marshal.GetLastWin32Error();
+                            throw new Win32Exception(alternativeError,
+                                "STAGE46_13_REDUCED_TOKEN_ALTERNATE_WIN32_" +
+                                alternativeError.ToString());
+                        }
+                        evidence.UsedReducedTokenAlternateLaunch = true;
+                    }
                     evidence.PrivilegeReducedTokenUsedForChild = true;
                 } else {
                     Require(CreateProcess(java, commandLine, IntPtr.Zero,
