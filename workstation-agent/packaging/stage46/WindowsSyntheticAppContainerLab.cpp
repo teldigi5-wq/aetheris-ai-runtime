@@ -103,12 +103,38 @@ int childMain(int argc, wchar_t** argv) {
         target.sin_family = AF_INET;
         target.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         target.sin_port = htons(static_cast<u_short>(port));
+        u_long nonblocking = 1;
+        if (ioctlsocket(socketFd, FIONBIO, &nonblocking) != 0) {
+            closesocket(socketFd); WSACleanup(); return 98;
+        }
         int result = connect(socketFd, reinterpret_cast<sockaddr*>(&target), sizeof(target));
         int error = result == SOCKET_ERROR ? WSAGetLastError() : 0;
+        if (result == SOCKET_ERROR &&
+            (error == WSAEWOULDBLOCK || error == WSAEINPROGRESS)) {
+            fd_set writeSet;
+            FD_ZERO(&writeSet);
+            FD_SET(socketFd, &writeSet);
+            timeval timeout = {1, 0};
+            int ready = select(0, nullptr, &writeSet, nullptr, &timeout);
+            if (ready > 0) {
+                int connectionError = 0;
+                int optionLength = sizeof(connectionError);
+                if (getsockopt(socketFd, SOL_SOCKET, SO_ERROR,
+                      reinterpret_cast<char*>(&connectionError), &optionLength) == 0) {
+                    error = connectionError;
+                    result = error == 0 ? 0 : SOCKET_ERROR;
+                } else { error = WSAGetLastError(); }
+            } else {
+                // Inconclusive connection setup, not proof of network denial.
+                error = ready == 0 ? WSAETIMEDOUT : WSAGetLastError();
+            }
+        }
         closesocket(socketFd);
         WSACleanup();
         if (result == 0) return 94; // Network unexpectedly permitted.
-        return (error == WSAEACCES || error == WSAENETUNREACH) ? 0 : 95;
+        if (error == WSAEACCES || error == WSAENETUNREACH) return 0;
+        // Report the exact harmless network error class in child exit code.
+        return error == WSAETIMEDOUT ? 96 : 95;
     }
     return 96;
 }
@@ -234,6 +260,9 @@ bool runAppChild(PSID appSid, const std::wstring& executable,
                     ok = exitStatus == 0;
                     if (!ok) fprintf(stderr, "STAGE46_14_CHILD_%ls_EXIT_%lu\n",
                                      mode.c_str(), exitStatus);
+                } else {
+                    fprintf(stderr, "STAGE46_14_CHILD_%ls_NO_CONFIRMED_EXIT_WAIT_%lu\n",
+                            mode.c_str(), waited);
                 }
             }
         }
