@@ -13,14 +13,14 @@ try {
     if ($PSVersionTable.PSVersion.Major -lt 7) {
         throw 'POWERSHELL_7_REQUIRED_FOR_READONLY_REVIEW'
     }
-    $isWindows=[System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+    $runningOnWindows=[System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
         [System.Runtime.InteropServices.OSPlatform]::Windows)
     if ($SyntheticCI) {
         if ($env:GITHUB_ACTIONS -cne 'true' -or
             $env:AETHERIS_STAGE45_WINDOWS_LAB -cne 'true') {
             throw 'SYNTHETIC_CI_NOT_AUTHORIZED'
         }
-    } elseif (-not $isWindows) {
+    } elseif (-not $runningOnWindows) {
         throw 'TARGET_READINESS_REQUIRES_WINDOWS'
     }
 
