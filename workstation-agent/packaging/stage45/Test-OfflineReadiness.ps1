@@ -70,10 +70,7 @@ try {
     Expect-Denied {Invoke-Stage45OfflineReview -BundleDirectory $bundle -ExpectedSha256 ('a'*64) -WorkspaceRoots @($root)} 'independent digest mismatch'
     Expect-Denied {Invoke-Stage45OfflineReview -BundleDirectory $bundle -ExpectedSha256 'malformed' -WorkspaceRoots @($root)} 'missing trusted digest'
     Expect-Denied {Invoke-Stage45OfflineReview -BundleDirectory $bundle -ExpectedSha256 $digest -WorkspaceRoots @($outside)} 'nonexistent grant'
-    Expect-Denied {Invoke-Stage45OfflineReview -BundleDirectory $bundle -ExpectedSha256 $digest -WorkspaceRoots @($caseRoot)} 'entire staging parent is disallowed as a validated narrow workspace?' | Out-Null
-    # Existing directory above is not necessarily a filesystem root:
-    # root-narrowing is evaluated against home, drive root and reparse,
-    # not any arbitrary parent; avoid asserting more than policy proves.
+    Expect-Denied {Invoke-Stage45OfflineReview -BundleDirectory $bundle -ExpectedSha256 $digest -WorkspaceRoots @([IO.Path]::GetPathRoot($root))} 'filesystem root grant'
 
     $manifest.activationAllowed=$true
     $manifest | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $manifestFile -Encoding utf8NoBOM
