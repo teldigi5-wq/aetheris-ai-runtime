@@ -110,7 +110,7 @@ public final class SyntraLoopbackModelClient implements AutoCloseable {
 
     public synchronized String reply(String question) throws ModelUnavailableException {
         if (question == null || question.isBlank() || question.length() > MAX_INPUT
-                || question.chars().anyMatch(c -> c < 32 && c != '\\n' && c != '\\t')) {
+                || question.chars().anyMatch(c -> c < 32 && c != '\n' && c != '\t')) {
             throw new ModelUnavailableException("INVALID_MODEL_PROMPT");
         }
         if (modelSwapBlocked)
