@@ -19,6 +19,17 @@ Add-Type -Path $source -ErrorAction Stop
 
 function Assert-ReducedEvidence {
     param([object]$e, [string]$expected)
+    Write-Host ('STAGE46_13_DIAGNOSTIC verdict='+$e.Verdict+
+        '; expected='+$expected+
+        '; tokenCreated='+$e.PrivilegeReducedTokenCreated+
+        '; reducedApplied='+$e.PrivilegeReducedTokenUsedForChild+
+        '; fallbackSameToken='+$e.UsedReducedTokenAlternateLaunch+
+        '; parentPrivCount='+$e.ParentEnabledPrivilegeCount+
+        '; childPrivCount='+$e.ChildEnabledPrivilegeCount+
+        '; kernelReadBack='+$e.KernelLimitsReadBack+
+        '; assignedSuspended='+$e.AssignedWhileSuspended+
+        '; childExited='+$e.ChildExited+
+        '; childExitCode='+$e.ExitCode)
     if ($e.Verdict -ne $expected -or
         -not $e.PrivilegeReducedTokenCreated -or
         -not $e.PrivilegeReducedTokenUsedForChild -or
