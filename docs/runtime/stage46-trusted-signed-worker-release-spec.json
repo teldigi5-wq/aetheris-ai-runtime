@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "stage": "46.17",
+  "artifact_class": "SYNTHETIC_TEST_ONLY",
+  "release_decision": "NO_GO",
+  "candidate_worker": {
+    "canonical_source_revision": null,
+    "independently_approved_reproducible_artifact_sha256": null,
+    "approved_code_signing_leaf_certificate_sha256": null,
+    "independently_pinned_trust_chain": false,
+    "code_signing_eku_verified": false,
+    "authenticode_valid": false,
+    "certificate_revocation_verified": false,
+    "non_writable_staged_artifact": false,
+    "launch_from_verified_open_handle": false,
+    "signed_dependency_manifest": false,
+    "voice_model_distribution_licenses_approved": false
+  },
+  "required_network_evidence": {
+    "test_listener_positive_control": true,
+    "per_process_app_identifier_verified": false,
+    "exact_ephemeral_destination_and_protocol_correlated": false,
+    "monotonic_time_window_correlated": false,
+    "actual_kernel_classify_drop_filter_and_layer_correlated": false,
+    "explicit_ipv4_and_ipv6_test_coverage": false,
+    "external_egress_and_dns_policy_verified": false,
+    "logging_available_and_complete": false,
+    "rollback_of_any_transient_wfp_configuration_verified": false
+  },
+  "enforcement_scope": {
+    "installed_firewall_rules": false,
+    "subscribed_to_wfp_events": false,
+    "real_microphone_enabled": false,
+    "real_speech_models_loaded": false,
+    "owner_desktop_actions_authorized": false,
+    "physical_owner_pc_pilot_authorized": false,
+    "production_authorized": false
+  },
+  "notes": [
+    "This is an unsigned synthetic fixture; no trust root may be derived from a GitHub PR or generated CI receipt.",
+    "A read-only WFP event snapshot may be disabled, inaccessible, empty or unrelated. Do not treat event counts as per-process denial.",
+    "No owner-PC installation, model download, device use, firewall mutation, merge or deployment is authorized."
+  ]
+}
