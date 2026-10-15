@@ -193,8 +193,12 @@ class SyntheticVoiceOwnerConsentLabTest {
         f.stop.set(true);
         assertThat(f.lab.simulateWithOwnerPermit(permit).status())
                 .isEqualTo(Status.EMERGENCY_STOP_LATCHED);
+        // Stage 45.5.19 hardening destroys the old owner session when
+        // external STOP is observed, so a subsequent command is DENIED
+        // rather than treating a deleted session as a continuing one.
         assertThat(f.lab.receiveSyntheticTranscript(session,"open editor").status())
-                .isEqualTo(Status.EMERGENCY_STOP_LATCHED);
+                .isEqualTo(Status.DENIED);
+        assertThat(f.lab.isSyntheticStopLatched()).isTrue();
         var broken=new SyntheticVoiceOwnerConsentLab(f.ownerKey.getPublic(),
                 () -> {throw new IllegalStateException("lost supervisor");},f.clock);
         assertThatThrownBy(() -> broken.openTrustedSession(OWNER))
