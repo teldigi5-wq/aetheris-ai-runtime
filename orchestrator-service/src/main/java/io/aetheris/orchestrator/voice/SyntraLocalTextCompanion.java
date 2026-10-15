@@ -38,21 +38,33 @@ public final class SyntraLocalTextCompanion {
     private SyntraLocalTextCompanion() {}
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 0) {
-            System.err.println("Usage: SyntraLocalTextCompanion (no arguments; offline demo only)");
+        if (args.length != 0 && (args.length != 2 || !"--local-model".equals(args[0]))) {
+            System.err.println("Usage: SyntraLocalTextCompanion [--local-model INSTALLED_MODEL_ID]");
             System.exit(2);
             return;
         }
-        // No persistent keys, approvals, model downloads or OS operations.
         try (var reader = new InputStreamReader(System.in, StandardCharsets.UTF_8);
              var writer = new PrintWriter(System.out, true, StandardCharsets.UTF_8)) {
-            run(reader, writer, () -> false);
+            if (args.length == 0) {
+                run(reader, writer, () -> false);
+            } else {
+                try (var model = new SyntraLoopbackModelClient(args[1])) {
+                    run(reader, writer, () -> false, model);
+                }
+            }
         }
     }
 
     /** Testable local console adapter. It deliberately cannot provide
      * OwnerPermit; no approval can be issued through spoken/typed text. */
     static void run(Reader input, Writer output, BooleanSupplier emergencyStop)
+            throws IOException, GeneralSecurityException {
+        run(input, output, emergencyStop, null);
+    }
+
+    /** Model responses are DISPLAY ONLY and never enter the consent approval path. */
+    static void run(Reader input, Writer output, BooleanSupplier emergencyStop,
+                    SyntraLoopbackModelClient localModel)
             throws IOException, GeneralSecurityException {
         Objects.requireNonNull(input);
         Objects.requireNonNull(output);
@@ -73,7 +85,14 @@ public final class SyntraLocalTextCompanion {
         }
 
         var reader = new BufferedReader(input);
-        output.write("Syntra Local Text Preview — offline, no microphone, no AI model, no PC control.\n");
+        boolean awake = false;
+        final java.time.Instant sessionEnds = java.time.Instant.now().plusSeconds(300);
+        if (localModel == null) {
+            output.write("Syntra Local Text Preview — offline, no microphone, no AI model, no PC control.\n");
+        } else {
+            output.write("Syntra Local Model Preview — localhost inference OPT-IN; no microphone or PC control.\n");
+            output.write("Local model configured: " + localModel.modelId() + " (availability not yet confirmed).\n");
+        }
         output.write("Type 'help', 'hi syntra', 'status', 'stop', or 'quit'.\n");
         output.flush();
 
@@ -95,6 +114,8 @@ public final class SyntraLocalTextCompanion {
             if ("help".equals(normalized)) {
                 output.write("Offline text preview: hi syntra | show system status | open editor | open project notes | status | stop | quit.\n");
                 output.write("Desktop requests create proposals only; no approval or real action is possible here.\n");
+                if (localModel != null)
+                    output.write("After typed wake: ask YOUR_QUESTION (preinstalled Ollama on loopback only).\n");
                 output.flush();
                 continue;
             }
@@ -128,14 +149,42 @@ public final class SyntraLocalTextCompanion {
                         + "; microphone=" + plan.microphoneIntegrated()
                         + "; local-STT=" + plan.localSttConnected()
                         + "; local-TTS=" + plan.localTtsConnected() + ".\n");
+                if (localModel != null)
+                    output.write("MODEL: LOOPBACK_ONLY_OPT_IN; internet/proxies DISABLED; model loading unverified.\n");
+                output.flush();
+                continue;
+            }
+
+            if (normalized.startsWith("ask ")) {
+                if (localModel == null || !awake || !java.time.Instant.now().isBefore(sessionEnds)) {
+                    output.write("DENIED: typed wake and explicit local-model opt-in required.\n");
+                } else {
+                    String question = line.strip().substring(4);
+                    try {
+                        String answer = localModel.reply(question);
+                        boolean stopAfter;
+                        try { stopAfter = emergencyStop.getAsBoolean(); }
+                        catch (RuntimeException unavailable) { stopAfter = true; }
+                        if (stopAfter) {
+                            consent.receiveSyntheticTranscript(session, "status");
+                            output.write("STOP: local model answer discarded; no action executed.\n");
+                        } else {
+                            output.write("LOCAL MODEL (untrusted text, never an action): " + answer + "\n");
+                        }
+                    } catch (SyntraLoopbackModelClient.ModelUnavailableException unavailable) {
+                        output.write("MODEL UNAVAILABLE: " + unavailable.getMessage() + "; no remote fallback.\n");
+                    }
+                }
                 output.flush();
                 continue;
             }
 
             var response = consent.receiveSyntheticTranscript(session, line);
             switch (response.status()) {
-                case WAKE_ACKNOWLEDGED ->
-                        output.write("Syntra: text wake acknowledged. No microphone or speaker identity verified.\n");
+                case WAKE_ACKNOWLEDGED -> {
+                    awake = true;
+                    output.write("Syntra: text wake acknowledged. No microphone or speaker identity verified.\n");
+                }
                 case AWAITING_TRUSTED_OWNER_APPROVAL ->
                         output.write("PREVIEW ONLY: proposal recorded. Independent owner authorization required; no action will run.\n");
                 case EMERGENCY_STOP_LATCHED ->
