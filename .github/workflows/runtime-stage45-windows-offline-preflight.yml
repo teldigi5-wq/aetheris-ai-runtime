@@ -1,0 +1,109 @@
+name: Runtime Stage 45.5.17 Offline Workstation Review Gate
+
+on:
+  pull_request:
+    branches:
+      - security/stage45-multiagent-budget-stop-20261014
+      - main
+    paths:
+      - 'workstation-agent/packaging/stage45/**'
+      - 'docs/security/stage45-windows-offline-preflight.md'
+      - '.github/workflows/runtime-stage45-windows-offline-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-readiness-deny-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      AETHERIS_STAGE45_WINDOWS_LAB: 'true'
+    steps:
+      - name: Checkout exact pull request revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Show portable PowerShell version
+        shell: pwsh
+        run: |
+          $PSVersionTable.PSVersion.ToString()
+          if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'PowerShell 7 is required' }
+      - name: Parse all Stage 45.5.17 scripts
+        shell: pwsh
+        run: |
+          Get-ChildItem workstation-agent/packaging/stage45 -Filter '*.ps1' |
+            ForEach-Object {
+              $tokens=$null; $errors=$null
+              [System.Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$errors) | Out-Null
+              if ($errors.Count -gt 0) { throw ("PowerShell parsing failed: "+$_.Name) }
+            }
+          $tokens=$null; $errors=$null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path workstation-agent/packaging/stage45/OfflineReadinessPolicy.psm1).Path,
+            [ref]$tokens,[ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { throw 'PowerShell module parsing failed' }
+      - name: Adversarial synthetic offline review checks
+        shell: pwsh
+        run: |
+          ./workstation-agent/packaging/stage45/Test-OfflineReadiness.ps1
+
+  built-jar-no-activation-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      AETHERIS_STAGE45_WINDOWS_LAB: 'true'
+    steps:
+      - name: Checkout exact pull request revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Install Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Test and package EXISTING host-agent module without starting it
+        run: ./mvnw -B -f workstation-agent/pom.xml test package
+      - name: Build CI-only review package from actual shaded JAR
+        shell: pwsh
+        run: |
+          ./workstation-agent/packaging/stage45/New-ReviewBundleCiOnly.ps1 `
+            -SourceJar workstation-agent/target/aetheris-host-agent.jar `
+            -ReviewDirectory (Join-Path $env:RUNNER_TEMP 'stage45-review-bundle')
+      - name: Exercise read-only offline review against packaged JAR
+        shell: pwsh
+        run: |
+          $bundle=Join-Path $env:RUNNER_TEMP 'stage45-review-bundle'
+          $root=Join-Path $env:RUNNER_TEMP 'stage45-allowed-workspace'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          $jar=Join-Path $bundle 'aetheris-host-agent.jar'
+          $expected=(Get-FileHash -LiteralPath $jar -Algorithm SHA256).Hash.ToLowerInvariant()
+          $result=(& ./workstation-agent/packaging/stage45/Invoke-OfflineReadiness.ps1 `
+            -BundleDirectory $bundle -ExpectedSha256 $expected `
+            -WorkspaceRoots $root -SyntheticCI | ConvertFrom-Json)
+          if ($LASTEXITCODE -ne 0 -or $result.status -ne 'REVIEW_ONLY_NO_ACTIVATION' -or
+              $result.platformEvidence -ne 'CI_SYNTHETIC_NOT_WINDOWS_CERTIFIED' -or
+              $result.activated -or $result.installed -or $result.releaseAuthorized -or
+              $result.wslInvoked -or $result.daemonStarted) {
+              throw 'The offline package failed the non-activation policy'
+          }
+          Write-Host 'STAGE45_REAL_JAR_OFFLINE_REVIEW_PASS'
+
+  complete-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact pull request revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Install Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Verify full Java orchestrator suite unchanged
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
