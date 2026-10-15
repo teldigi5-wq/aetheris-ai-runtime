@@ -117,6 +117,9 @@ namespace SyntraStage4612Lab {
         private static extern bool GetExitCodeProcess(IntPtr process, out uint code);
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool TerminateProcess(IntPtr process, uint exitCode);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool CloseHandle(IntPtr handle);
 
         private static void Require(bool passed, string stage) {
@@ -165,7 +168,8 @@ namespace SyntraStage4612Lab {
             if (Environment.OSVersion.Platform != PlatformID.Win32NT)
                 throw new PlatformNotSupportedException("WINDOWS_JOB_LAB_ONLY");
             if (mode != "EXIT" && mode != "STALL" &&
-                mode != "FAIL" && mode != "TRY_CHILD")
+                mode != "FAIL" && mode != "TRY_CHILD" &&
+                mode != "CHECK_ENV")
                 throw new ArgumentException("INVALID_FIXED_SYNTHETIC_MODE");
             if (maxWaitMillis < 100 || maxWaitMillis > 5000)
                 throw new ArgumentException("INVALID_LAB_WAIT_BUDGET");
@@ -191,7 +195,7 @@ namespace SyntraStage4612Lab {
             IntPtr job = IntPtr.Zero;
             PROCESS_INFORMATION pi = new PROCESS_INFORMATION();
             bool processCreated = false;
-            bool resumed = false;
+            bool assigned = false;
             var evidence = new JobEvidence();
             try {
                 job = CreateJobObject(IntPtr.Zero, null);
@@ -263,11 +267,11 @@ namespace SyntraStage4612Lab {
                 Require(AssignProcessToJobObject(job, pi.hProcess),
                     "ASSIGN_SUSPENDED_CHILD_TO_JOB_FAILED");
                 evidence.AssignedWhileSuspended = true;
+                assigned = true;
 
                 uint resumeResult = ResumeThread(pi.hThread);
                 Require(resumeResult != uint.MaxValue, "RESUME_JOB_CHILD_FAILED");
-                resumed = true;
-
+ 
                 uint wait = WaitForSingleObject(pi.hProcess, (uint)maxWaitMillis);
                 if (wait == WAIT_TIMEOUT) {
                     // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE applies to all members.
@@ -297,6 +301,13 @@ namespace SyntraStage4612Lab {
                 // and run uncontained. Never resume a child before assignment.
                 if (job != IntPtr.Zero) CloseHandle(job);
                 if (processCreated) {
+                    // If the OS refused Job assignment, the child is still
+                    // suspended; terminate it explicitly rather than orphaning
+                    // an uncontained process.
+                    if (!assigned && pi.hProcess != IntPtr.Zero) {
+                        TerminateProcess(pi.hProcess, 26);
+                        WaitForSingleObject(pi.hProcess, 3000);
+                    }
                     if (pi.hThread != IntPtr.Zero) CloseHandle(pi.hThread);
                     if (pi.hProcess != IntPtr.Zero) CloseHandle(pi.hProcess);
                 }
