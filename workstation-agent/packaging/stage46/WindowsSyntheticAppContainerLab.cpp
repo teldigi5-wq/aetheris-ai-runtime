@@ -184,10 +184,27 @@ bool runAppChild(PSID appSid, const std::wstring& executable,
     std::vector<wchar_t> writable(command.begin(), command.end());
     writable.push_back(L'\0');
     std::wstring root = windowsRoot();
-    std::wstring environment = L"SystemRoot=" + root;
-    environment.push_back(L'\0');
-    environment += L"WINDIR=" + root;
-    environment.push_back(L'\0');
+    // Strict OS bootstrap allowlist: no account tokens, API keys, GITHUB_*
+    // variables, passwords or arbitrary inherited environment. AppContainer
+    // startup may need more OS path variables than ordinary CreateProcessW.
+    const wchar_t* names[] = {L"APPDATA", L"LOCALAPPDATA", L"PATH",
+        L"ProgramData", L"SystemDrive", L"SystemRoot", L"TEMP",
+        L"TMP", L"USERPROFILE", L"WINDIR"};
+    std::wstring environment;
+    for (const wchar_t* name : names) {
+        DWORD required = GetEnvironmentVariableW(name, nullptr, 0);
+        if (required <= 1 || required > 32768) continue;
+        std::vector<wchar_t> value(required);
+        DWORD written = GetEnvironmentVariableW(name, value.data(), required);
+        if (written == 0 || written >= required) continue;
+        std::wstring str(value.data(), written);
+        if (str.find(L'\r') != std::wstring::npos ||
+            str.find(L'\n') != std::wstring::npos ||
+            str.find(L'=') != std::wstring::npos) continue;
+        environment += std::wstring(name) + L"=" + str;
+        environment.push_back(L'\0');
+    }
+    if (environment.empty()) environment = L"SystemRoot=" + root + L'\0';
     environment.push_back(L'\0');
     bool ok = false, assigned = false;
     DWORD exitStatus = 0;
