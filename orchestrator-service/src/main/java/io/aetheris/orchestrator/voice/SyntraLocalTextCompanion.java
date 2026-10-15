@@ -115,7 +115,7 @@ public final class SyntraLocalTextCompanion {
                 output.write("Offline text preview: hi syntra | show system status | open editor | open project notes | status | stop | quit.\n");
                 output.write("Desktop requests create proposals only; no approval or real action is possible here.\n");
                 if (localModel != null)
-                    output.write("After typed wake: ask YOUR_QUESTION (preinstalled Ollama on loopback only).\n");
+                    output.write("After typed wake: models | model info | ask YOUR_QUESTION (preinstalled Ollama on loopback only).\n");
                 output.flush();
                 continue;
             }
@@ -151,6 +151,36 @@ public final class SyntraLocalTextCompanion {
                         + "; local-TTS=" + plan.localTtsConnected() + ".\n");
                 if (localModel != null)
                     output.write("MODEL: LOOPBACK_ONLY_OPT_IN; internet/proxies DISABLED; model loading unverified.\n");
+                output.flush();
+                continue;
+            }
+
+            if ("models".equals(normalized) || "model info".equals(normalized)) {
+                if (localModel == null || !awake || !java.time.Instant.now().isBefore(sessionEnds)) {
+                    output.write("DENIED: typed wake and explicit local-model opt-in required.\n");
+                } else {
+                    try {
+                        if ("models".equals(normalized)) {
+                            var inventory=localModel.listInstalledModels();
+                            output.write("INSTALLED LOCAL MODELS: " + inventory.size() +
+                                    " (read-only; no loading or automatic selection).\n");
+                            for (var installed : inventory.stream().limit(10).toList())
+                                output.write("MODEL ID: " + installed.name() + " (metadata only).\n");
+                        } else {
+                            var assessment=localModel.reviewSelectedModel();
+                            output.write("MODEL REVIEW: " + assessment.model() + "; file bytes=" +
+                                    assessment.modelDiskBytes() + "; SHA256 prefix=" +
+                                    assessment.sha256Prefix() + ".\n");
+                            output.write("HOST RAM FREE MiB: " +
+                                    (assessment.hostMemory().freeBytes().isPresent()
+                                    ? assessment.hostMemory().freeBytes().getAsLong()/1048576L
+                                    : "unknown") + "; " + assessment.advisory() + ".\n");
+                            output.write("GPU/VRAM: UNVERIFIED; loading/performance: NOT_CERTIFIED.\n");
+                        }
+                    } catch (SyntraLoopbackModelClient.ModelUnavailableException error) {
+                        output.write("MODEL UNAVAILABLE: " + error.getMessage() + "; no remote fallback.\n");
+                    }
+                }
                 output.flush();
                 continue;
             }
