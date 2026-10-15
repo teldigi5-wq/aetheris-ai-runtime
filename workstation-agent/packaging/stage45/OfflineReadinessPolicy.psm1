@@ -112,7 +112,7 @@ function Invoke-Stage45OfflineReview {
     foreach($root in $WorkspaceRoots) {
         $scopes+=Assert-Stage45WorkspaceRoot -Root $root
     }
-    if (($scopes | Select-Object -Unique).Count -ne $scopes.Count) {
+    if (@($scopes | Select-Object -Unique).Count -ne @($scopes).Count) {
         throw 'WORKSPACE_DUPLICATE_ROOT_DENIED'
     }
     $manifestPath=Assert-Stage45PathNoReparse -Path (Join-Path $bundle 'offline-review.json')
