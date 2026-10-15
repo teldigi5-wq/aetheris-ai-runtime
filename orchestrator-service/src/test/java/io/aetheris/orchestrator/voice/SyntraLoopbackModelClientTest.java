@@ -211,7 +211,7 @@ class SyntraLoopbackModelClientTest {
         try(var client=adapter()){
             client.reply("Explain arrays");
             assertThat(chats).hasValue(1);
-            tagsBody="{\\"models\\":[{\\"name\\":\\"qwen3:4b\\",\\"size\\":2300000000,\\"digest\\":\\"" + "b".repeat(64) + "\\"}]}";
+            tagsBody="{\"models\":[{\"name\":\"qwen3:4b\",\"size\":2300000000,\"digest\":\"" + "b".repeat(64) + "\"}]}";
             assertThatThrownBy(()->client.reply("Continue"))
                 .isInstanceOf(SyntraLoopbackModelClient.ModelUnavailableException.class)
                 .hasMessage("LOCAL_MODEL_DIGEST_CHANGED_SESSION_DENIED");
@@ -221,11 +221,11 @@ class SyntraLoopbackModelClientTest {
 
     @Test void malformedMissingMetadataAndDuplicateEntriesNeverStartChat() throws Exception {
         for(String invalid:new String[]{
-            "{\\"models\\":[{\\"name\\":\\"qwen3:4b\\"}]}",
-            "{\\"models\\":[{\\"name\\":\\"qwen3:4b\\",\\"size\\":-1,\\"digest\\":\\"" + "a".repeat(64) + "\\"}]}",
-            "{\\"models\\":[{\\"name\\":\\"../../escape\\",\\"size\\":2,\\"digest\\":\\"" + "a".repeat(64) + "\\"}]}",
-            "{\\"models\\":[{\\"name\\":\\"qwen3:4b\\",\\"size\\":2,\\"digest\\":\\"invalid\\"}]}",
-            "{\\"models\\":[{\\"name\\":\\"qwen3:4b\\",\\"size\\":2,\\"digest\\":\\"" + "a".repeat(64) + "\\"},{\\"name\\":\\"qwen3:4b\\",\\"size\\":2,\\"digest\\":\\"" + "a".repeat(64) + "\\"}]}"
+            "{\"models\":[{\"name\":\"qwen3:4b\"}]}",
+            "{\"models\":[{\"name\":\"qwen3:4b\",\"size\":-1,\"digest\":\"" + "a".repeat(64) + "\"}]}",
+            "{\"models\":[{\"name\":\"../../escape\",\"size\":2,\"digest\":\"" + "a".repeat(64) + "\"}]}",
+            "{\"models\":[{\"name\":\"qwen3:4b\",\"size\":2,\"digest\":\"invalid\"}]}",
+            "{\"models\":[{\"name\":\"qwen3:4b\",\"size\":2,\"digest\":\"" + "a".repeat(64) + "\"},{\"name\":\"qwen3:4b\",\"size\":2,\"digest\":\"" + "a".repeat(64) + "\"}]}"
         }) {
             tagsBody=invalid;
             try(var client=adapter()){
@@ -240,7 +240,7 @@ class SyntraLoopbackModelClientTest {
         var out=new StringWriter();
         try(var client=adapter()) {
             SyntraLocalTextCompanion.run(new StringReader(
-                "models\\nmodel info\\nhi syntra\\nmodels\\nmodel info\\nquit\\n"),
+                "models\nmodel info\nhi syntra\nmodels\nmodel info\nquit\n"),
                 out,()->false,client);
         }
         assertThat(out.toString()).contains("DENIED: typed wake and explicit local-model opt-in required");
