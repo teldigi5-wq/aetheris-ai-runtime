@@ -2,8 +2,6 @@
 // Fixed native synthetic fixture only. Never installed or enabled in the
 // speech runtime, never receives transcripts/PCM, user files or real secrets.
 // Build ONLY in the GitHub-hosted Windows 2022 CI synthetic test job.
-#define UNICODE
-#define _UNICODE
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <userenv.h>
@@ -60,7 +58,7 @@ bool changeSyntheticFileAcl(const std::wstring& file, PSID appSid, ACCESS_MODE o
     access.grfInheritance = NO_INHERITANCE;
     access.Trustee.TrusteeForm = TRUSTEE_IS_SID;
     access.Trustee.TrusteeType = TRUSTEE_IS_WELL_KNOWN_GROUP;
-    access.Trustee.ptstr = reinterpret_cast<LPWSTR>(appSid);
+    access.Trustee.ptstrName = reinterpret_cast<LPWSTR>(appSid);
     ec = SetEntriesInAclW(1, &access, oldAcl, &newAcl);
     if (ec == ERROR_SUCCESS) {
         ec = SetNamedSecurityInfoW(const_cast<LPWSTR>(file.c_str()),
