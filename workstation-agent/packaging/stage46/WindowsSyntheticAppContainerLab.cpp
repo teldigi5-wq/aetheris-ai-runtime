@@ -285,6 +285,40 @@ bool runAppChild(PSID appSid, const std::wstring& executable,
     return ok;
 }
 
+// Positive control is outside the AppContainer, only for a disposable
+// 127.0.0.1 ephemeral listener. Without a confirmed accessible listener,
+// a child timeout has no evidentiary value for capability isolation.
+bool positiveLoopbackControl(const sockaddr_in& address, SOCKET listener) {
+    SOCKET client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (client == INVALID_SOCKET) return false;
+    u_long nonblocking = 1;
+    bool connected = false;
+    if (ioctlsocket(client, FIONBIO, &nonblocking) == 0) {
+        int rc = connect(client, reinterpret_cast<const sockaddr*>(&address),
+                         sizeof(address));
+        if (rc == 0) {
+            connected = true;
+        } else if (WSAGetLastError() == WSAEWOULDBLOCK) {
+            fd_set writable;
+            FD_ZERO(&writable);
+            FD_SET(client, &writable);
+            timeval wait = {1, 0};
+            if (select(0, nullptr, &writable, nullptr, &wait) > 0) {
+                int error = -1;
+                int length = sizeof(error);
+                connected = getsockopt(client, SOL_SOCKET, SO_ERROR,
+                         reinterpret_cast<char*>(&error), &length) == 0 && error == 0;
+            }
+        }
+    }
+    if (connected) {
+        // Connection was established; consume backlog before child probe.
+        SOCKET peer = accept(listener, nullptr, nullptr);
+        if (peer != INVALID_SOCKET) closesocket(peer);
+    }
+    closesocket(client);
+    return connected;
+}
 bool protectedSyntheticFile(const std::wstring& path, PSID appSid) {
     HANDLE h = CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE, 0,
               nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -343,6 +377,11 @@ int parentMain() {
         int length = sizeof(address);
         if (getsockname(listener, reinterpret_cast<sockaddr*>(&address),
                         &length) == SOCKET_ERROR) break;
+        if (!positiveLoopbackControl(address, listener)) {
+            fputs("STAGE46_15_LOOPBACK_POSITIVE_CONTROL_FAILED\n", stderr);
+            break;
+        }
+        puts("STAGE46_15_LOOPBACK_POSITIVE_CONTROL_CONNECTED");
         if (!runAppChild(sid, exe, L"LOOPBACK",
             std::to_wstring(ntohs(address.sin_port)), false)) break;
         puts("STAGE46_14_LOOPBACK_NOT_CONNECTED_NETWORK_EGRESS_NOT_CERTIFIED");
