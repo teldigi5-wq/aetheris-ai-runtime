@@ -1,0 +1,182 @@
+name: Runtime Stage 46.18 Synthetic WFP Match and Dual Build Evidence
+
+on:
+  pull_request:
+    branches:
+      - feature/stage46-wfp-drop-audit-signing-spec-20261015
+      - main
+    paths:
+      - 'tools/security/stage46_wfp_synthetic_match_contract.py'
+      - 'tools/security/test_stage46_wfp_synthetic_match_contract.py'
+      - 'tools/security/stage46_synthetic_dual_build_gate.py'
+      - 'tools/security/test_stage46_synthetic_dual_build_gate.py'
+      - 'workstation-agent/packaging/stage46/WindowsSyntheticReproducibleWorkerProbe.cpp'
+      - 'workstation-agent/packaging/stage46/Test-SyntraSyntheticDualBuild.ps1'
+      - 'docs/runtime/stage46-synthetic-wfp-match-dual-build.md'
+      - '.github/workflows/runtime-stage46-synthetic-wfp-dual-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-two-build-native-artifact-evidence:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Test independent compile/link invocations on same MSVC runner
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraSyntheticDualBuild.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_18_TWO_BUILD_PROOF_FAILED' }
+      - name: Adversarial release-trust receipt tests
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tools/security -p test_stage46_synthetic_dual_build_gate.py -v
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_18_BINARY_TRUST_TEST_FAILURE' }
+
+  windows-existing-containment-and-readonly-wfp:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Build inert Java process for Windows sandbox regressions
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -f orchestrator-service/pom.xml -DskipTests compile
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_18_JAVA_FIXTURE_COMPILE_FAILED' }
+      - name: Repeat reduced token and Job Object kernel checks
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsReducedTokenLab.ps1 -ClassesPath ./orchestrator-service/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_13_REDUCED_TOKEN_REGRESSION' }
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsJobLab.ps1 -ClassesPath ./orchestrator-service/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_12_JOB_OBJECT_REGRESSION' }
+      - name: Preserve AppContainer and read-only WFP provenance gates
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsAppContainerLab.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_15_APP_CONTAINER_REGRESSION' }
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsWfpReadOnly.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_16_WFP_READ_ONLY_REGRESSION' }
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWfpDropAuditReadOnly.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_17_WFP_DROP_REGRESSION' }
+
+  linux-synthetic-voice-and-correlation-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Existing synthetic voice/STOP and owner-bound regression
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=SyntraSyntheticHostLimitsTest,SyntraSyntheticProcessSpeechBoundaryTest,SyntraSyntheticAsyncVoiceBoundaryTest,SyntraVoiceReadOnlyConversationBridgeTest,SyntraOfflineVoiceTurnCoordinatorTest,SyntraOfflineSpeechArtifactReviewTest,SyntraSyntheticAudioGateTest,SyntraSyntheticAudioTaskControlReviewTest,SyntheticVoiceOwnerConsentLabTest,SyntheticVoiceTaskControlReviewTest,VerifiedOwnerTaskReadTest test
+      - name: Stage 46.18 exact synthetic WFP matching and dual-build adversarial tests
+        run: |
+          python3 -m unittest discover -s tools/security -p test_stage46_wfp_synthetic_match_contract.py -v
+          python3 -m unittest discover -s tools/security -p test_stage46_synthetic_dual_build_gate.py -v
+      - name: Earlier Windows evidence policies stay fail closed
+        run: |
+          python3 -m unittest discover -s tools/security -p test_stage46_worker_trust_evidence.py -v
+          python3 -m unittest discover -s tools/security -p test_stage46_wfp_provenance_gate.py -v
+          python3 -m unittest discover -s tools/security -p test_stage46_wfp_drop_audit_gate.py -v
+
+  immutable-production-release-no-go:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Stage 45 all thirteen release blockers
+        run: |
+          python3 -m unittest discover -s tools/security -p test_stage45_pre_pilot_gate.py -v
+          python3 tools/security/stage45_pre_pilot_gate.py > "$RUNNER_TEMP/stage46-18-no-go.json"
+          python3 - "$RUNNER_TEMP/stage46-18-no-go.json" <<'PY'
+          import json,sys
+          with open(sys.argv[1],encoding="utf-8") as file: result=json.load(file)
+          assert result["decision"]=="NO_GO" and len(result["release_blockers"])==13
+          assert result["production_pilot_authorized"] is False
+          assert result["agent_command_execution_authorized"] is False
+          assert result["desktop_actions_authorized"] is False
+          print("STAGE46_18_PRODUCTION_AND_PHYSICAL_OWNER_PC_NO_GO")
+          PY
+
+  full-orchestrator-and-workstation-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Full orchestrator Java regression
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+      - name: Workstation agent security regression
+        run: ./mvnw -B -f workstation-agent/pom.xml test
+
+  synthetic-only-static-security-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Verify no real WFP capture and no signed-worker claims
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('workstation-agent/packaging/stage46')
+          native=(root/'WindowsSyntheticReproducibleWorkerProbe.cpp').read_text()
+          ps=(root/'Test-SyntraSyntheticDualBuild.ps1').read_text()
+          contract=Path('tools/security/stage46_wfp_synthetic_match_contract.py').read_text()
+          trust=Path('tools/security/stage46_synthetic_dual_build_gate.py').read_text()
+          assert 'FIXED_SYNTHETIC_ARTIFACT_SELFTEST_ONLY' in native
+          assert ps.count('/Brepro') >= 2
+          assert 'Get-AuthenticodeSignature' in ps and 'NotSigned' in ps
+          for marker in ('SYNTHETIC_FIXTURE_ONLY','SYNTHETIC_NO_REAL_WFP_DATA',
+                         'real_kernel_event_provenance_verified',
+                         'real_app_specific_wfp_drop_verified'):
+              assert marker in contract
+          assert '"decision": "NO_GO"' in trust
+          for bad in ('FwpmFilterAdd','FwpmFilterDelete','FwpmNetEventSubscribe',
+                      'TargetDataLine','SourceDataLine','MicCapture',
+                      'SyntraLoopbackModelClient','Desktop.getDesktop()'):
+              assert bad not in native and bad not in contract
+          print('STAGE46_18_SYNTHETIC_WFP_AND_UNSIGNED_DUAL_BUILD_NO_GO')
+          PY
