@@ -1,0 +1,139 @@
+name: Runtime Stage 46.13 Windows Reduced Privilege Identity Lab
+
+on:
+  pull_request:
+    branches:
+      - feature/stage46-windows-job-object-lab-20261015
+      - main
+    paths:
+      - 'workstation-agent/packaging/stage46/WindowsSyntheticJobLab.cs'
+      - 'workstation-agent/packaging/stage46/Test-SyntraWindowsReducedTokenLab.ps1'
+      - 'docs/runtime/stage46-windows-reduced-token-lab.md'
+      - '.github/workflows/runtime-stage46-reduced-token-lab.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-real-reduced-token-and-job-evidence:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Compile inert fixed synthetic Java probe
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -f orchestrator-service/pom.xml -DskipTests compile
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_13_JAVA_COMPILE_FAILED' }
+      - name: Verify real Windows restricted token and Job Object, no fallback
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsReducedTokenLab.ps1 -ClassesPath ./orchestrator-service/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_13_WINDOWS_REDUCED_TOKEN_NOT_VERIFIED' }
+      - name: Previous Windows Job Object regression
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsJobLab.ps1 -ClassesPath ./orchestrator-service/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_12_WINDOWS_JOB_REGRESSION' }
+
+  linux-synthetic-security-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Prior subprocess and synthetic voice regressions
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=SyntraSyntheticHostLimitsTest,SyntraSyntheticProcessSpeechBoundaryTest,SyntraSyntheticAsyncVoiceBoundaryTest,SyntraVoiceReadOnlyConversationBridgeTest,SyntraOfflineVoiceTurnCoordinatorTest,SyntraOfflineSpeechArtifactReviewTest,SyntraSyntheticAudioGateTest,SyntraSyntheticAudioTaskControlReviewTest,SyntheticVoiceOwnerConsentLabTest,SyntheticVoiceTaskControlReviewTest test
+
+  unchanged-13-blocker-production-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Stage 45 fixed release NO_GO
+        run: |
+          python3 -m unittest discover -s tools/security -p test_stage45_pre_pilot_gate.py -v
+          python3 tools/security/stage45_pre_pilot_gate.py > "$RUNNER_TEMP/stage46-13-no-go.json"
+          python3 - "$RUNNER_TEMP/stage46-13-no-go.json" <<'PY'
+          import json,sys
+          with open(sys.argv[1],encoding="utf-8") as source: report=json.load(source)
+          assert report["decision"]=="NO_GO" and len(report["release_blockers"])==13
+          assert report["production_pilot_authorized"] is False
+          assert report["agent_command_execution_authorized"] is False
+          assert report["desktop_actions_authorized"] is False
+          print("STAGE46_13_PHYSICAL_OWNER_PC_AND_PRODUCTION_NO_GO")
+          PY
+
+  complete-orchestrator-workstation-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Complete orchestrator test suite
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+      - name: Existing workstation agent security regression
+        run: ./mvnw -B -f workstation-agent/pom.xml test
+
+  static-reduced-token-not-full-sandbox:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Guard reduced token exact worker and NO_GO
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('workstation-agent/packaging/stage46')
+          code=(root/'WindowsSyntheticJobLab.cs').read_text(encoding='utf-8')
+          check=(root/'Test-SyntraWindowsReducedTokenLab.ps1').read_text(encoding='utf-8')
+          req=('OpenProcessToken','CreateRestrictedToken','CreateProcessAsUser',
+               'DISABLE_MAX_PRIVILEGE','LUA_TOKEN',
+               'RunPrivilegeReduced','CREATE_SUSPENDED',
+               'AssignProcessToJobObject', 'TerminateProcess(pi.hProcess, 26)',
+               'PrivilegeReducedTokenUsedForChild', 'EnabledPrivilegeCount')
+          assert all(t in code for t in req)
+          assert 'FILESYSTEM_AND_NETWORK_SANDBOX_NOT_CLAIMED' in check
+          banned=('@RestController','@Service','TargetDataLine','SourceDataLine',
+                  'SyntraLoopbackModelClient','OwnerPermit','VoiceSessionService')
+          assert not any(x in code for x in banned)
+          print('STAGE46_13_REDUCED_TOKEN_LAB_ONLY_NO_DEVICE_NO_EXECUTION')
+          PY
