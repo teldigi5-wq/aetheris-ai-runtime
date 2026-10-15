@@ -1,0 +1,92 @@
+name: Runtime Stage 46.3 Local Model Readiness and Digest Pin
+
+on:
+  pull_request:
+    branches:
+      - feature/stage46-local-model-loopback-20261015
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraLocalModelReadiness.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraLoopbackModelClient.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraLocalTextCompanion.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/voice/SyntraLocalModelReadinessTest.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/voice/SyntraLoopbackModelClientTest.java'
+      - 'docs/runtime/stage46-local-model-readiness.md'
+      - '.github/workflows/runtime-stage46-local-model-readiness.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  installed-only-model-metadata-and-hardware-advisory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact draft PR head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Test fake-local Ollama inventory, digest swap, RAM advisory, STOP and privacy
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=SyntraLocalModelReadinessTest,SyntraLoopbackModelClientTest,SyntraLocalTextCompanionTest,SyntheticVoiceOwnerConsentLabTest,SyntheticVoiceTaskControlReviewTest test
+      - name: Confirm untouched standalone default never uses HTTP
+        run: |
+          printf 'status\nhi syntra\nmodels\nmodel info\nquit\n' \
+            | java -cp orchestrator-service/target/classes \
+              io.aetheris.orchestrator.voice.SyntraLocalTextCompanion \
+            > "$RUNNER_TEMP/default-no-model.txt"
+          grep -F 'network NOT USED' "$RUNNER_TEMP/default-no-model.txt"
+          grep -F 'DENIED: typed wake and explicit local-model opt-in required' "$RUNNER_TEMP/default-no-model.txt"
+          echo STAGE46_MODEL_DISCOVERY_DEFAULT_DISABLED
+
+  stage45-pilot-remains-no-go:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact draft PR head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Run immutable synthetic-only NO-GO assessment
+        run: |
+          python3 -m unittest discover -s tools/security -p test_stage45_pre_pilot_gate.py -v
+          python3 tools/security/stage45_pre_pilot_gate.py > "$RUNNER_TEMP/no-go.json"
+          python3 - "$RUNNER_TEMP/no-go.json" <<'PY'
+          import json,sys
+          report=json.load(open(sys.argv[1],encoding="utf-8"))
+          assert report["decision"]=="NO_GO"
+          assert len(report["release_blockers"])==13
+          assert report["production_pilot_authorized"] is False
+          assert report["agent_command_execution_authorized"] is False
+          assert report["desktop_actions_authorized"] is False
+          print("STAGE46_MODEL_READINESS_NO_GO")
+          PY
+
+  complete-orchestrator-and-workstation-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact draft PR head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Full orchestrator Java tests
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+      - name: Existing workstation-agent tests
+        run: ./mvnw -B -f workstation-agent/pom.xml test
