@@ -120,3 +120,7 @@ try {
 } finally {
     Remove-Item -LiteralPath $caseRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
+
+# Explicit success after expected child-process denials; never mask a
+# failed assertion (uncaught exceptions exit before reaching this line).
+exit 0
