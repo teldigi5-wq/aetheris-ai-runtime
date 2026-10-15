@@ -52,6 +52,7 @@ public final class SyntraSyntheticProcessSpeechBoundary implements AutoCloseable
     private final BooleanSupplier externalStop;
     private final int maxWaitMs;
     private final FaultMode mode;
+    private final SyntraSyntheticHostLimits.Profile hostProfile;
     private final AtomicBoolean started = new AtomicBoolean(false);
     private final AtomicBoolean latched = new AtomicBoolean(false);
     private final AtomicBoolean busy = new AtomicBoolean(false);
@@ -61,17 +62,23 @@ public final class SyntraSyntheticProcessSpeechBoundary implements AutoCloseable
     public SyntraSyntheticProcessSpeechBoundary(BooleanSupplier syntheticFixtureGrant,
                                                 BooleanSupplier independentStop,
                                                 int maxWaitMs) {
-        this(syntheticFixtureGrant, independentStop, maxWaitMs, FaultMode.NORMAL);
+        this(syntheticFixtureGrant, independentStop, maxWaitMs, FaultMode.NORMAL,
+                SyntraSyntheticHostLimits.Profile.PORTABLE_SYNTHETIC_ONLY);
     }
 
     /** Package-private fault injection is available to same-package tests,
      * not to arbitrary spoken input, CLI flags or model-generated requests. */
     private SyntraSyntheticProcessSpeechBoundary(BooleanSupplier syntheticFixtureGrant,
                                                   BooleanSupplier independentStop,
-                                                  int maxWaitMs, FaultMode mode) {
+                                                  int maxWaitMs, FaultMode mode,
+                                                  SyntraSyntheticHostLimits.Profile hostProfile) {
         this.permission = Objects.requireNonNull(syntheticFixtureGrant);
         this.externalStop = Objects.requireNonNull(independentStop);
         this.mode = Objects.requireNonNull(mode);
+        this.hostProfile = Objects.requireNonNull(hostProfile);
+        if (hostProfile == SyntraSyntheticHostLimits.Profile.LINUX_RLIMIT_LAB &&
+                !SyntraSyntheticHostLimits.linuxLabAvailable())
+            throw new IllegalStateException("LINUX_RESOURCE_LAB_NOT_SUPPORTED");
         if (maxWaitMs < MIN_WAIT_MS || maxWaitMs > MAX_WAIT_MS)
             throw new IllegalArgumentException("INVALID_PROCESS_WAIT_BUDGET");
         this.maxWaitMs = maxWaitMs;
@@ -83,7 +90,18 @@ public final class SyntraSyntheticProcessSpeechBoundary implements AutoCloseable
                                                          int maxWaitMs,
                                                          String faultMode) {
         return new SyntraSyntheticProcessSpeechBoundary(grant, stop,
-                maxWaitMs, FaultMode.valueOf(faultMode));
+                maxWaitMs, FaultMode.valueOf(faultMode),
+                SyntraSyntheticHostLimits.Profile.PORTABLE_SYNTHETIC_ONLY);
+    }
+
+    /** Only package-local synthetic tests can opt into the Linux limits lab.
+     * Windows and other hosts fail closed; this is not production sandboxing. */
+    static SyntraSyntheticProcessSpeechBoundary forLinuxLimitsTest(
+            BooleanSupplier grant, BooleanSupplier stop, int maxWaitMs,
+            String faultMode) {
+        return new SyntraSyntheticProcessSpeechBoundary(grant, stop,
+                maxWaitMs, FaultMode.valueOf(faultMode),
+                SyntraSyntheticHostLimits.Profile.LINUX_RLIMIT_LAB);
     }
 
     /** A single, explicitly opted-in synthetic fixture session. */
@@ -157,9 +175,8 @@ public final class SyntraSyntheticProcessSpeechBoundary implements AutoCloseable
                 revoke();
                 return result(Outcome.WORKER_REJECTED_LATCHED, 0);
             }
-            var command = new ProcessBuilder(javaExecutable, "-Xms16m",
-                    "-Xmx64m", "-cp", classPath,
-                    SyntraSyntheticPcmWorkerMain.class.getName(), mode.name());
+            var command = new ProcessBuilder(SyntraSyntheticHostLimits.command(
+                    hostProfile, javaExecutable, classPath, mode.name()));
             command.redirectErrorStream(true);
             // Do not forward inherited API keys or credentials to the child.
             command.environment().clear();
