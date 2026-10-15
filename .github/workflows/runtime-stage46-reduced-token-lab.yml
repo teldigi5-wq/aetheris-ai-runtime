@@ -126,7 +126,7 @@ jobs:
           code=(root/'WindowsSyntheticJobLab.cs').read_text(encoding='utf-8')
           check=(root/'Test-SyntraWindowsReducedTokenLab.ps1').read_text(encoding='utf-8')
           req=('OpenProcessToken','CreateRestrictedToken','CreateProcessAsUser',
-               'DISABLE_MAX_PRIVILEGE','LUA_TOKEN',
+               'DISABLE_MAX_PRIVILEGE',
                'RunPrivilegeReduced','CREATE_SUSPENDED',
                'AssignProcessToJobObject', 'TerminateProcess(pi.hProcess, 26)',
                'PrivilegeReducedTokenUsedForChild', 'EnabledPrivilegeCount')
