@@ -1,0 +1,233 @@
+name: Runtime Stage 45.5.19 Pre-Pilot NO-GO Security Review
+
+on:
+  pull_request:
+    branches:
+      - security/stage45-voice-owner-consent-lab-20261015
+      - main
+    paths:
+      - 'tools/security/stage45_pre_pilot_gate.py'
+      - 'tools/security/test_stage45_pre_pilot_gate.py'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntheticVoiceOwnerConsentLab.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/voice/SyntheticVoiceTaskControlReviewTest.java'
+      - 'docs/security/stage45-prepilot-no-go-review.md'
+      - '.github/workflows/runtime-stage45-prepilot-review.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  immutable-no-go-inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      AETHERIS_STAGE45_WINDOWS_LAB: 'true'
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Verify exact HEAD, not PR merge commit
+        env:
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$PR_HEAD"
+      - name: Test NO-GO policy, forged promotion and missing blocker denial
+        run: python3 -m unittest discover -s tools/security -p test_stage45_pre_pilot_gate.py -v
+      - name: Produce offline machine-readable NO-GO readiness assessment
+        run: |
+          python3 tools/security/stage45_pre_pilot_gate.py > "$RUNNER_TEMP/aetheris-stage45-prepilot-no-go.json"
+          python3 - "$RUNNER_TEMP/aetheris-stage45-prepilot-no-go.json" <<'PY'
+          import json,sys
+          report=json.load(open(sys.argv[1],encoding="utf-8"))
+          assert report["decision"]=="NO_GO"
+          assert report["synthetic_source_inventory_complete"]
+          assert len(report["release_blockers"])>=10
+          assert report["production_pilot_authorized"] is False
+          assert report["agent_command_execution_authorized"] is False
+          assert report["desktop_actions_authorized"] is False
+          print("STAGE45_PREPILOT_EXPECTED_NO_GO blockers="+str(len(report["release_blockers"])))
+          PY
+      - name: Recheck Windows offline review policy without installing anything
+        shell: pwsh
+        run: ./workstation-agent/packaging/stage45/Test-OfflineReadiness.ps1
+
+  cross-boundary-voice-taskcontrol-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Test real TaskControl STOP state blocks old voice consent even after release
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=SyntheticVoiceTaskControlReviewTest,SyntheticVoiceOwnerConsentLabTest test
+
+  disposable-postgres-cross-stage-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: stage45-final-ci-synthetic
+          POSTGRES_DB: aetheris_stage45_prepilot_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aetheris_stage45_prepilot_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    env:
+      AETHERIS_STAGE45_MULTIAGENT_PG_CI: 'true'
+      AETHERIS_STAGE45_AUDIT_CI: 'true'
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Repeat concurrent agent quotas and simulated STOP rollback using disposable PostgreSQL
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:5432/aetheris_stage45_prepilot_ci
+          SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: stage45-final-ci-synthetic
+          SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dspring.datasource.url="$SPRING_DATASOURCE_URL" \
+            -Dspring.datasource.driver-class-name="$SPRING_DATASOURCE_DRIVER_CLASS_NAME" \
+            -Dspring.datasource.username="$SPRING_DATASOURCE_USERNAME" \
+            -Dspring.datasource.password="$SPRING_DATASOURCE_PASSWORD" \
+            -Dspring.jpa.hibernate.ddl-auto=create-drop \
+            -Dtest=SyntheticMultiAgentAuthorityLabJpaTest,SyntheticStopAuditRollbackIT,SyntheticVoiceTaskControlReviewTest test
+
+  fixed-broker-crypto-and-fail-closed-faults:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Re-test key custody, broker STOP protocol, PID changes and journal rollback
+        run: |
+          go test -v \
+            tests/sandbox/stage45_fixed_kill_broker.go \
+            tests/sandbox/stage45_broker_recovery.go \
+            tests/sandbox/stage45_kill_broker_protocol.go \
+            tests/sandbox/stage45_key_custody.go \
+            tests/sandbox/stage45_host_watch_state.go \
+            tests/sandbox/stage45_key_custody_test.go \
+            tests/sandbox/stage45_broker_recovery_test.go \
+            tests/sandbox/stage45_kill_broker_protocol_test.go \
+            tests/sandbox/stage45_host_watch_state_test.go
+
+  fixed-oci-stop-broker-postgres:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: stage45-final-broker-synthetic
+          POSTGRES_DB: aetheris_stage45_final_broker
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aetheris_stage45_final_broker"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    env:
+      AETHERIS_STAGE45_BROKER_CI: 'true'
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Verify disposable OS-user and Docker prerequisites
+        run: |
+          go version
+          id nobody
+          docker info --format '{{.ServerVersion}}'
+          sudo -n true
+      - name: Build detached fixed-target kill broker and unprivileged verifier
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" \
+            -o "$RUNNER_TEMP/stage45-unprivileged-verifier" \
+            tests/sandbox/stage45_unprivileged_watch_verifier.go \
+            tests/sandbox/stage45_kill_broker_protocol.go \
+            tests/sandbox/stage45_host_watch_state.go \
+            tests/sandbox/stage45_key_custody.go
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" \
+            -o "$RUNNER_TEMP/stage45-kill-broker" \
+            tests/sandbox/stage45_fixed_kill_broker.go \
+            tests/sandbox/stage45_broker_recovery.go \
+            tests/sandbox/stage45_kill_broker_protocol.go \
+            tests/sandbox/stage45_key_custody.go
+          chmod 755 "$RUNNER_TEMP/stage45-unprivileged-verifier" "$RUNNER_TEMP/stage45-kill-broker"
+      - name: Pull fixed synthetic OCI image outside workload
+        run: docker pull ghcr.io/containerd/busybox@sha256:907ca53d7e2947e849b839b1cd258c98fd3916c60f2e6e70c30edbf741ab6754
+      - name: Retest signed STOP and deadman on synthetic container and PostgreSQL
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:5432/aetheris_stage45_final_broker
+          SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: stage45-final-broker-synthetic
+          SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dspring.datasource.url="$SPRING_DATASOURCE_URL" \
+            -Dspring.datasource.driver-class-name="$SPRING_DATASOURCE_DRIVER_CLASS_NAME" \
+            -Dspring.datasource.username="$SPRING_DATASOURCE_USERNAME" \
+            -Dspring.datasource.password="$SPRING_DATASOURCE_PASSWORD" \
+            -Dspring.jpa.hibernate.ddl.auto=create-drop \
+            -Daetheris.stage45.verifier.bin="$RUNNER_TEMP/stage45-unprivileged-verifier" \
+            -Daetheris.stage45.broker.bin="$RUNNER_TEMP/stage45-kill-broker" \
+            -Dtest=SyntheticSeparatedKillBrokerIT,SyntheticSupervisorPulseLabJpaTest test
+
+  complete-java-and-workstation-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Full Java orchestrator regression
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+      - name: Existing workstation-agent Java regression
+        run: ./mvnw -B -f workstation-agent/pom.xml test
