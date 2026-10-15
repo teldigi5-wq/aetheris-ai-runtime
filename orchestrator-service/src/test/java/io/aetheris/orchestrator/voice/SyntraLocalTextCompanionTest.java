@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import java.io.StringReader;
 import java.io.StringWriter;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -67,14 +66,13 @@ class SyntraLocalTextCompanionTest {
     @Test
     void externalStopAfterWakeBlocksPendingRequestsAndCannotBeReleasedInSession()
             throws Exception {
-        var stop=new AtomicBoolean(false);
         var writer=new StringWriter();
         // Switch external STOP after the second signal read. No host
         // process or real asynchronous watcher is used.
         var reads=new java.util.concurrent.atomic.AtomicInteger();
         SyntraLocalTextCompanion.run(
                 new StringReader("hi syntra\nopen editor\nquit\n"),
-                writer, () -> reads.incrementAndGet() >= 3);
+                writer, () -> reads.incrementAndGet() >= 4);
         assertThat(writer.toString()).contains("text wake acknowledged");
         assertThat(writer.toString()).contains("STOP: external signal active");
         assertThat(writer.toString()).doesNotContain("PREVIEW ONLY");
