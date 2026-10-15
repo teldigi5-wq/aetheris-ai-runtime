@@ -208,9 +208,18 @@ public final class SyntheticVoiceOwnerConsentLab {
     }
 
     private boolean stopActive() {
-        if(localStopLatched) return true;
-        try {return independentEmergencyStop.getAsBoolean();}
-        catch (RuntimeException unavailable) {return true;}
+        if (localStopLatched) return true;
+        // A later release of a volatile global STOP must NOT resurrect
+        // a pending, previously owner-signed request from this session.
+        // Every entry point calling this method is synchronized.
+        try {
+            if (!independentEmergencyStop.getAsBoolean()) return false;
+        } catch (RuntimeException unavailable) {
+            // Unknown supervisor status is an irreversible local STOP.
+        }
+        localStopLatched=true;
+        sessions.clear();
+        return true;
     }
 
     private static String normalize(String input) {
