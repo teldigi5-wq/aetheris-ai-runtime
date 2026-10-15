@@ -257,9 +257,20 @@ bool runAppChild(PSID appSid, const std::wstring& executable,
                     if (ok) puts("STAGE46_14_APP_CONTAINER_STALL_JOB_KILLED");
                 } else if (waited == WAIT_OBJECT_0 &&
                            GetExitCodeProcess(pi.hProcess, &exitStatus)) {
-                    ok = exitStatus == 0;
-                    if (!ok) fprintf(stderr, "STAGE46_14_CHILD_%ls_EXIT_%lu\n",
-                                     mode.c_str(), exitStatus);
+                    // WSAETIMEDOUT proves only that the bounded loopback
+                    // attempt did not connect during this probe. It is NOT
+                    // definitive Windows network-policy denial. Never claim
+                    // a complete network sandbox from this result.
+                    if (mode == L"LOOPBACK" && exitStatus == 96) {
+                        puts("STAGE46_14_LOOPBACK_TIMEOUT_NETWORK_POLICY_INCONCLUSIVE");
+                        ok = true;
+                    } else {
+                        ok = exitStatus == 0;
+                        if (!ok) fprintf(stderr, "STAGE46_14_CHILD_%ls_EXIT_%lu\n",
+                                         mode.c_str(), exitStatus);
+                        if (ok && mode == L"LOOPBACK")
+                            puts("STAGE46_14_LOOPBACK_ACCESS_DENIED_BY_WINSOCK");
+                    }
                 } else {
                     fprintf(stderr, "STAGE46_14_CHILD_%ls_NO_CONFIRMED_EXIT_WAIT_%lu\n",
                             mode.c_str(), waited);
@@ -334,7 +345,7 @@ int parentMain() {
                         &length) == SOCKET_ERROR) break;
         if (!runAppChild(sid, exe, L"LOOPBACK",
             std::to_wstring(ntohs(address.sin_port)), false)) break;
-        puts("STAGE46_14_LOOPBACK_CONNECT_DENIED_WITH_ZERO_CAPABILITIES");
+        puts("STAGE46_14_LOOPBACK_NOT_CONNECTED_NETWORK_EGRESS_NOT_CERTIFIED");
         if (!runAppChild(sid, exe, L"STALL", L"NONE", true)) break;
         success = true;
     } while (false);
