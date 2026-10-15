@@ -33,6 +33,7 @@ int wmain(int argc, wchar_t** argv) {
     if (openStatus != ERROR_SUCCESS || !engine.value) {
         std::puts("STAGE46_17_WFP_SNAPSHOT_UNAVAILABLE");
         std::puts("STAGE46_17_WFP_PROCESS_CORRELATION_NOT_VERIFIED");
+        std::puts("STAGE46_17_NO_WFP_FILTER_OR_AUDIT_CONFIGURATION_CHANGED");
         return 0; // Read-only diagnostic unavailable, not a release gate.
     }
     // Restrict the fixed snapshot to CLASSIFY_DROP, not arbitrary traffic.
@@ -51,6 +52,7 @@ int wmain(int argc, wchar_t** argv) {
     if (status != ERROR_SUCCESS || !enumerator.value) {
         std::puts("STAGE46_17_WFP_SNAPSHOT_UNAVAILABLE");
         std::puts("STAGE46_17_WFP_PROCESS_CORRELATION_NOT_VERIFIED");
+        std::puts("STAGE46_17_NO_WFP_FILTER_OR_AUDIT_CONFIGURATION_CHANGED");
         return 0;
     }
     constexpr UINT32 kMaxSnapshotEvents = 16;
