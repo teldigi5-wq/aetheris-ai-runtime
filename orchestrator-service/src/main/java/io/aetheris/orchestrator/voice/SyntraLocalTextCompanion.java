@@ -115,7 +115,7 @@ public final class SyntraLocalTextCompanion {
                 output.write("Offline text preview: hi syntra | show system status | open editor | open project notes | status | stop | quit.\n");
                 output.write("Desktop requests create proposals only; no approval or real action is possible here.\n");
                 if (localModel != null)
-                    output.write("After typed wake: models | model info | ask YOUR_QUESTION (preinstalled Ollama on loopback only).\n");
+                    output.write("After typed wake: models | model info | model health | clear context | model reset | ask YOUR_QUESTION (preinstalled Ollama on loopback only).\n");
                 output.flush();
                 continue;
             }
@@ -144,7 +144,8 @@ public final class SyntraLocalTextCompanion {
 
             if ("status".equals(normalized)) {
                 LocalSpeechRuntimePlan plan = LocalSpeechRuntimePlan.current();
-                output.write("STATUS: LOCAL_TEXT_PREVIEW; command execution OFF; installation OFF; network NOT USED.\n");
+                output.write("STATUS: LOCAL_TEXT_PREVIEW; command execution OFF; installation OFF; network "
+                        + (localModel == null ? "NOT USED." : "LOOPBACK OPT-IN ONLY.") + "\n");
                 output.write("SPEECH: " + plan.state()
                         + "; microphone=" + plan.microphoneIntegrated()
                         + "; local-STT=" + plan.localSttConnected()
@@ -180,6 +181,30 @@ public final class SyntraLocalTextCompanion {
                     } catch (SyntraLoopbackModelClient.ModelUnavailableException error) {
                         output.write("MODEL UNAVAILABLE: " + error.getMessage() + "; no remote fallback.\n");
                     }
+                }
+                output.flush();
+                continue;
+            }
+
+            if ("model health".equals(normalized) || "model reset".equals(normalized)
+                    || "clear context".equals(normalized)) {
+                if (localModel == null || !awake || !java.time.Instant.now().isBefore(sessionEnds)) {
+                    output.write("DENIED: typed wake and explicit local-model opt-in required.\n");
+                } else if ("clear context".equals(normalized)) {
+                    localModel.clearContext();
+                    output.write("LOCAL CONTEXT CLEARED: session-only text history deleted; model digest still pinned.\n");
+                } else if ("model reset".equals(normalized)) {
+                    localModel.resetFailedSession();
+                    output.write("MODEL RETRY RESET: transient failures cleared manually; model identity latch retained.\n");
+                } else {
+                    var health=localModel.health();
+                    output.write("MODEL HEALTH: completed=" + health.completedReplies()
+                            + "; consecutive failures=" + health.consecutiveFailures()
+                            + "; circuit open=" + health.circuitOpen()
+                            + "; model identity blocked=" + health.modelIdentityBlocked()
+                            + "; last local attempt ms=" + health.lastAttemptMillis()
+                            + "; context turns=" + health.retainedTurns() + ".\n");
+                    output.write("LOCAL TIMING: synthetic-only until real weights tested; GPU/model-load certification=false.\n");
                 }
                 output.flush();
                 continue;

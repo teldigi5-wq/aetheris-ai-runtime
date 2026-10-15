@@ -32,6 +32,7 @@ class SyntraLoopbackModelClientTest {
     private volatile int chatStatus;
     private volatile String responseType;
     private volatile AtomicBoolean stopDuringChat;
+    private volatile long artificialChatDelayMillis;
 
     @BeforeEach void startLoopback() throws Exception {
         tags.set(0);
@@ -43,6 +44,7 @@ class SyntraLoopbackModelClientTest {
         chatStatus=200;
         responseType="application/json";
         stopDuringChat=null;
+        artificialChatDelayMillis=0;
         server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
         server.createContext("/api/tags",e->{
             tags.incrementAndGet();
@@ -53,6 +55,8 @@ class SyntraLoopbackModelClientTest {
             try {
                 request.set(JSON.readTree(e.getRequestBody()));
                 if(stopDuringChat!=null) stopDuringChat.set(true);
+                if(artificialChatDelayMillis>0)
+                    Thread.sleep(artificialChatDelayMillis);
             } catch(Exception parseFailure){
                 respond(e,400,"{}");
                 return;
@@ -248,6 +252,117 @@ class SyntraLoopbackModelClientTest {
         assertThat(out.toString()).contains("MODEL REVIEW: qwen3:4b");
         assertThat(out.toString()).contains("GPU/VRAM: UNVERIFIED; loading/performance: NOT_CERTIFIED");
         assertThat(chats).hasValue(0);
+    }
+
+    @Test void fixedContextAndUnloadHintDoNotEnableAnyToolsOrModels() throws Exception {
+        try(var local=adapter()){
+            local.reply("Explain Java methods");
+            JsonNode posted=request.get();
+            assertThat(posted.path("options").path("num_ctx").asInt()).isEqualTo(2048);
+            assertThat(posted.path("options").path("num_predict").asInt()).isEqualTo(256);
+            assertThat(posted.path("keep_alive").asText()).isEqualTo("0");
+            assertThat(posted.path("stream").asBoolean()).isFalse();
+            assertThat(posted.has("tools")).isFalse();
+            var health=local.health();
+            assertThat(health.completedReplies()).isEqualTo(1);
+            assertThat(health.lastAttemptMillis()).isGreaterThanOrEqualTo(0L);
+            assertThat(health.lastAttemptSucceeded()).isTrue();
+            assertThat(health.loadingOrGpuCertified()).isFalse();
+        }
+    }
+
+    @Test void repeatedModelFailuresOpenCircuitUntilExplicitLocalReset() throws Exception {
+        tagsStatus=503;
+        try(var local=adapter()){
+            for(int i=0;i<3;i++) {
+                assertThatThrownBy(()->local.reply("private question"))
+                    .isInstanceOf(SyntraLoopbackModelClient.ModelUnavailableException.class)
+                    .hasMessage("MODEL_HTTP_STATUS_DENIED");
+            }
+            assertThat(local.health().consecutiveFailures()).isEqualTo(3);
+            assertThat(local.health().circuitOpen()).isTrue();
+            assertThat(local.health().completedReplies()).isZero();
+            assertThat(tags).hasValue(3);
+            assertThat(chats).hasValue(0);
+            tagsStatus=200;
+            assertThatThrownBy(()->local.reply("private question"))
+                .isInstanceOf(SyntraLoopbackModelClient.ModelUnavailableException.class)
+                .hasMessage("LOCAL_MODEL_CIRCUIT_OPEN");
+            assertThat(tags).hasValue(3);
+            local.resetFailedSession();
+            assertThat(local.health().circuitOpen()).isFalse();
+            assertThat(local.reply("new consent-free text question")).contains("fake local model");
+            assertThat(local.health().completedReplies()).isEqualTo(1);
+            assertThat(local.health().consecutiveFailures()).isZero();
+            assertThat(chats).hasValue(1);
+        }
+    }
+
+    @Test void digestSubstitutionCannotBeBypassedByRetryResetOrReversion() throws Exception {
+        try(var local=adapter()){
+            local.reply("private one");
+            tagsBody="{\"models\":[{\"name\":\"qwen3:4b\",\"size\":2300000000,\"digest\":\"" + "b".repeat(64) + "\"}]}";
+            assertThatThrownBy(()->local.reply("private two"))
+                .isInstanceOf(SyntraLoopbackModelClient.ModelUnavailableException.class)
+                .hasMessage("LOCAL_MODEL_DIGEST_CHANGED_SESSION_DENIED");
+            assertThat(local.health().modelIdentityBlocked()).isTrue();
+            tagsBody="{\"models\":[{\"name\":\"qwen3:4b\",\"size\":2300000000,\"digest\":\"" + "a".repeat(64) + "\"}]}";
+            local.resetFailedSession();
+            assertThat(local.health().retainedTurns()).isZero();
+            assertThatThrownBy(()->local.reply("private three"))
+                .isInstanceOf(SyntraLoopbackModelClient.ModelUnavailableException.class)
+                .hasMessage("LOCAL_MODEL_IDENTITY_BLOCKED");
+            assertThat(chats).hasValue(1);
+        }
+    }
+
+    @Test void clearingContextDeletesOnlyVolatilePromptsAndNeverInvokesHttp() throws Exception {
+        try(var local=adapter()){
+            local.reply("an example question");
+            assertThat(local.health().retainedTurns()).isEqualTo(2);
+            int before=chats.get();
+            local.clearContext();
+            assertThat(local.health().retainedTurns()).isZero();
+            assertThat(chats).hasValue(before);
+            local.reply("another question");
+            assertThat(request.get().path("messages").size()).isEqualTo(2);
+            assertThat(local.health().completedReplies()).isEqualTo(2);
+        }
+    }
+
+    @Test void consoleCanInspectFailureHealthAndManuallyClearHistoryWithoutToolCalls()
+            throws Exception {
+        try(var local=adapter()){
+            var out=new StringWriter();
+            SyntraLocalTextCompanion.run(new StringReader(
+                "model health\nhi syntra\nask explain java\nmodel health\nclear context\nmodel health\nmodel reset\nquit\n"),
+                out,()->false,local);
+            assertThat(out.toString()).contains("DENIED: typed wake and explicit local-model opt-in required");
+            assertThat(out.toString()).contains("MODEL HEALTH: completed=1");
+            assertThat(out.toString()).contains("LOCAL CONTEXT CLEARED");
+            assertThat(out.toString()).contains("context turns=0");
+            assertThat(out.toString()).contains("MODEL RETRY RESET");
+            assertThat(out.toString()).doesNotContain("Launched", "Executed desktop");
+            assertThat(chats).hasValue(1);
+        }
+    }
+
+    @Test void slowLoopbackInferenceTimesOutAndNeverAddsChatHistory() throws Exception {
+        artificialChatDelayMillis=550;
+        try(var local=new SyntraLoopbackModelClient(
+                "qwen3:4b",server.getAddress().getPort(),
+                java.time.Duration.ofMillis(150))){
+            assertThatThrownBy(()->local.reply("Do not run apps"))
+                .isInstanceOf(SyntraLoopbackModelClient.ModelUnavailableException.class)
+                .hasMessage("LOCAL_MODEL_UNAVAILABLE");
+            var health=local.health();
+            assertThat(health.completedReplies()).isZero();
+            assertThat(health.consecutiveFailures()).isEqualTo(1);
+            assertThat(health.retainedTurns()).isZero();
+            assertThat(health.lastAttemptSucceeded()).isFalse();
+            assertThat(health.lastAttemptMillis()).isGreaterThanOrEqualTo(100L);
+            assertThat(health.loadingOrGpuCertified()).isFalse();
+        }
     }
 
 }
