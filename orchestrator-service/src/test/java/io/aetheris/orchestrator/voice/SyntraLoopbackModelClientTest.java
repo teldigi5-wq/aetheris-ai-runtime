@@ -37,7 +37,7 @@ class SyntraLoopbackModelClientTest {
         tags.set(0);
         chats.set(0);
         request.set(null);
-        tagsBody="{\"models\":[{\"name\":\"qwen3:4b\",\"digest\":\"ci-synthetic\"}]}";
+        tagsBody="{\"models\":[{\"name\":\"qwen3:4b\",\"size\":2300000000,\"digest\":\"" + "a".repeat(64) + "\"}]}";
         chatBody="{\"done\":true,\"message\":{\"role\":\"assistant\",\"content\":\"Hello from a fake local model\"}}";
         tagsStatus=200;
         chatStatus=200;
@@ -86,14 +86,14 @@ class SyntraLoopbackModelClientTest {
             assertThat(payload.path("messages").get(0).path("role").asText()).isEqualTo("system");
             assertThat(payload.path("messages").get(1).path("content").asText()).isEqualTo("Explain a Java array");
             client.reply("And give one example");
-            assertThat(tags).hasValue(1);
+            assertThat(tags).hasValue(2);
             assertThat(chats).hasValue(2);
             assertThat(request.get().path("messages").size()).isEqualTo(4);
         }
     }
 
     @Test void refusesNonInstalledModelBeforeAnyChatOrImplicitPull() throws Exception {
-        tagsBody="{\"models\":[{\"name\":\"llama3.2:3b\"}]}";
+        tagsBody="{\"models\":[{\"name\":\"llama3.2:3b\",\"size\":2100000000,\"digest\":\"" + "b".repeat(64) + "\"}]}";
         try(var client=adapter()){
             assertThatThrownBy(() -> client.reply("hello"))
                     .isInstanceOf(SyntraLoopbackModelClient.ModelUnavailableException.class)
