@@ -6,7 +6,6 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.InputStream;
-import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.ProxySelector;
 import java.net.SocketAddress;
@@ -17,7 +16,6 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
@@ -48,7 +46,11 @@ public final class SyntraLoopbackModelClient implements AutoCloseable {
     private final URI base;
     private final ObjectMapper json = new ObjectMapper();
     private final Deque<Turn> history = new ArrayDeque<>();
-    private boolean installedModelChecked;
+    private String pinnedDigest;
+    private static final int MAX_MODEL_ENTRIES = 128;
+    private static final long MAX_DISK_BYTES = 200L * 1024 * 1024 * 1024;
+
+    public record InstalledModel(String name, long diskBytes, String sha256Digest) {}
 
     private record Turn(String role,String text) {}
 
@@ -87,10 +89,7 @@ public final class SyntraLoopbackModelClient implements AutoCloseable {
             throw new ModelUnavailableException("INVALID_MODEL_PROMPT");
         }
         try {
-            if (!installedModelChecked) {
-                verifyInstalledModel();
-                installedModelChecked = true;
-            }
+            verifyInstalledModel();
             ObjectNode body = json.createObjectNode();
             body.put("model", model);
             body.put("stream", false);
@@ -138,17 +137,70 @@ public final class SyntraLoopbackModelClient implements AutoCloseable {
         return item;
     }
 
-    private void verifyInstalledModel() throws Exception {
-        JsonNode tags = invokeJson("/api/tags", null, Duration.ofSeconds(4));
-        JsonNode models = tags.path("models");
-        if (!models.isArray()) throw new ModelUnavailableException("MODEL_DISCOVERY_INVALID");
-        for (JsonNode entry : models) {
-            if (entry.path("name").isTextual() && model.equals(entry.path("name").asText())) {
-                return;
+    /** Inventory is read only from the existing local Ollama daemon;
+     * never downloads, auto-selects or starts any model. */
+    public synchronized List<InstalledModel> listInstalledModels() throws ModelUnavailableException {
+        try {
+            JsonNode tags = invokeJson("/api/tags", null, Duration.ofSeconds(4));
+            JsonNode models = tags.path("models");
+            if (!models.isArray() || models.size() > MAX_MODEL_ENTRIES) {
+                throw new ModelUnavailableException("MODEL_DISCOVERY_INVALID");
             }
+            List<InstalledModel> result = new java.util.ArrayList<>();
+            java.util.Set<String> names = new java.util.HashSet<>();
+            for (JsonNode entry:models) {
+                JsonNode name = entry.path("name");
+                JsonNode size = entry.path("size");
+                JsonNode digest = entry.path("digest");
+                if (!name.isTextual() || !size.isIntegralNumber()
+                        || !digest.isTextual()) {
+                    throw new ModelUnavailableException("MODEL_METADATA_INCOMPLETE");
+                }
+                String id=name.asText();
+                String hash=digest.asText();
+                long bytes=size.asLong();
+                if (!id.matches("[A-Za-z0-9][A-Za-z0-9._:-]{0,79}")
+                        || id.contains("..") || bytes<=0 || bytes>MAX_DISK_BYTES
+                        || !hash.matches("[0-9a-f]{64}") || !names.add(id)) {
+                    throw new ModelUnavailableException("MODEL_METADATA_INVALID");
+                }
+                result.add(new InstalledModel(id,bytes,hash));
+            }
+            return List.copyOf(result);
+        } catch(ModelUnavailableException error) {
+            throw error;
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new ModelUnavailableException("LOCAL_MODEL_INTERRUPTED");
+        } catch (Exception unavailable) {
+            throw new ModelUnavailableException("LOCAL_MODEL_UNAVAILABLE");
         }
-        // No implicit remote model pull: fail if a model isn't already installed.
+    }
+
+    /** Review selected model metadata and host-RAM signal; does not load
+     * weights or claim model fit, dedicated GPU memory or benchmark data. */
+    public synchronized SyntraLocalModelReadiness.Review reviewSelectedModel()
+            throws ModelUnavailableException {
+        InstalledModel chosen = findSelectedModel();
+        return SyntraLocalModelReadiness.evaluate(chosen.name(),
+                chosen.diskBytes(), chosen.sha256Digest(),
+                SyntraLocalModelReadiness.observe());
+    }
+
+    private InstalledModel findSelectedModel() throws ModelUnavailableException {
+        for (InstalledModel candidate:listInstalledModels())
+            if (model.equals(candidate.name())) return candidate;
         throw new ModelUnavailableException("MODEL_NOT_INSTALLED_LOCALLY");
+    }
+
+    private void verifyInstalledModel() throws ModelUnavailableException {
+        InstalledModel installed = findSelectedModel();
+        if (pinnedDigest == null) {
+            pinnedDigest = installed.sha256Digest();
+        } else if (!pinnedDigest.equals(installed.sha256Digest())) {
+            history.clear();
+            throw new ModelUnavailableException("LOCAL_MODEL_DIGEST_CHANGED_SESSION_DENIED");
+        }
     }
 
     private JsonNode invokeJson(String path,String payload,Duration timeout) throws Exception {
@@ -199,7 +251,7 @@ public final class SyntraLoopbackModelClient implements AutoCloseable {
     /** Session-local conversation history is never saved to disk. */
     @Override public synchronized void close() {
         history.clear();
-        installedModelChecked=false;
+        pinnedDigest=null;
     }
 
     public static final class ModelUnavailableException extends Exception {
