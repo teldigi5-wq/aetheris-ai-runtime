@@ -1,0 +1,92 @@
+name: Runtime Stage 46.5 Synthetic Offline Speech Foundation
+
+on:
+  pull_request:
+    branches:
+      - feature/stage46-inference-budget-recovery-20261015
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraSyntheticAudioGate.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/voice/SyntraSyntheticAudioGateTest.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/voice/SyntraSyntheticAudioTaskControlReviewTest.java'
+      - 'docs/runtime/stage46-synthetic-offline-speech-foundation.md'
+      - '.github/workflows/runtime-stage46-synthetic-offline-speech.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-audio-consent-stop-and-zeroization:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Exercise fake PCM/STT/TTS policy, actual TaskControl STOP and prior consent
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=SyntraSyntheticAudioGateTest,SyntraSyntheticAudioTaskControlReviewTest,SyntheticVoiceOwnerConsentLabTest,SyntheticVoiceTaskControlReviewTest test
+      - name: Confirm the standalone default console remains microphone and network disabled
+        run: |
+          printf 'status\nhi syntra\nstop everything\nquit\n' \
+            | java -cp orchestrator-service/target/classes \
+              io.aetheris.orchestrator.voice.SyntraLocalTextCompanion \
+            > "$RUNNER_TEMP/offline-stage46-speech-disabled.txt"
+          grep -F 'microphone=false; local-STT=false; local-TTS=false' \
+            "$RUNNER_TEMP/offline-stage46-speech-disabled.txt"
+          grep -F 'network NOT USED' "$RUNNER_TEMP/offline-stage46-speech-disabled.txt"
+          grep -F 'STOP: latched' "$RUNNER_TEMP/offline-stage46-speech-disabled.txt"
+          echo STAGE46_MICROPHONE_AND_DESKTOP_STILL_DISABLED
+
+  production-no-go-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Verify 13 production blockers remain intact
+        run: |
+          python3 -m unittest discover -s tools/security -p test_stage45_pre_pilot_gate.py -v
+          python3 tools/security/stage45_pre_pilot_gate.py > "$RUNNER_TEMP/no-go.json"
+          python3 - "$RUNNER_TEMP/no-go.json" <<'PY'
+          import json,sys
+          report=json.load(open(sys.argv[1],encoding="utf-8"))
+          assert report["decision"]=="NO_GO"
+          assert len(report["release_blockers"])==13
+          assert report["production_pilot_authorized"] is False
+          assert report["agent_command_execution_authorized"] is False
+          assert report["desktop_actions_authorized"] is False
+          print("STAGE46_SPEECH_FOUNDATION_RELEASE_NO_GO")
+          PY
+
+  complete-orchestrator-and-workstation-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: All orchestrator Java tests
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+      - name: Unchanged workstation-agent tests
+        run: ./mvnw -B -f workstation-agent/pom.xml test
