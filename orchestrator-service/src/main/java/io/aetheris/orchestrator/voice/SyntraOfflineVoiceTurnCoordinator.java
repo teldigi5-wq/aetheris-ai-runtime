@@ -25,7 +25,8 @@ public final class SyntraOfflineVoiceTurnCoordinator {
 
     public enum Outcome {
         DENIED, READY, LISTENING, SPEECH_BUFFERED, NOISE_DISCARDED,
-        WAKE_ACKNOWLEDGED, STATUS_PREVIEW_READY, UNTRUSTED_TRANSCRIPT_IGNORED,
+        WAKE_ACKNOWLEDGED, STATUS_PREVIEW_READY, HELP_PREVIEW_READY,
+        UNTRUSTED_TRANSCRIPT_IGNORED,
         SYNTHETIC_TTS_NOT_PLAYED, STOP_LATCHED
     }
     /** responseTicket is a one-use local correlation token, not consent. */
@@ -45,6 +46,7 @@ public final class SyntraOfflineVoiceTurnCoordinator {
     private int framesSeen;
     private long sequence;
     private long pendingTicket;
+    private Outcome pendingPreview;
     private boolean active;
     private boolean awake;
     private boolean latched;
@@ -101,6 +103,7 @@ public final class SyntraOfflineVoiceTurnCoordinator {
             }
             // A new utterance makes the previous unplayed reply stale.
             pendingTicket = 0;
+            pendingPreview = null;
             System.arraycopy(frame, 0, utterance, bufferedBytes, frame.length);
             bufferedBytes += frame.length;
             voicedFrames++;
@@ -120,8 +123,10 @@ public final class SyntraOfflineVoiceTurnCoordinator {
      * passed to a fake TTS; the generated array is erased, not played. */
     public synchronized Event synthesizeNonPlayingStatus(long ticket) {
         if (!usable()) return event(latched ? Outcome.STOP_LATCHED : Outcome.DENIED);
-        if (ticket <= 0 || ticket != pendingTicket) return event(Outcome.DENIED);
+        if (ticket <= 0 || ticket != pendingTicket ||
+                pendingPreview != Outcome.STATUS_PREVIEW_READY) return event(Outcome.DENIED);
         pendingTicket = 0; // Consume before running untrusted fake adapter.
+        pendingPreview = null;
         byte[] generated = null;
         try {
             generated = tts.synthesize("Syntra status preview. Real voice and desktop control are disabled.",
@@ -139,6 +144,27 @@ public final class SyntraOfflineVoiceTurnCoordinator {
         } finally {
             if (generated != null) Arrays.fill(generated, (byte) 0);
         }
+    }
+
+    /**
+     * Consume exactly one status/help ticket for a read-only text projection.
+     * Tickets are local correlations, not authentication or owner approval.
+     * No caller-supplied transcript or model response can be emitted here.
+     */
+    public synchronized Event consumeReadOnlyPreview(long ticket, Outcome expected) {
+        if (!usable()) return event(latched ? Outcome.STOP_LATCHED : Outcome.DENIED);
+        if (!awake || (expected != Outcome.STATUS_PREVIEW_READY &&
+                expected != Outcome.HELP_PREVIEW_READY) ||
+                ticket <= 0 || ticket != pendingTicket || expected != pendingPreview)
+            return event(Outcome.DENIED);
+        pendingTicket = 0;
+        pendingPreview = null;
+        return event(expected);
+    }
+
+    /** Final gate before read-only output is handed to a caller. */
+    public synchronized boolean canDeliverReadOnlyReply() {
+        return usable() && awake;
     }
 
     /** Irreversible for this instance; DOES NOT stop other applications. */
@@ -169,11 +195,18 @@ public final class SyntraOfflineVoiceTurnCoordinator {
             if (isWake(normalized)) {
                 awake = true;
                 pendingTicket = 0;
+                pendingPreview = null;
                 return event(Outcome.WAKE_ACKNOWLEDGED);
             }
             if (awake && ("status".equals(normalized) || "show system status".equals(normalized))) {
                 pendingTicket = ++sequence;
+                pendingPreview = Outcome.STATUS_PREVIEW_READY;
                 return new Event(Outcome.STATUS_PREVIEW_READY, framesSeen, pendingTicket, 0);
+            }
+            if (awake && ("help".equals(normalized) || "what can you do".equals(normalized))) {
+                pendingTicket = ++sequence;
+                pendingPreview = Outcome.HELP_PREVIEW_READY;
+                return new Event(Outcome.HELP_PREVIEW_READY, framesSeen, pendingTicket, 0);
             }
             return event(Outcome.UNTRUSTED_TRANSCRIPT_IGNORED);
         } catch (RuntimeException adapterFailure) {
@@ -224,6 +257,7 @@ public final class SyntraOfflineVoiceTurnCoordinator {
         awake = false;
         expires = null;
         pendingTicket = 0;
+        pendingPreview = null;
         eraseUtterance();
     }
 
