@@ -207,7 +207,7 @@ jobs:
             -Dspring.datasource.driver-class-name="$SPRING_DATASOURCE_DRIVER_CLASS_NAME" \
             -Dspring.datasource.username="$SPRING_DATASOURCE_USERNAME" \
             -Dspring.datasource.password="$SPRING_DATASOURCE_PASSWORD" \
-            -Dspring.jpa.hibernate.ddl.auto=create-drop \
+            -Dspring.jpa.hibernate.ddl-auto=create-drop \
             -Daetheris.stage45.verifier.bin="$RUNNER_TEMP/stage45-unprivileged-verifier" \
             -Daetheris.stage45.broker.bin="$RUNNER_TEMP/stage45-kill-broker" \
             -Dtest=SyntheticSeparatedKillBrokerIT,SyntheticSupervisorPulseLabJpaTest test
