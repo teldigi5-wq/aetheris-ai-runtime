@@ -1,0 +1,143 @@
+name: Runtime Stage 46.33 Supervised Paper Recovery Evidence
+
+on:
+  pull_request:
+    branches:
+      - feature/stage46-independent-replay-checkpoint-20261016
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/trading/PaperRecoveryReviewService.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/trading/PaperRecoveryReviewIntegrationTest.java'
+      - 'docs/runtime/stage46-supervised-paper-recovery-review.md'
+      - '.github/workflows/runtime-stage46-supervised-paper-recovery.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  real-paper-account-market-guard-and-recovery-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Evaluate actual JPA paper account, mark, positions, drawdown and checkpoint
+        run: ./mvnw -B -f orchestrator-service/pom.xml -Dtest=PaperRecoveryReviewIntegrationTest test
+      - name: Preserve rollback, durable replay and HMAC authentication tests
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=OfflinePaperRollbackCheckpointIntegrationTest,OfflinePaperReplayLedgerIntegrationTest,OfflinePaperStateReconciliationTest test
+      - name: Preserve money-management, drawdown and authorization boundaries
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=PaperDrawdownGuardIntegrationTest,PaperCapitalBudgetServiceTest,Stage10TradingIntegrationTest test
+
+  full-orchestrator-and-workstation-regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Full Java orchestrator and integration suite
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+      - name: Full Java workstation-agent suite
+        run: ./mvnw -B -f workstation-agent/pom.xml test
+
+  python-offline-quant-reference-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Existing independent checkpoint and signed offline state checks
+        run: |
+          python3 -m unittest discover -s aetheris-quant/tests -p test_offline_replay_checkpoint.py -v
+          python3 -m unittest discover -s aetheris-quant/tests -p test_offline_paper_state_boundary.py -v
+      - name: Existing fixed Python paper-risk and Binance live-host denial
+        run: |
+          python3 -m unittest discover -s aetheris-quant/tests -p test_paper_risk_cross_language_contract.py -v
+          python3 -m unittest discover -s aetheris-quant/tests -p test_execution_boundary.py -v
+      - name: Static guard ensures no write or unauthorized execution was introduced
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path("orchestrator-service/src/main/java/io/aetheris/orchestrator/trading/PaperRecoveryReviewService.java").read_text()
+          assert 'INDEPENDENT_CHECKPOINT_CUSTODY_UNVERIFIED' in source
+          assert 'ownerApprovedRecovery' in source and 'drawdownCircuitReset' in source
+          assert 'NO_GO' in source and '@Transactional(readOnly = true)' in source
+          for forbidden in ('@PostMapping','@PutMapping','@DeleteMapping','@PatchMapping',
+              'saveAndFlush(', 'deleteById(', 'realize(', 'resetCircuit(',
+              'marketOrder(', 'placeOrder(', 'HttpClient', 'RestTemplate',
+              'ProcessBuilder', 'Runtime.getRuntime', 'BinanceTestnetClient'):
+              assert forbidden not in source, forbidden
+          print("STAGE46_33_READONLY_REVIEW_NO_ACCOUNT_IMPORT_OR_TRADING")
+          PY
+
+  hosted-windows-existing-worker-containment:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Compile only the fixed inert CI-only worker module
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -f synthetic-worker-lab/pom.xml -DskipTests clean package
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_33_INDEPENDENT_WORKER_COMPILE_FAILED' }
+      - name: Native Windows reduced-token, Job Object and AppContainer regressions
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsReducedTokenLab.ps1 -ClassesPath ./synthetic-worker-lab/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_33_REDUCED_TOKEN_FAILED' }
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsJobLab.ps1 -ClassesPath ./synthetic-worker-lab/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_33_JOB_OBJECT_FAILED' }
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsAppContainerLab.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_33_APPCONTAINER_FAILED' }
+
+  immutable-stage45-all-13-release-blockers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Assert thirteen unmodified production NO_GO blockers
+        run: |
+          python3 -m unittest discover -s tools/security -p test_stage45_pre_pilot_gate.py -v
+          python3 tools/security/stage45_pre_pilot_gate.py > "$RUNNER_TEMP/stage46-33-no-go.json"
+          python3 - "$RUNNER_TEMP/stage46-33-no-go.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          p=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          assert p["decision"]=="NO_GO" and len(p["release_blockers"])==13
+          for name in ("production_pilot_authorized","protected_branch_merge_permitted",
+                       "agent_command_execution_authorized","desktop_actions_authorized",
+                       "windows_device_certified","voice_microphone_certified",
+                       "deploy_permitted"):
+              assert p[name] is False,name
+          print("STAGE46_33_ALL_THIRTEEN_SECURITY_BLOCKERS_PRODUCTION_OWNER_PC_NO_GO")
+          PY
