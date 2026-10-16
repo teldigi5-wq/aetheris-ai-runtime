@@ -1,0 +1,19 @@
+{
+  "fixture_kind": "PUBLIC_INERT_TEST_EVIDENCE_NOT_AN_EXTERNAL_TRUST_ANCHOR",
+  "key_warning": "PUBLIC CI HMAC KEY; NOT AN OWNER IDENTITY, ATTESTOR, HSM OR PRODUCTION ANTI-ROLLBACK KEY",
+  "public_test_key_utf8": "stage46-independent-public-fixture-key-DO-NOT-USE",
+  "checkpoint": {
+    "schema_version": 1,
+    "scope": "OFFLINE_SYNTHETIC_ROLLBACK_CHECKPOINT_ONLY",
+    "account_id": "paper-default",
+    "highest_sequence": 2,
+    "highest_digest": "0dbca02a652bb6a478950fec9094caf3df0e26e82e61ab633759c63ce9af1ed3",
+    "issued_ms": 1760000180000,
+    "expires_ms": 1760000240000,
+    "decision": "NO_GO"
+  },
+  "tag": "8afa665770b45497e73ba573da46787d540150743490218bbe9d84fb1982ce0f",
+  "check_at_ms": 1760000200000,
+  "production_verified": false,
+  "live_trading_authorized": false
+}
