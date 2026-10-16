@@ -171,7 +171,7 @@ def review_inventory(spec: object, *, java_sources: object,
     for path, source in sorted(script_sources.items()):
         if (path.startswith("workstation-agent/packaging/")
             and not path.startswith("workstation-agent/packaging/stage46/")):
-            if re.search(r"(?i)(?:packaging[/\\]stage46|syntra(?:synthetic|offlinevoice|voicereadonly)|windowsSynthetic(?:Job|AppContainer|Wfp))", source):
+            if re.search(r"(?i)(?:(?:^|[/\\])stage46[/\\]|syntra(?:synthetic|offlinevoice|voicereadonly|windows)|windowsSynthetic(?:Job|AppContainer|Wfp))", source):
                 installed.append(path)
 
     result["compiled_synthetic_java_count"] = len(compiled)
