@@ -1,0 +1,66 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <!-- Stage 46.24: a CI-only independent build, NOT a production dependency.
+       Explicit -f invocation required: this repository has no parent reactor.
+       The two fixed Java source files remain canonical in orchestrator-service
+       until a separately reviewed migration; no second source copy exists. -->
+  <groupId>io.aetheris.synthetic.lab</groupId>
+  <artifactId>syntra-synthetic-worker-lab-only</artifactId>
+  <version>0.2.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.build.outputTimestamp>2020-01-01T00:00:00Z</project.build.outputTimestamp>
+  </properties>
+  <!-- NO dependencies: no Spring, microphone, AI model, network transport,
+       user account, security credential or desktop invocation API. -->
+  <build>
+    <sourceDirectory>${project.basedir}/../orchestrator-service/src/main/java</sourceDirectory>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+        <configuration>
+          <release>21</release>
+          <includes>
+            <include>io/aetheris/orchestrator/voice/SyntraSyntheticPcmWorkerMain.java</include>
+            <include>io/aetheris/orchestrator/voice/SyntraSyntheticJobProbeMain.java</include>
+          </includes>
+          <showWarnings>true</showWarnings>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.5.1</version>
+        <configuration>
+          <includes>
+            <include>io/aetheris/orchestrator/voice/SyntraSyntheticPcmWorkerMain.class</include>
+            <include>io/aetheris/orchestrator/voice/SyntraSyntheticJobProbeMain.class</include>
+          </includes>
+          <archive>
+            <addMavenDescriptor>false</addMavenDescriptor>
+          </archive>
+        </configuration>
+      </plugin>
+      <!-- Defense in depth: explicit Maven install/deploy cannot publish the
+           synthetic artifact without a separately reviewed POM change. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-install-plugin</artifactId>
+        <version>3.1.2</version>
+        <configuration><skip>true</skip></configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-deploy-plugin</artifactId>
+        <version>3.1.2</version>
+        <configuration><skip>true</skip></configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
