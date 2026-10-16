@@ -1,0 +1,159 @@
+name: Runtime Stage 46.29 Cross-Language PAPER Risk Policy Contract
+
+on:
+  pull_request:
+    branches:
+      - feature/stage46-paper-drawdown-circuit-20261016
+      - main
+    paths:
+      - 'risk-contracts/stage46-paper-parity-v1.json'
+      - 'aetheris-quant/app/paper_risk_contract.py'
+      - 'aetheris-quant/tests/test_paper_risk_cross_language_contract.py'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/trading/PaperCrossLanguageRiskContractTest.java'
+      - 'tools/security/stage46_cross_language_risk_readiness.py'
+      - 'docs/runtime/stage46-cross-language-paper-risk-parity.md'
+      - '.github/workflows/runtime-stage46-cross-language-risk-parity.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  python-paper-reference-and-testnet-nogo:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact PR HEAD, no cached write credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Cross-language shared policy fixtures and known runtime gaps
+        run: |
+          python3 tools/security/stage46_cross_language_risk_readiness.py > "$RUNNER_TEMP/stage46-29-readiness.json"
+          python3 - "$RUNNER_TEMP/stage46-29-readiness.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          p=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          assert p["paper_fixture_reference_parity"] is True
+          assert p["quant_code_default_alignment"] is True
+          assert p["budget_vectors_verified"] == 7
+          assert p["drawdown_vectors_verified"] == 3
+          for key in ("python_quant_testnet_runtime_policy_parity",
+                      "python_quant_testnet_persistent_drawdown_latch_verified",
+                      "python_java_trading_account_state_shared",
+                      "python_quant_live_money_authorized",
+                      "python_quant_testnet_order_authorized_by_this_contract",
+                      "java_paper_exchange_order_authorized","production_authorized"):
+              assert p[key] is False,key
+          assert p["decision"] == "NO_GO"
+          print("STAGE46_29_SEVEN_PAPER_BUDGET_AND_THREE_DRAWDOWN_FIXTURES_TESTNET_NO_GO")
+          PY
+      - name: Adversarial Python JSON/default contract regression
+        run: python3 -m unittest discover -s aetheris-quant/tests -p test_paper_risk_cross_language_contract.py -v
+      - name: Verify existing signed testnet client never accepts live Binance host
+        run: python3 -m unittest discover -s aetheris-quant/tests -p test_execution_boundary.py -v
+      - name: Confirm no autonomous exchange integration is added in this stage
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          evaluator=Path("aetheris-quant/app/paper_risk_contract.py").read_text()
+          checker=Path("tools/security/stage46_cross_language_risk_readiness.py").read_text()
+          for content in (evaluator,):
+              for forbidden in ("import httpx","from .binance","market_order(",
+                  "place_order(", "aiohttp", "import requests","ProcessBuilder",
+                  "ENABLE_TESTNET_EXECUTION=true", "auto_start_autonomous=True"):
+                  assert forbidden not in content,forbidden
+          assert "python_quant_testnet_runtime_policy_parity" in checker
+          assert "paper_risk_contract" not in Path("aetheris-quant/app/autonomous.py").read_text()
+          print("STAGE46_29_READONLY_PARITY_NOT_AUTOTRADING")
+          PY
+
+  actual-java-paper-risk-reference-fixtures:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Java 21 Temurin
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Exercise ACTUAL Java defaults, paper budget and drawdown on same JSON reference vectors
+        run: ./mvnw -B -f orchestrator-service/pom.xml -Dtest=PaperCrossLanguageRiskContractTest test
+      - name: Existing paper drawdown and capital budget safety
+        run: ./mvnw -B -f orchestrator-service/pom.xml -Dtest=PaperDrawdownPolicyTest,PaperDrawdownGuardIntegrationTest,PaperCapitalBudgetServiceTest,Stage10TradingIntegrationTest test
+
+  full-orchestrator-workstation-regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Full existing orchestrator test suite
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+      - name: Full existing workstation-agent test suite
+        run: ./mvnw -B -f workstation-agent/pom.xml test
+
+  windows-existing-security-containment-regressions:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Compile fixed inert test worker only
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -f synthetic-worker-lab/pom.xml -DskipTests clean package
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_29_INDEPENDENT_WINDOWS_WORKER_COMPILE_FAILED' }
+      - name: Native Windows restricted token, Job Object and AppContainer lab
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsReducedTokenLab.ps1 -ClassesPath ./synthetic-worker-lab/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_29_REDUCED_TOKEN_FAILED' }
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsJobLab.ps1 -ClassesPath ./synthetic-worker-lab/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_29_JOB_OBJECT_FAILED' }
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsAppContainerLab.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_29_APPCONTAINER_FAILED' }
+
+  immutable-stage45-thirteen-release-blockers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Stage45 13 production blockers and fail-closed owner consent policy
+        run: |
+          python3 -m unittest discover -s tools/security -p test_stage45_pre_pilot_gate.py -v
+          python3 tools/security/stage45_pre_pilot_gate.py > "$RUNNER_TEMP/stage46-29-no-go.json"
+          python3 - "$RUNNER_TEMP/stage46-29-no-go.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          p=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          assert p["decision"] == "NO_GO" and len(p["release_blockers"]) == 13
+          for key in ("production_pilot_authorized","protected_branch_merge_permitted",
+                      "agent_command_execution_authorized","desktop_actions_authorized",
+                      "windows_device_certified","voice_microphone_certified","deploy_permitted"):
+              assert p[key] is False,key
+          print("STAGE46_29_ALL_THIRTEEN_RELEASE_BLOCKERS_PRODUCTION_AND_OWNER_NO_GO")
+          PY
