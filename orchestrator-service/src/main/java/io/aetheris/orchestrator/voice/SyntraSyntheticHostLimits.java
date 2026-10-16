@@ -20,6 +20,11 @@ import java.util.Objects;
 final class SyntraSyntheticHostLimits {
     enum Profile { PORTABLE_SYNTHETIC_ONLY, LINUX_RLIMIT_LAB }
 
+    // Fixed test-only class identity, intentionally not linked to the worker
+    // bytecode. Its absence from a production JAR fails closed on invocation.
+    // Keep this literal synchronized through SyntheticWorkerProtocolContractTest.
+    static final String FIXED_PCM_WORKER_CLASS =
+            "io.aetheris.orchestrator.voice.SyntraSyntheticPcmWorkerMain";
     private static final Path LINUX_PRLIMIT = Path.of("/usr/bin/prlimit");
     static final String CPU_SECONDS = "--cpu=5";
     static final String ADDRESS_BYTES = "--as=4294967296"; // 4 GiB virtual address space
@@ -59,7 +64,7 @@ final class SyntraSyntheticHostLimits {
         result.add("-Xmx64m");
         result.add("-cp");
         result.add(classPath);
-        result.add(SyntraSyntheticPcmWorkerMain.class.getName());
+        result.add(FIXED_PCM_WORKER_CLASS);
         result.add(internalMode);
         return List.copyOf(result);
     }

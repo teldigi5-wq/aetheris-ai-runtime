@@ -33,6 +33,12 @@ public final class SyntraSyntheticProcessSpeechBoundary implements AutoCloseable
     public static final int MIN_WAIT_MS = 100;
     public static final int MAX_WAIT_MS = 5_000;
     private static final int MAX_OUTPUT_BYTES = 128;
+    // Frozen CI-only wire values; production class must not load/link a
+    // synthetic worker type that is deliberately absent from the Boot JAR.
+    // Tests compare these literals with the independent module's canonical
+    // worker implementation and require fail-closed behavior on mismatch.
+    static final int FIXED_PCM_MAGIC = 0x53463431; // SF41
+    static final String FIXED_PCM_PREFIX = "SYNTRA46_10_V1|";
 
     public enum Outcome {
         DENIED, SESSION_READY, VOICE, SILENCE, BUSY_DENIED,
@@ -215,7 +221,7 @@ public final class SyntraSyntheticProcessSpeechBoundary implements AutoCloseable
             // The only IPC is three fixed-format ints and bounded data bytes.
             // Closing stdin guarantees the child can reject trailing bytes.
             try (var input = new DataOutputStream(child.getOutputStream())) {
-                input.writeInt(SyntraSyntheticPcmWorkerMain.MAGIC);
+                input.writeInt(FIXED_PCM_MAGIC);
                 input.writeInt(SAMPLE_RATE_HZ);
                 input.writeInt(frame.length);
                 input.write(frame);
@@ -239,9 +245,9 @@ public final class SyntraSyntheticProcessSpeechBoundary implements AutoCloseable
             synchronized (output) {
                 protocol = output.toString(StandardCharsets.US_ASCII);
             }
-            if ((SyntraSyntheticPcmWorkerMain.PREFIX + "VOICE\n").equals(protocol))
+            if ((FIXED_PCM_PREFIX + "VOICE\n").equals(protocol))
                 return result(Outcome.VOICE, frame.length);
-            if ((SyntraSyntheticPcmWorkerMain.PREFIX + "SILENCE\n").equals(protocol))
+            if ((FIXED_PCM_PREFIX + "SILENCE\n").equals(protocol))
                 return result(Outcome.SILENCE, frame.length);
             revoke();
             return result(Outcome.WORKER_REJECTED_LATCHED, 0);
