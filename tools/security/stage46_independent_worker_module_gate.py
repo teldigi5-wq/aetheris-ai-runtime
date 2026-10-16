@@ -8,7 +8,6 @@ It cannot certify production, real model/audio, WFP egress, owner or release.
 """
 from __future__ import annotations
 import argparse
-import hashlib
 import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -67,7 +66,7 @@ def _pom_ok(lab:object,prod:object)->bool:
         module.find("m:modules",NS) is not None or
         module.find("m:profiles",NS) is not None or
         module.findtext("./m:build/m:sourceDirectory",namespaces=NS)
-          !="\${project.basedir}/../orchestrator-service/src/main/java" or
+          !="${project.basedir}/../orchestrator-service/src/main/java" or
         module.findtext("./m:properties/m:maven.compiler.release",namespaces=NS)!="21" or
         module.findtext("./m:properties/m:project.build.outputTimestamp",namespaces=NS)
           !="2020-01-01T00:00:00Z"):
@@ -145,7 +144,7 @@ def read_paths(root:Path)->dict[str,object]:
         return review(lab_pom=lab.read_text(encoding="utf-8"),
                       prod_pom=prod.read_text(encoding="utf-8"),
                       lab_entries=a,boot_entries=b,canonical_source_paths=srcpaths)
-    except (OSError,UnicodeError,ValueError,Exception) as exc:
+    except (OSError,UnicodeError,ValueError) :
         # Unexpected errors do NOT constitute passing evidence.
         return dict(BASE)
 
