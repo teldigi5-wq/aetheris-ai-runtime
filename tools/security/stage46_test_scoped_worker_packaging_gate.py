@@ -138,7 +138,9 @@ def review(*, spec: object, pom: object, boot_entries: object,
         or not result["normal_jar_layout_verified"]
         or not any(p.startswith(BOOTS_LIB_PREFIX) and p.endswith(".jar") for p in production)
         or not result["fixture_jar_manifest_verified"]
-        or not all(p.startswith(("META-INF/", WORKER_PREFIX)) for p in fixturezip)
+        or not all(p.startswith("META-INF/") or p.startswith(WORKER_PREFIX)
+                   or p in ("io/", "io/aetheris/", "io/aetheris/orchestrator/")
+                   for p in fixturezip)
         or result["archive_sensitive_entry_count"]
         or any("/src/test/" in p or p.endswith("Test.class") for p in production | fixturezip)):
         return result
