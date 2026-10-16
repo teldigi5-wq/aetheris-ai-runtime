@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "repo": "teldigi5-wq/aetheris-ai-runtime",
+  "observed_on": "2026-10-16",
+  "anchor_pr": 84,
+  "release_decision": "NO_GO",
+  "production_authorized": false,
+  "owner_pc_pilot_authorized": false,
+  "expected_pr_state": "open",
+  "expected_draft": true,
+  "chain": [
+    {
+      "number": 72,
+      "stage": "46.6",
+      "head": "feature/stage46-offline-speech-artifact-review-20261015",
+      "base": "feature/stage46-synthetic-offline-speech-gate-20261015",
+      "head_sha": "ad99084a8362e457a1e8d72c48554100f0eb1297",
+      "base_sha": "fcb38e936de0040bcd612cad2c0fbee7798bd06d"
+    },
+    {
+      "number": 73,
+      "stage": "46.7",
+      "head": "feature/stage46-offline-voice-turn-lifecycle-20261015",
+      "base": "feature/stage46-offline-speech-artifact-review-20261015",
+      "head_sha": "b33d6f49fea130f41c01ba40bc6435f206e2a9ce",
+      "base_sha": "ad99084a8362e457a1e8d72c48554100f0eb1297"
+    },
+    {
+      "number": 74,
+      "stage": "46.8",
+      "head": "feature/stage46-readonly-voice-conversation-bridge-20261015",
+      "base": "feature/stage46-offline-voice-turn-lifecycle-20261015",
+      "head_sha": "95eb0037345c865c48c0c7d836e79c08a8258e9b",
+      "base_sha": "b33d6f49fea130f41c01ba40bc6435f206e2a9ce"
+    },
+    {
+      "number": 75,
+      "stage": "46.9",
+      "head": "feature/stage46-synthetic-voice-async-cancellation-20261015",
+      "base": "feature/stage46-readonly-voice-conversation-bridge-20261015",
+      "head_sha": "1a08467d70043d7c1b9b0ec10b6c7e060de2862e",
+      "base_sha": "95eb0037345c865c48c0c7d836e79c08a8258e9b"
+    },
+    {
+      "number": 76,
+      "stage": "46.10",
+      "head": "feature/stage46-synthetic-voice-process-isolation-20261015",
+      "base": "feature/stage46-synthetic-voice-async-cancellation-20261015",
+      "head_sha": "cad2f1897310ecab2a62127c79684f282bf8a256",
+      "base_sha": "1a08467d70043d7c1b9b0ec10b6c7e060de2862e"
+    },
+    {
+      "number": 77,
+      "stage": "46.11",
+      "head": "feature/stage46-speech-host-containment-lab-20261015",
+      "base": "feature/stage46-synthetic-voice-process-isolation-20261015",
+      "head_sha": "cd8657db1950d8da04c27d7ab5054da0a16dce5f",
+      "base_sha": "cad2f1897310ecab2a62127c79684f282bf8a256"
+    },
+    {
+      "number": 78,
+      "stage": "46.12",
+      "head": "feature/stage46-windows-job-object-lab-20261015",
+      "base": "feature/stage46-speech-host-containment-lab-20261015",
+      "head_sha": "928a4731e49ef17fd5140b225e2d4fa4c6e61d5c",
+      "base_sha": "cd8657db1950d8da04c27d7ab5054da0a16dce5f"
+    },
+    {
+      "number": 79,
+      "stage": "46.13",
+      "head": "feature/stage46-restricted-token-preflight-20261015",
+      "base": "feature/stage46-windows-job-object-lab-20261015",
+      "head_sha": "be0834af882694984120cb67f46b695347494110",
+      "base_sha": "928a4731e49ef17fd5140b225e2d4fa4c6e61d5c"
+    },
+    {
+      "number": 80,
+      "stage": "46.14",
+      "head": "feature/stage46-appcontainer-capability-lab-20261015",
+      "base": "feature/stage46-restricted-token-preflight-20261015",
+      "head_sha": "9c4d6fb4677fe4969fe704e04fb60a23169a37c2",
+      "base_sha": "be0834af882694984120cb67f46b695347494110"
+    },
+    {
+      "number": 81,
+      "stage": "46.15",
+      "head": "feature/stage46-trusted-worker-network-proof-20261015",
+      "base": "feature/stage46-appcontainer-capability-lab-20261015",
+      "head_sha": "1fe8126171aa91345a7ae9a50726adcc92b0c313",
+      "base_sha": "9c4d6fb4677fe4969fe704e04fb60a23169a37c2"
+    },
+    {
+      "number": 82,
+      "stage": "46.16",
+      "head": "feature/stage46-wfp-readonly-and-release-provenance-20261015",
+      "base": "feature/stage46-trusted-worker-network-proof-20261015",
+      "head_sha": "9271d97da3aca08f6436e04fa8457f1953ab0d97",
+      "base_sha": "1fe8126171aa91345a7ae9a50726adcc92b0c313"
+    },
+    {
+      "number": 83,
+      "stage": "46.17",
+      "head": "feature/stage46-wfp-drop-audit-signing-spec-20261015",
+      "base": "feature/stage46-wfp-readonly-and-release-provenance-20261015",
+      "head_sha": "cc6aa2716fc80005a13b5216f70729d6dd54c7bd",
+      "base_sha": "9271d97da3aca08f6436e04fa8457f1953ab0d97"
+    },
+    {
+      "number": 84,
+      "stage": "46.18",
+      "head": "feature/stage46-synthetic-wfp-correlation-and-dual-build-20261015",
+      "base": "feature/stage46-wfp-drop-audit-signing-spec-20261015",
+      "head_sha": "89142d2a47965bb80efc981115159947644c6d1c",
+      "base_sha": "cc6aa2716fc80005a13b5216f70729d6dd54c7bd"
+    }
+  ]
+}
