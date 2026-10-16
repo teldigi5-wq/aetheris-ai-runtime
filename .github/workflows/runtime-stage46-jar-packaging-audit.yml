@@ -1,0 +1,166 @@
+name: Runtime Stage 46.22 Packaged JAR Exposure and Dependency Inventory
+
+on:
+  pull_request:
+    branches:
+      - feature/stage46-integration-surface-inventory-20261016
+      - main
+    paths:
+      - 'tools/security/stage46_jar_packaging_evidence.py'
+      - 'tools/security/test_stage46_jar_packaging_evidence.py'
+      - 'docs/runtime/stage46-jar-packaging-audit.md'
+      - '.github/workflows/runtime-stage46-jar-packaging-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  real-spring-boot-and-shaded-jar-packaging-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Package actual Spring Boot orchestrator without running it
+        run: ./mvnw -B -f orchestrator-service/pom.xml -DskipTests package
+      - name: Package actual Maven-shaded workstation host without installing
+        run: ./mvnw -B -f workstation-agent/pom.xml -DskipTests package
+      - name: Inspect physical zip entries, compiled main classes and Maven nested libraries
+        run: |
+          python3 tools/security/stage46_jar_packaging_evidence.py \
+            --spec docs/runtime/stage46-minimal-integration-scope.json \
+            --orchestrator-jar orchestrator-service/target/orchestrator-service-0.2.0-SNAPSHOT.jar \
+            --workstation-jar workstation-agent/target/aetheris-host-agent.jar \
+            --output "$RUNNER_TEMP/stage46-22-built-jar-inventory.json"
+          python3 - "$RUNNER_TEMP/stage46-22-built-jar-inventory.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          v=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          assert v["packaged_artifacts_inspected"] is True
+          assert v["compiled_synthetic_classes_embedded_count"] == 9
+          assert v["compiled_synthetic_main_entrypoints_embedded_count"] == 2
+          assert v["synthetic_classes_are_excluded_from_orchestrator_jar"] is False
+          assert v["orchestrator_nested_dependency_count"] > 0
+          assert not v["test_only_classes_or_dependencies_detected"]
+          assert not v["prohibited_sensitive_resource_entries"]
+          assert not v["unexpected_lab_native_payload_entries"]
+          assert v["production_authorized"] is False and v["decision"] == "NO_GO"
+          print("STAGE46_22_ACTUAL_JAR_BOTH_EMBEDDED_SYNTHETIC_MAIN_CLASSES_NO_GO")
+          PY
+      - name: Adversarial entry and artifact consistency tests
+        run: python3 -m unittest discover -s tools/security -p test_stage46_jar_packaging_evidence.py -v
+      - name: Never upload or publish the unsigned JARs
+        run: echo "STAGE46_22_BUILT_LOCAL_TO_EPHEMERAL_CI_NO_ARTIFACT_UPLOAD"
+
+  synthetic-runtime-callgraph-and-source-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Ensure actual Java main-source wiring still fails closed
+        run: |
+          python3 tools/security/stage46_integration_surface_gate.py
+          python3 -m unittest discover -s tools/security -p test_stage46_integration_surface_gate.py -v
+
+  full-java-and-workstation-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Targeted synthetic speech, consent, STOP and owner-bound tests
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=SyntraSyntheticHostLimitsTest,SyntraSyntheticProcessSpeechBoundaryTest,SyntraSyntheticAsyncVoiceBoundaryTest,SyntraVoiceReadOnlyConversationBridgeTest,SyntraOfflineVoiceTurnCoordinatorTest,SyntraOfflineSpeechArtifactReviewTest,SyntraSyntheticAudioGateTest,SyntraSyntheticAudioTaskControlReviewTest,SyntheticVoiceOwnerConsentLabTest,SyntheticVoiceTaskControlReviewTest,VerifiedOwnerTaskReadTest test
+      - name: Entire orchestrator regression
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+      - name: Existing workstation-agent tests
+        run: ./mvnw -B -f workstation-agent/pom.xml test
+
+  windows-existing-contained-synthetic-regression:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact PR HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Compile fixed synthetic Java child
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -f orchestrator-service/pom.xml -DskipTests compile
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_22_WINDOWS_TEST_COMPILE_FAILED' }
+      - name: Job Object and reduced Windows token regression
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsReducedTokenLab.ps1 -ClassesPath ./orchestrator-service/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_22_TOKEN_REGRESSION' }
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsJobLab.ps1 -ClassesPath ./orchestrator-service/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_22_JOB_OBJECT_REGRESSION' }
+      - name: AppContainer fixed synthetic test only
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsAppContainerLab.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_22_APPCONTAINER_REGRESSION' }
+
+  no-release-thirteen-blocker-and-main-merge-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR HEAD with full history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Assert Stage 45 release NO_GO unchanged
+        run: |
+          python3 -m unittest discover -s tools/security -p test_stage45_pre_pilot_gate.py -v
+          python3 tools/security/stage45_pre_pilot_gate.py > "$RUNNER_TEMP/stage46-22-no-go.json"
+          python3 - "$RUNNER_TEMP/stage46-22-no-go.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          p=json.loads(Path(sys.argv[1]).read_text())
+          assert p["decision"] == "NO_GO"
+          assert len(p["release_blockers"]) == 13
+          for key in ("production_pilot_authorized","protected_branch_merge_permitted",
+                      "agent_command_execution_authorized","desktop_actions_authorized",
+                      "windows_device_certified","voice_microphone_certified","deploy_permitted"):
+              assert p[key] is False
+          print("STAGE46_22_THIRTEEN_UNCHANGED_RELEASE_BLOCKERS_NO_GO")
+          PY
+      - name: Read-only local Git merge-tree without merge or ref update
+        env:
+          EXACT_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git -c protocol.version=2 fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          python3 tools/security/stage46_integration_merge_review.py --expected-head "$EXACT_HEAD"
