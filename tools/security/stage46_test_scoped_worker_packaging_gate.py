@@ -106,6 +106,15 @@ def review(*, spec: object, pom: object, boot_entries: object,
            fixture_entries: object, compiled_entries: object,
            default_profile_fixture_exists: object) -> dict[str, object]:
     result = dict(OUTPUT)
+    if (not isinstance(spec, dict) or
+        not isinstance(spec.get("controls"), dict) or
+        spec["controls"].get("all_thirteen_stage45_blockers_active") is not True or
+        any(spec["controls"].get(k) is not False for k in (
+            "production_authorized", "merge_authorized",
+            "owner_pc_pilot_authorized", "microphone_authorized",
+            "desktop_actions_authorized", "integration_candidate_created",
+            "wfp_firewall_changes_authorized"))):
+        return result
     expected = expected_classes(spec)
     prod = _jar_names(boot_entries)
     fixture = _jar_names(fixture_entries)
