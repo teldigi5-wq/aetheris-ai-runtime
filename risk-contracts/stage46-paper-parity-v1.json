@@ -1,0 +1,293 @@
+{
+  "schema_version": 1,
+  "id": "syntra-paper-risk-contract-v1",
+  "scope": "CROSS_LANGUAGE_PAPER_PARITY_TEST_ONLY",
+  "decision": "NO_GO",
+  "release_authorization": {
+    "python_quant_testnet_orders_authorized": false,
+    "java_paper_exchange_orders_authorized": false,
+    "live_money_orders_authorized": false,
+    "production_pilot_authorized": false,
+    "protected_branch_merge_authorized": false
+  },
+  "policy": {
+    "risk_per_trade_fraction": 0.005,
+    "max_daily_loss_fraction": 0.02,
+    "max_open_positions": 3,
+    "max_leverage": 3,
+    "min_reward_risk": 1.5,
+    "max_stop_fraction": 0.15,
+    "max_gross_exposure_multiple": 3,
+    "max_symbol_exposure_fraction": 0.4,
+    "max_correlated_fraction_of_gross": 0.82,
+    "max_peak_to_trough_drawdown_fraction": 0.08
+  },
+  "quant_settings_review": {
+    "default_risk_per_trade_fraction": 0.005,
+    "default_max_daily_loss_fraction": 0.02,
+    "default_max_open_positions": 3,
+    "default_max_leverage": 3,
+    "default_max_correlated_exposure_fraction": 0.82,
+    "auto_risk_fraction": 0.0025,
+    "auto_max_notional_fraction": 0.05,
+    "auto_leverage": 1,
+    "auto_max_positions": 1,
+    "quant_testnet_peak_drawdown_latch_verified": false,
+    "java_python_state_store_shared": false,
+    "execution_policy_parity_verified": false
+  },
+  "budget_cases": [
+    {
+      "id": "baseline_long_symbol_cap",
+      "input": {
+        "symbol": "BTCUSDT",
+        "side": "LONG",
+        "starting_balance": 10000,
+        "cash_balance": 10000,
+        "daily_realized_pnl": 0,
+        "entry_price": 100,
+        "fill_price": 100,
+        "stop_loss": 99,
+        "recommended_notional": 10000,
+        "signal_risk_pct": 0.5,
+        "leverage": 1,
+        "reward_risk": 2,
+        "accepted": true,
+        "open_positions": []
+      },
+      "expected": {
+        "allowed": true,
+        "approved_notional": 4000,
+        "estimated_loss_at_stop": 40,
+        "remaining_daily_loss_budget": 200,
+        "projected_gross_exposure": 4000,
+        "projected_correlated_exposure": 4000
+      }
+    },
+    {
+      "id": "baseline_short_symbol_cap",
+      "input": {
+        "symbol": "BTCUSDT",
+        "side": "SHORT",
+        "starting_balance": 10000,
+        "cash_balance": 10000,
+        "daily_realized_pnl": 0,
+        "entry_price": 100,
+        "fill_price": 100,
+        "stop_loss": 101,
+        "recommended_notional": 10000,
+        "signal_risk_pct": 0.5,
+        "leverage": 1,
+        "reward_risk": 2,
+        "accepted": true,
+        "open_positions": []
+      },
+      "expected": {
+        "allowed": true,
+        "approved_notional": 4000,
+        "estimated_loss_at_stop": 40,
+        "remaining_daily_loss_budget": 200,
+        "projected_gross_exposure": 4000,
+        "projected_correlated_exposure": 4000
+      }
+    },
+    {
+      "id": "nearly_exhausted_daily_budget",
+      "input": {
+        "symbol": "BTCUSDT",
+        "side": "LONG",
+        "starting_balance": 10000,
+        "cash_balance": 9805,
+        "daily_realized_pnl": -195,
+        "entry_price": 100,
+        "fill_price": 100,
+        "stop_loss": 99,
+        "recommended_notional": 10000,
+        "signal_risk_pct": 0.5,
+        "leverage": 1,
+        "reward_risk": 2,
+        "accepted": true,
+        "open_positions": []
+      },
+      "expected": {
+        "allowed": true,
+        "approved_notional": 500,
+        "estimated_loss_at_stop": 5,
+        "remaining_daily_loss_budget": 5,
+        "projected_gross_exposure": 500,
+        "projected_correlated_exposure": 500
+      }
+    },
+    {
+      "id": "existing_stop_risk_counts_against_daily",
+      "input": {
+        "symbol": "ETHUSDT",
+        "side": "LONG",
+        "starting_balance": 10000,
+        "cash_balance": 9815,
+        "daily_realized_pnl": -185,
+        "entry_price": 100,
+        "fill_price": 100,
+        "stop_loss": 99,
+        "recommended_notional": 10000,
+        "signal_risk_pct": 0.5,
+        "leverage": 1,
+        "reward_risk": 2,
+        "accepted": true,
+        "open_positions": [
+          {
+            "symbol": "ETHUSD",
+            "side": "LONG",
+            "entry_price": 100,
+            "stop_loss": 99,
+            "quantity": 10,
+            "notional": 1000
+          }
+        ]
+      },
+      "expected": {
+        "allowed": true,
+        "approved_notional": 500,
+        "estimated_loss_at_stop": 5,
+        "remaining_daily_loss_budget": 5,
+        "projected_gross_exposure": 1500,
+        "projected_correlated_exposure": 1500
+      }
+    },
+    {
+      "id": "daily_loss_halt",
+      "input": {
+        "symbol": "BTCUSDT",
+        "side": "LONG",
+        "starting_balance": 10000,
+        "cash_balance": 9800,
+        "daily_realized_pnl": -200,
+        "entry_price": 100,
+        "fill_price": 100,
+        "stop_loss": 99,
+        "recommended_notional": 10000,
+        "signal_risk_pct": 0.5,
+        "leverage": 1,
+        "reward_risk": 2,
+        "accepted": true,
+        "open_positions": []
+      },
+      "expected": {
+        "allowed": false,
+        "approved_notional": 0
+      }
+    },
+    {
+      "id": "invalid_long_stop",
+      "input": {
+        "symbol": "BTCUSDT",
+        "side": "LONG",
+        "starting_balance": 10000,
+        "cash_balance": 10000,
+        "daily_realized_pnl": 0,
+        "entry_price": 100,
+        "fill_price": 100,
+        "stop_loss": 101,
+        "recommended_notional": 10000,
+        "signal_risk_pct": 0.5,
+        "leverage": 1,
+        "reward_risk": 2,
+        "accepted": true,
+        "open_positions": []
+      },
+      "expected": {
+        "allowed": false,
+        "approved_notional": 0
+      }
+    },
+    {
+      "id": "too_many_positions",
+      "input": {
+        "symbol": "BTCUSDT",
+        "side": "LONG",
+        "starting_balance": 10000,
+        "cash_balance": 10000,
+        "daily_realized_pnl": 0,
+        "entry_price": 100,
+        "fill_price": 100,
+        "stop_loss": 99,
+        "recommended_notional": 10000,
+        "signal_risk_pct": 0.5,
+        "leverage": 1,
+        "reward_risk": 2,
+        "accepted": true,
+        "open_positions": [
+          {
+            "symbol": "ADAUSDT",
+            "side": "LONG",
+            "entry_price": 100,
+            "stop_loss": 99,
+            "quantity": 10,
+            "notional": 1000
+          },
+          {
+            "symbol": "ETHUSDT",
+            "side": "LONG",
+            "entry_price": 100,
+            "stop_loss": 99,
+            "quantity": 10,
+            "notional": 1000
+          },
+          {
+            "symbol": "SOLUSDT",
+            "side": "LONG",
+            "entry_price": 100,
+            "stop_loss": 99,
+            "quantity": 10,
+            "notional": 1000
+          }
+        ]
+      },
+      "expected": {
+        "allowed": false,
+        "approved_notional": 0
+      }
+    }
+  ],
+  "drawdown_cases": [
+    {
+      "id": "within_drawdown_limit",
+      "previous_peak": 10000,
+      "previous_equity": 10000,
+      "previous_max_drawdown_pct": 0,
+      "previous_halted": false,
+      "observed_equity": 9500,
+      "expected": {
+        "halted": false,
+        "peak_equity": 10000,
+        "max_drawdown_pct": 5
+      }
+    },
+    {
+      "id": "peak_based_trip",
+      "previous_peak": 12000,
+      "previous_equity": 12000,
+      "previous_max_drawdown_pct": 0,
+      "previous_halted": false,
+      "observed_equity": 11000,
+      "expected": {
+        "halted": true,
+        "peak_equity": 12000,
+        "max_drawdown_pct": 8.333333333333334
+      }
+    },
+    {
+      "id": "recovery_cannot_reset",
+      "previous_peak": 10000,
+      "previous_equity": 9200,
+      "previous_max_drawdown_pct": 8,
+      "previous_halted": true,
+      "observed_equity": 15000,
+      "expected": {
+        "halted": true,
+        "peak_equity": 15000,
+        "max_drawdown_pct": 8
+      }
+    }
+  ]
+}
