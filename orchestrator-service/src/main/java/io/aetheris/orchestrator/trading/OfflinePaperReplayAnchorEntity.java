@@ -21,7 +21,7 @@ public class OfflinePaperReplayAnchorEntity {
     private String accountKey;
 
     @Version
-    private long version;
+    private Long version;
 
     private long lastAcceptedSequence;
 
@@ -65,7 +65,7 @@ public class OfflinePaperReplayAnchorEntity {
     }
 
     public String getAccountKey() { return accountKey; }
-    public long getVersion() { return version; }
+    public Long getVersion() { return version; }
     public long getLastAcceptedSequence() { return lastAcceptedSequence; }
     public String getLastAcceptedDigest() { return lastAcceptedDigest; }
     public Instant getUpdatedAt() { return updatedAt; }
