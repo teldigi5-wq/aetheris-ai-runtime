@@ -46,6 +46,9 @@ public final class CompanyOrganizationDirectory {
         Set<String> registeredIds = agents.stream()
                 .map(AgentDefinition::id)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (registeredIds.size() != agents.size()) {
+            throw new IllegalStateException("DUPLICATE_SPECIALIST_ORGANIZATION_IDENTITY");
+        }
 
         for (AgentDefinition agent : agents) {
             if (agent.id() == null || agent.division() == null ||
