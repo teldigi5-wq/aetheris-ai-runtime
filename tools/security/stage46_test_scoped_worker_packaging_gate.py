@@ -129,12 +129,17 @@ def review(*, spec: object, pom: object, boot_entries: object,
     names = sorted(p.removeprefix(BOOTS_CLASS_PREFIX) for p in mains)
     keep = allclasses - mains
     src_mains = set(names)
-    if (not _config(pom)
-        or not {"BOOT-INF/", "BOOT-INF/classes/", "META-INF/MANIFEST.MF"}.issubset(production)
+    result["pom_configuration_verified"] = _config(pom)
+    result["normal_jar_layout_verified"] = {"BOOT-INF/", "BOOT-INF/classes/",
+                                               "META-INF/MANIFEST.MF"}.issubset(production)
+    result["fixture_jar_manifest_verified"] = "META-INF/MANIFEST.MF" in fixturezip
+    result["archive_sensitive_entry_count"] = len(_jarexposure(production | fixturezip))
+    if (not result["pom_configuration_verified"]
+        or not result["normal_jar_layout_verified"]
         or not any(p.startswith(BOOTS_LIB_PREFIX) and p.endswith(".jar") for p in production)
-        or "META-INF/MANIFEST.MF" not in fixturezip
+        or not result["fixture_jar_manifest_verified"]
         or not all(p.startswith(("META-INF/", WORKER_PREFIX)) for p in fixturezip)
-        or _jarexposure(production | fixturezip)
+        or result["archive_sensitive_entry_count"]
         or any("/src/test/" in p or p.endswith("Test.class") for p in production | fixturezip)):
         return result
 
