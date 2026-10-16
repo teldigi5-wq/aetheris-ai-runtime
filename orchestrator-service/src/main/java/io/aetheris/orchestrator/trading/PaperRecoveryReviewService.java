@@ -17,7 +17,7 @@ import java.util.List;
  * until a real external trust root exists. All outcomes remain NO_GO.
  */
 @Service
-public final class PaperRecoveryReviewService {
+public class PaperRecoveryReviewService {
     private static final String ACCOUNT = "paper-default";
     private static final long MAX_MARK_AGE_MS = 120_000L;
     private static final long MAX_MARK_GUARD_SKEW_MS = 120_000L;
