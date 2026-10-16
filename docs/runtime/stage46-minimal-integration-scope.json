@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "stage": "46.21",
+  "release_decision": "NO_GO",
+  "scope": "STAGED_DRAFT_INTEGRATION_REVIEW_NOT_PRODUCTION_RELEASE",
+  "candidate_policy": "MINIMAL_CONSOLIDATION_SPECIFICATION_ONLY_NO_MERGE",
+  "source_pr_range": {
+    "first": 72,
+    "last": 86,
+    "all_open_draft_unmerged_expected": true
+  },
+  "compiled_synthetic_java_sources": [
+    "orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraOfflineSpeechArtifactReview.java",
+    "orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraOfflineVoiceTurnCoordinator.java",
+    "orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraSyntheticAsyncVoiceBoundary.java",
+    "orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraSyntheticAudioGate.java",
+    "orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraSyntheticHostLimits.java",
+    "orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraSyntheticJobProbeMain.java",
+    "orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraSyntheticPcmWorkerMain.java",
+    "orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraSyntheticProcessSpeechBoundary.java",
+    "orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraVoiceReadOnlyConversationBridge.java"
+  ],
+  "allowed_synthetic_main_entrypoints": [
+    "orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraSyntheticJobProbeMain.java",
+    "orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/SyntraSyntheticPcmWorkerMain.java"
+  ],
+  "file_category_rules": {
+    "orchestrator-service/src/main/java/io/aetheris/orchestrator/voice/": "COMPILED_MAIN_SYNTHETIC_REVIEW_REQUIRED",
+    "orchestrator-service/src/test/java/": "TEST_ONLY",
+    "workstation-agent/packaging/stage46/": "CI_NATIVE_AND_POWERSHELL_LAB",
+    "tools/security/stage46_": "READ_ONLY_SECURITY_POLICY",
+    "tools/security/test_stage46_": "SECURITY_POLICY_TEST_ONLY",
+    ".github/workflows/runtime-stage46-": "CI_WORKFLOW_ONLY",
+    "docs/runtime/stage46-": "DOCUMENTATION_ONLY"
+  },
+  "unreviewed_production_entrypoints": [
+    "workstation-agent/packaging/install.ps1",
+    "orchestrator-service/pom.xml"
+  ],
+  "detected_release_risks": [
+    "JAVA_SYNTHETIC_HELPERS_COMPILED_ON_MAIN_CLASSPATH",
+    "SPRING_OR_PRODUCTION_CALLER_WIRING_NOT_AUTHORIZED",
+    "SYNTHETIC_WORKER_CLASSES_NOT_SIGNED_RELEASE_ARTIFACTS",
+    "REAL_AUDIO_AND_HARDWARE_NOT_VALIDATED",
+    "WINDOWS_WFP_PROCESS_EGRESS_NOT_PROVEN",
+    "UNMERGED_STACK_HAS_NO_APPROVED_INTEGRATION_CANDIDATE",
+    "FUTURE_INSTALLER_SECURITY_AND_DEPENDENCY_REVIEW_REQUIRED"
+  ],
+  "mandatory_next_reviews": [
+    "Decide whether compiled synthetic Java belongs in test sources or separate test-scoped Maven fixture without breaking verified tests",
+    "Manually review all dependencies and reflective/service-loader wiring before allowing a production path",
+    "Create minimal patch candidate only with independent security and architecture approval",
+    "Verify signed release artifacts from independently reviewed source and protected builder",
+    "Approve real Windows and voice-hardware tests separately after all Stage45 blockers satisfied"
+  ],
+  "controls": {
+    "all_thirteen_stage45_blockers_active": true,
+    "integration_candidate_created": false,
+    "merge_authorized": false,
+    "production_authorized": false,
+    "owner_pc_pilot_authorized": false,
+    "microphone_authorized": false,
+    "desktop_actions_authorized": false,
+    "wfp_firewall_changes_authorized": false
+  }
+}
