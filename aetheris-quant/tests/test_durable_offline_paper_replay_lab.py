@@ -121,7 +121,7 @@ class DurablePaperReplayTest(unittest.TestCase):
         self.assertFalse(any(DATA["runtime_authority"].values()))
         self.assertEqual(DATA["decision"], "NO_GO")
         self.assertNotIn("enable_autonomous_testnet",
-                         Path(__file__).read_text(encoding="utf-8"))
+                         Path(__file__).with_name("durable_offline_paper_replay_lab.py").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
