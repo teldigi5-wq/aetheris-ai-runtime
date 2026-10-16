@@ -76,10 +76,64 @@
   </dependencies>
   <build>
     <plugins>
+      <!-- Stage 46.23: fixed synthetic child *main* classes are compiled for
+           existing Maven/JUnit/Windows CI tests, but must NOT be shipped in
+           the ordinary Spring Boot executable JAR. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.5.1</version>
+        <executions>
+          <execution>
+            <id>default-jar</id>
+            <configuration>
+              <excludes>
+                <exclude>io/aetheris/orchestrator/voice/SyntraSyntheticPcmWorkerMain.class</exclude>
+                <exclude>io/aetheris/orchestrator/voice/SyntraSyntheticJobProbeMain.class</exclude>
+              </excludes>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
       </plugin>
     </plugins>
   </build>
+  <!-- Explicit lab-only Maven profile: generates a tiny synthetic fixture JAR
+       only when opted into CI with -Psynthetic-worker-lab. Maven JAR plugin
+       attach=false means this artifact is NOT attached for install/deploy.
+       Do not turn this on by default or activate on production packaging. -->
+  <profiles>
+    <profile>
+      <id>synthetic-worker-lab</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-jar-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>synthetic-worker-lab-only</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+                <configuration>
+                  <classifier>synthetic-worker-lab-only</classifier>
+                  <attach>false</attach>
+                  <includes>
+                    <include>io/aetheris/orchestrator/voice/SyntraSyntheticPcmWorkerMain.class</include>
+                    <include>io/aetheris/orchestrator/voice/SyntraSyntheticJobProbeMain.class</include>
+                  </includes>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+
 </project>
