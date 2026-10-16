@@ -1,0 +1,178 @@
+name: Runtime Stage 46.20 Integration Readiness Without Merge
+
+on:
+  pull_request:
+    branches:
+      - feature/stage46-cross-runner-provenance-and-chain-audit-20261016
+      - main
+    paths:
+      - 'tools/security/stage46_integration_merge_review.py'
+      - 'tools/security/test_stage46_integration_merge_review.py'
+      - 'tools/security/stage46_integration_chain_review.py'
+      - 'tools/security/test_stage46_integration_chain_review.py'
+      - 'docs/runtime/stage46-integration-readiness-review.md'
+      - '.github/workflows/runtime-stage46-integration-readiness.yml'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  protected-main-merge-tree-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Fetch main for local merge-tree inspection only
+        run: git -c protocol.version=2 fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+      - name: Review conflict status without Git merge, checkout, push or ref write
+        env:
+          EXACT_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 tools/security/stage46_integration_merge_review.py \
+            --expected-head "$EXACT_HEAD" \
+            --output "$RUNNER_TEMP/stage46-20-main-merge-review.json"
+      - name: Adversarial merge-result safety tests
+        run: python3 -m unittest discover -s tools/security -p test_stage46_integration_merge_review.py -v
+
+  live-extended-draft-chain-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Audit fourteen existing draft PRs on GitHub using read-only token
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURRENT_BASE: ${{ github.event.pull_request.base.ref }}
+          CURRENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          python3 tools/security/stage46_integration_chain_review.py \
+            --manifest docs/runtime/stage46-draft-chain-integrity-manifest.json \
+            --current-base "$CURRENT_BASE" --current-base-sha "$CURRENT_BASE_SHA"
+      - name: Reject changed, closed, merged, ready, or retargeted PR evidence
+        run: |
+          python3 -m unittest discover -s tools/security -p test_stage46_integration_chain_review.py -v
+          python3 -m unittest discover -s tools/security -p test_stage46_pr_chain_audit.py -v
+
+  windows-no-device-security-regression:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Compile fixed synthetic Java process
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -f orchestrator-service/pom.xml -DskipTests compile
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_20_JAVA_COMPILE_FAILED' }
+      - name: Windows reduced token and Job Object
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsReducedTokenLab.ps1 -ClassesPath ./orchestrator-service/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_20_TOKEN_FAILURE' }
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsJobLab.ps1 -ClassesPath ./orchestrator-service/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_20_JOB_FAILURE' }
+      - name: AppContainer and read-only WFP policy
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsAppContainerLab.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_20_APPCONTAINER_FAILURE' }
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsWfpReadOnly.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_20_WFP_LAYER_FAILURE' }
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWfpDropAuditReadOnly.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_20_WFP_SNAPSHOT_FAILURE' }
+
+  linux-synthetic-voice-and-release-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Targeted synthetic voice and owner-isolation Java tests
+        run: |
+          ./mvnw -B -f orchestrator-service/pom.xml \
+            -Dtest=SyntraSyntheticHostLimitsTest,SyntraSyntheticProcessSpeechBoundaryTest,SyntraSyntheticAsyncVoiceBoundaryTest,SyntraVoiceReadOnlyConversationBridgeTest,SyntraOfflineVoiceTurnCoordinatorTest,SyntraOfflineSpeechArtifactReviewTest,SyntraSyntheticAudioGateTest,SyntraSyntheticAudioTaskControlReviewTest,SyntheticVoiceOwnerConsentLabTest,SyntheticVoiceTaskControlReviewTest,VerifiedOwnerTaskReadTest test
+      - name: Prior synthetic evidence and provenance security suites
+        run: |
+          for suite in test_stage46_worker_trust_evidence.py test_stage46_wfp_provenance_gate.py test_stage46_wfp_drop_audit_gate.py test_stage46_wfp_synthetic_match_contract.py test_stage46_synthetic_dual_build_gate.py test_stage46_cross_runner_build_gate.py test_stage46_pr_chain_audit.py; do
+            python3 -m unittest discover -s tools/security -p "$suite" -v
+          done
+
+  full-orchestrator-and-workstation-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Full orchestrator
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+      - name: Existing workstation agent
+        run: ./mvnw -B -f workstation-agent/pom.xml test
+
+  immutable-no-go-and-review-only-static:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: All thirteen blockers, zero merge or deployment
+        run: |
+          python3 -m unittest discover -s tools/security -p test_stage45_pre_pilot_gate.py -v
+          python3 tools/security/stage45_pre_pilot_gate.py > "$RUNNER_TEMP/stage46-20-no-go.json"
+          python3 - "$RUNNER_TEMP/stage46-20-no-go.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          report=json.loads(Path(sys.argv[1]).read_text())
+          assert report["decision"]=="NO_GO" and len(report["release_blockers"])==13
+          for key in ("production_pilot_authorized","agent_command_execution_authorized",
+                      "desktop_actions_authorized","protected_branch_merge_permitted",
+                      "windows_device_certified","voice_microphone_certified","deploy_permitted"):
+              assert report[key] is False, key
+          print("STAGE46_20_THIRTEEN_RELEASE_BLOCKERS_MERGE_AND_PILOT_NO_GO")
+          PY
+      - name: Static review source contains no actual GitHub mutation or Windows activation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          git=Path("tools/security/stage46_integration_merge_review.py").read_text()
+          pr=Path("tools/security/stage46_integration_chain_review.py").read_text()
+          assert '"merge-tree", "--write-tree", "--messages"' in git
+          assert '"status", "--porcelain=v1"' in git
+          assert '"decision": "NO_GO"' in git
+          assert 'pr85["merged"] is not False' in pr and 'pr85["draft"] is not True' in pr
+          forbidden=("FwpmFilterAdd", "TargetDataLine", "SourceDataLine",
+                     "SyntraLoopbackModelClient", "git push", "reset --hard",
+                     "subprocess.Popen", "os.system")
+          assert not any(word in git or word in pr for word in forbidden)
+          print("STAGE46_20_READ_ONLY_REVIEW_NO_DEVICE_OR_MERGE")
+          PY
