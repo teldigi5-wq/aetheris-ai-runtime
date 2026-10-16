@@ -1,0 +1,143 @@
+name: Runtime Stage 46.31 Durable Offline Paper Replay Lab
+
+on:
+  pull_request:
+    branches:
+      - feature/stage46-offline-risk-state-reconciliation-20261016
+      - main
+    paths:
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/trading/Stage4631*.java'
+      - 'aetheris-quant/tests/durable_offline_paper_replay_lab.py'
+      - 'aetheris-quant/tests/test_durable_offline_paper_replay_lab.py'
+      - 'docs/runtime/stage46-durable-paper-replay-lab.md'
+      - '.github/workflows/runtime-stage46-durable-paper-replay-lab.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  actual-java-disposable-h2-atomic-replay-lab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Durable H2 restart/concurrency/rollback and existing signed snapshots
+        run: ./mvnw -B -f orchestrator-service/pom.xml -Dtest=Stage4631DurablePaperReplayLabTest,OfflinePaperStateReconciliationTest test
+      - name: Previous real Java paper money management and cross-language parity
+        run: ./mvnw -B -f orchestrator-service/pom.xml -Dtest=PaperCrossLanguageRiskContractTest,PaperCapitalBudgetServiceTest,PaperDrawdownPolicyTest,PaperDrawdownGuardIntegrationTest test
+
+  actual-python-disposable-sqlite-replay-lab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Disposable SQLite restart/atomic CAS/rollback and replay adversaries
+        run: python3 -m unittest discover -s aetheris-quant/tests -p test_durable_offline_paper_replay_lab.py -v
+      - name: Previous synthetic authenticated envelope and paper-risk parity
+        run: |
+          python3 -m unittest discover -s aetheris-quant/tests -p test_offline_paper_state_boundary.py -v
+          python3 -m unittest discover -s aetheris-quant/tests -p test_paper_risk_cross_language_contract.py -v
+          python3 -m unittest discover -s aetheris-quant/tests -p test_execution_boundary.py -v
+      - name: Enforce test-source-only new ledger and unchanged bot
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          a=Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/trading/Stage4631OfflineReplayLedgerLab.java")
+          b=Path("aetheris-quant/tests/durable_offline_paper_replay_lab.py")
+          for path in (a,b):
+              assert path.is_file()
+          for root in (Path("orchestrator-service/src/main/java"),
+                       Path("aetheris-quant/app")):
+              assert not list(root.rglob("*Stage4631*"))
+              assert not list(root.rglob("*durable_offline_paper_replay_lab*"))
+          q=Path("aetheris-quant/app/autonomous.py").read_text()
+          assert "durable_offline_paper_replay_lab" not in q
+          assert "offline_paper_state_boundary" not in q
+          src=a.read_text()+"\n"+b.read_text()
+          for forbidden in ("@RestController","@GetMapping","@PostMapping","@Service",
+                            "market_order(", "place_order(", "import requests",
+                            "import httpx", "from .binance"):
+              assert forbidden not in src,forbidden
+          print("STAGE46_31_TEST_DATABASE_ONLY_NO_EXCHANGE_OR_RUNTIME_WIRING")
+          PY
+
+  complete-orchestrator-and-workstation-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: All orchestrator Java suites, including H2 durable replay lab
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+      - name: Existing workstation-agent tests
+        run: ./mvnw -B -f workstation-agent/pom.xml test
+
+  hosted-windows-inert-containment-unchanged:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Compile fixed inert two-class worker module only
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -f synthetic-worker-lab/pom.xml -DskipTests clean package
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_31_INERT_WORKER_BUILD_FAILED' }
+      - name: Existing reduced-token Job Object and AppContainer synthetic tests
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsReducedTokenLab.ps1 -ClassesPath ./synthetic-worker-lab/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_31_REDUCED_TOKEN_FAILED' }
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsJobLab.ps1 -ClassesPath ./synthetic-worker-lab/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_31_JOB_OBJECT_FAILED' }
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsAppContainerLab.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_31_APPCONTAINER_FAILED' }
+
+  immutable-stage45-release-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Stage45 13 immutable blockers are still release NO_GO
+        run: |
+          python3 -m unittest discover -s tools/security -p test_stage45_pre_pilot_gate.py -v
+          python3 tools/security/stage45_pre_pilot_gate.py > "$RUNNER_TEMP/stage46-31-no-go.json"
+          python3 - "$RUNNER_TEMP/stage46-31-no-go.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          p=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          assert p["decision"]=="NO_GO" and len(p["release_blockers"])==13
+          for name in ("production_pilot_authorized","protected_branch_merge_permitted",
+                       "agent_command_execution_authorized","desktop_actions_authorized",
+                       "windows_device_certified","voice_microphone_certified","deploy_permitted"):
+              assert p[name] is False,name
+          print("STAGE46_31_THIRTEEN_BLOCKERS_PRODUCTION_OWNER_PC_NO_GO")
+          PY
