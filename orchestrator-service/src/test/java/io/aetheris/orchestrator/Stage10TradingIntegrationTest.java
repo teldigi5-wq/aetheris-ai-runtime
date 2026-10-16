@@ -40,6 +40,13 @@ class Stage10TradingIntegrationTest {
         assertThat(filled.status()).isEqualTo("PARTIAL_FILL_SIMULATED");
         assertThat(filled.mode()).isEqualTo("PAPER_SIMULATION_ONLY");
         assertThat(filled.fillRatio()).isEqualTo(.4);
+        assertThat(filled.riskDecision()).isNotNull();
+        assertThat(filled.riskDecision().allowed()).isTrue();
+        assertThat(filled.riskDecision().approvedNotional()).isPositive();
+        assertThat(filled.filledNotional())
+                .isEqualTo(filled.riskDecision().approvedNotional() * filled.fillRatio());
+        assertThat(filled.riskDecision().estimatedLossAtStop())
+                .isLessThanOrEqualTo(filled.riskDecision().remainingDailyLossBudget());
         assertThat(filled.simulatedCosts()).isPositive();
         assertThat(filled.marketSources()).containsExactlyInAnyOrder("stage10-source-a", "stage10-source-b");
         assertThat(filled.detail()).contains("no durable position").contains("no exchange order");
