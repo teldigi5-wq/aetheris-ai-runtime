@@ -14,13 +14,16 @@ public class PaperRiskOfficerService {
     private final PaperRiskPolicyRepository paperPolicies;
     private final PaperPositionRepository positions;
     private final TradingIntelligenceService intelligence;
+    private final PaperDrawdownGuardService drawdownGuard;
 
     public PaperRiskOfficerService(PaperRiskPolicyRepository paperPolicies,
                                    PaperPositionRepository positions,
-                                   TradingIntelligenceService intelligence) {
+                                   TradingIntelligenceService intelligence,
+                                   PaperDrawdownGuardService drawdownGuard) {
         this.paperPolicies = paperPolicies;
         this.positions = positions;
         this.intelligence = intelligence;
+        this.drawdownGuard = drawdownGuard;
     }
 
     public PaperRiskPolicyEntity policy() {
@@ -42,6 +45,12 @@ public class PaperRiskOfficerService {
         // The trading account's daily UTC boundary must be evaluated before
         // taking the snapshot; Stage45 still forbids real money operation.
         account.ensureDay();
+        PaperDrawdownGuardService.OpeningDecision circuit = drawdownGuard.forNewPaperExposure(account);
+        if (!circuit.allowed()) {
+            return new PaperRiskDecision(false,
+                    List.of("Paper drawdown circuit blocks new exposure: " + circuit.reason()),
+                    0, 0, 0, 0, 0);
+        }
         PaperCapitalBudgetService.Quote budget = PaperCapitalBudgetService.assess(
                 account, signal, simulatedFillPrice, intelligence.policy(), policy(),
                 positions.findByStatus(PaperPositionStatus.OPEN));
