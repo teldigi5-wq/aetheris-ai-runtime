@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "mode": "SYNTHETIC_OFFLINE_PAPER_CHAIN_FIXTURE_ONLY",
+  "decision": "NO_GO",
+  "key_warning": "A FIXED PUBLIC TEST-ONLY KEY; NEVER USE FOR PRODUCTION AUTHENTICATION",
+  "test_key_utf8": "stage46-offline-synthetic-ci-key-v1-unsafe",
+  "snapshots": [
+    {
+      "state": {
+        "schema_version": 1,
+        "origin": "JAVA_PAPER_SYNTHETIC_ONLY",
+        "account_id": "paper-default",
+        "currency": "USD",
+        "sequence": 1,
+        "issued_ms": 1760000000000,
+        "expires_ms": 1760000120000,
+        "previous_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+        "cash_minor": 1000000,
+        "equity_minor": 1000000,
+        "daily_realized_minor": 0,
+        "halted": false,
+        "positions": []
+      },
+      "sha256": "7228c253bae5b97f71067454690fe7c136d4782729ae72cd85b32da64b89a281",
+      "tag": "e9bbe1938e0266c0c55047baf9b87d39dd360141af9b758a013c1596c5a328af",
+      "verify_at_ms": 1760000030000
+    },
+    {
+      "state": {
+        "schema_version": 1,
+        "origin": "JAVA_PAPER_SYNTHETIC_ONLY",
+        "account_id": "paper-default",
+        "currency": "USD",
+        "sequence": 2,
+        "issued_ms": 1760000050000,
+        "expires_ms": 1760000170000,
+        "previous_digest": "7228c253bae5b97f71067454690fe7c136d4782729ae72cd85b32da64b89a281",
+        "cash_minor": 990000,
+        "equity_minor": 960000,
+        "daily_realized_minor": -10000,
+        "halted": false,
+        "positions": [
+          {
+            "id": "p-001",
+            "symbol": "BTCUSDT",
+            "side": "LONG",
+            "entry_minor": 10000,
+            "stop_minor": 9900,
+            "quantity_microunits": 2000000,
+            "notional_minor": 20000
+          }
+        ]
+      },
+      "sha256": "0dbca02a652bb6a478950fec9094caf3df0e26e82e61ab633759c63ce9af1ed3",
+      "tag": "ff23d82b36f2a8132f0dd353af93eca14d9bd40d6c308a110ba23db73d626b97",
+      "verify_at_ms": 1760000070000
+    }
+  ],
+  "runtime_authority": {
+    "real_paper_account_state_import": false,
+    "python_quant_testnet_state_import": false,
+    "python_quant_testnet_orders": false,
+    "live_money_orders": false,
+    "owner_pc_pilot": false,
+    "production_release": false
+  }
+}
