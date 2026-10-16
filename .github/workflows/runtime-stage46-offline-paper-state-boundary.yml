@@ -1,0 +1,137 @@
+name: Runtime Stage 46.30 Offline Paper State Boundary
+
+on:
+  pull_request:
+    branches:
+      - feature/stage46-cross-language-paper-risk-contract-20261016
+      - main
+    paths:
+      - 'aetheris-quant/app/offline_paper_state_boundary.py'
+      - 'aetheris-quant/tests/test_offline_paper_state_boundary.py'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/trading/OfflinePaperStateReconciliation.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/trading/OfflinePaperStateReconciliationTest.java'
+      - 'risk-contracts/stage46-offline-paper-state-chain-fixtures.json'
+      - 'docs/runtime/stage46-offline-paper-state-reconciliation.md'
+      - '.github/workflows/runtime-stage46-offline-paper-state-boundary.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  python-offline-auth-replay-and-quant-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Python synthetic HMAC, replay and immutable NO_GO tests
+        run: python3 -m unittest discover -s aetheris-quant/tests -p test_offline_paper_state_boundary.py -v
+      - name: Existing Python cross-language paper risk parity and Binance live-host rejection
+        run: |
+          python3 tools/security/stage46_cross_language_risk_readiness.py > "$RUNNER_TEMP/stage46-30-risk-nogo.json"
+          python3 -m unittest discover -s aetheris-quant/tests -p test_paper_risk_cross_language_contract.py -v
+          python3 -m unittest discover -s aetheris-quant/tests -p test_execution_boundary.py -v
+      - name: No exchange or environment access in new offline boundary
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path("aetheris-quant/app/offline_paper_state_boundary.py").read_text()
+          fixture=Path("risk-contracts/stage46-offline-paper-state-chain-fixtures.json").read_text()
+          assert "snapshot_state_applied" in src and '"NO_GO"' in src
+          assert "NEVER USE FOR PRODUCTION" in fixture
+          for forbidden in ("import requests","import httpx","import socket",
+                 "market_order(", "place_order(", "load_dotenv","os.environ",
+                 "from .binance", "asyncio.create_task"):
+              assert forbidden not in src, forbidden
+          print("STAGE46_30_NO_RUNTIME_STATE_IMPORT_OR_TESTNET_EXECUTION")
+          PY
+
+  java-real-byte-identical-synthetic-authentication:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Verify actual Java synthetic HMAC-SHA256 golden signed chain and rejection tests
+        run: ./mvnw -B -f orchestrator-service/pom.xml -Dtest=OfflinePaperStateReconciliationTest test
+      - name: Prior actual Java paper risk, persistent drawdown and cross-language parity
+        run: ./mvnw -B -f orchestrator-service/pom.xml -Dtest=PaperCrossLanguageRiskContractTest,PaperCapitalBudgetServiceTest,PaperDrawdownPolicyTest,PaperDrawdownGuardIntegrationTest test
+
+  full-orchestrator-and-workstation-regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Entire orchestrator suite, no profile/test skips
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+      - name: Complete workstation-agent suite
+        run: ./mvnw -B -f workstation-agent/pom.xml test
+
+  hosted-windows-existing-containment-regressions:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Build only inert synthetic worker module
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -f synthetic-worker-lab/pom.xml -DskipTests clean package
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_30_FIXED_WORKER_BUILD_FAILED' }
+      - name: Verify native Job Object and reduced-token, then AppContainer fixture
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsReducedTokenLab.ps1 -ClassesPath ./synthetic-worker-lab/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_30_REDUCED_TOKEN_FAILURE' }
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsJobLab.ps1 -ClassesPath ./synthetic-worker-lab/target/classes
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_30_JOB_OBJECT_FAILURE' }
+          pwsh -NoProfile -NonInteractive -File ./workstation-agent/packaging/stage46/Test-SyntraWindowsAppContainerLab.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'STAGE46_30_APPCONTAINER_FAILURE' }
+
+  stage45-all-thirteen-immutable-release-blockers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Existing immutable production refusal
+        run: |
+          python3 -m unittest discover -s tools/security -p test_stage45_pre_pilot_gate.py -v
+          python3 tools/security/stage45_pre_pilot_gate.py > "$RUNNER_TEMP/stage46-30-no-go.json"
+          python3 - "$RUNNER_TEMP/stage46-30-no-go.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          p=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          assert p["decision"] == "NO_GO" and len(p["release_blockers"]) == 13
+          for key in ("production_pilot_authorized","protected_branch_merge_permitted",
+                      "agent_command_execution_authorized","desktop_actions_authorized",
+                      "windows_device_certified","voice_microphone_certified","deploy_permitted"):
+              assert p[key] is False,key
+          print("STAGE46_30_ALL_THIRTEEN_RELEASE_BLOCKERS_OWNER_PC_PRODUCTION_NO_GO")
+          PY
