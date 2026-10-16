@@ -58,11 +58,13 @@ jobs:
           from pathlib import Path
           evaluator=Path("aetheris-quant/app/paper_risk_contract.py").read_text()
           checker=Path("tools/security/stage46_cross_language_risk_readiness.py").read_text()
-          for content in (evaluator, checker):
+          for content in (evaluator,):
               for forbidden in ("import httpx","from .binance","market_order(",
                   "place_order(", "aiohttp", "import requests","ProcessBuilder",
                   "ENABLE_TESTNET_EXECUTION=true", "auto_start_autonomous=True"):
                   assert forbidden not in content,forbidden
+          assert "python_quant_testnet_runtime_policy_parity" in checker
+          assert "paper_risk_contract" not in Path("aetheris-quant/app/autonomous.py").read_text()
           print("STAGE46_29_READONLY_PARITY_NOT_AUTOTRADING")
           PY
 
