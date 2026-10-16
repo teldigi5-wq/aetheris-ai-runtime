@@ -38,13 +38,13 @@ class Stage4624IndependentWorkerModuleTest(unittest.TestCase):
         self.assertTrue(v["only_two_canonical_sources_used"])
         self.assertEqual(v["module_worker_bytecode_count"],2)
         self.assertEqual(v["module_dependencies_declared"],0)
-        self.assert_no_release(v)
+        self.no_release(v)
 
     def test_real_main_archive_contains_no_synthetic_worker_main(self):
         v=audit(evidence())
         self.assertTrue(v["ordinary_spring_boot_contains_no_worker_main"])
         self.assertEqual(v["production_worker_bytecode_count"],0)
-        self.assert_no_release(v)
+        self.no_release(v)
 
     def test_compiled_fixture_jar_may_only_include_two_worker_bytecodes(self):
         v=audit(evidence())
@@ -71,7 +71,7 @@ class Stage4624IndependentWorkerModuleTest(unittest.TestCase):
         e["boot_entries"].append(entry("BOOT-INF/classes/io/aetheris/orchestrator/voice/SyntraSyntheticJobProbeMain.class"))
         v=audit(e)
         self.assertFalse(v["ordinary_spring_boot_contains_no_worker_main"])
-        self.assert_no_release(v)
+        self.no_release(v)
 
     def test_module_maven_install_cannot_be_reenabled(self):
         e=evidence()
@@ -147,7 +147,7 @@ class Stage4624IndependentWorkerModuleTest(unittest.TestCase):
     def test_nonrelease_outcome_preserved_when_invalid(self):
         e=evidence()
         e["lab_entries"]=None
-        self.assert_no_release(audit(e))
+        self.no_release(audit(e))
         self.assertFalse(audit(e)["only_two_worker_bytecodes_in_module_jar"])
 
     def test_encrypted_jar_entry_rejected(self):
