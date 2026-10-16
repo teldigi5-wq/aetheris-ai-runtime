@@ -82,7 +82,8 @@ public final class OfflinePaperStateReconciliation {
                 || !integer(state.path("equity_minor"), true)
                 || !state.path("daily_realized_minor").isIntegralNumber()
                 || !state.path("daily_realized_minor").canConvertToLong()
-                || Math.abs(state.path("daily_realized_minor").longValue()) > 1_000_000_000_000_000L
+                || state.path("daily_realized_minor").longValue() < -1_000_000_000_000_000L
+                || state.path("daily_realized_minor").longValue() > 1_000_000_000_000_000L
                 || !state.path("halted").isBoolean()
                 || !state.path("positions").isArray()
                 || state.path("positions").size() > 16) {
