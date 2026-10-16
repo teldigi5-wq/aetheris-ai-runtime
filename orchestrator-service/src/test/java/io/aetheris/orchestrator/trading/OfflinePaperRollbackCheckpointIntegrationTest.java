@@ -178,13 +178,13 @@ class OfflinePaperRollbackCheckpointIntegrationTest {
     }
 
     @Test void invalidSignedLongAndUnknownScopeAreRejected() {
-        ObjectNode mutated=fixture.path("checkpoint").deepCopy();
-        mutated.put("highest_sequence",Long.MAX_VALUE);
-        assertThatThrownBy(()->OfflinePaperRollbackCheckpointService.canonical(mutated))
+        ObjectNode excessive=fixture.path("checkpoint").deepCopy();
+        excessive.put("highest_sequence",Long.MAX_VALUE);
+        assertThatThrownBy(()->OfflinePaperRollbackCheckpointService.canonical(excessive))
                 .isInstanceOf(IllegalArgumentException.class);
-        mutated=fixture.path("checkpoint").deepCopy();
-        mutated.put("scope","REAL_BROKER");
-        assertThatThrownBy(()->OfflinePaperRollbackCheckpointService.canonical(mutated))
+        ObjectNode wrongScope=fixture.path("checkpoint").deepCopy();
+        wrongScope.put("scope","REAL_BROKER");
+        assertThatThrownBy(()->OfflinePaperRollbackCheckpointService.canonical(wrongScope))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
