@@ -48,7 +48,7 @@ public class Stage10PaperOrderSimulatorService {
             return result("PENDING_NO_FILL", signal, consensus, orderType, simulatedFill, 0, 0, 0, 0,
                     "Requested simulation fill ratio is zero; order remains unfilled", decision);
         }
-        double notional = Math.min(signal.getRecommendedNotional(), paper.account().getCashBalance() * signal.getLeverage());
+        double notional = decision.approvedNotional();
         double filledNotional = notional * fillRatio;
         double quantity = filledNotional / simulatedFill;
         double fees = filledNotional * request.feeBps() / 10_000d;
