@@ -80,9 +80,14 @@ pipelines is claimed operational by this stage.**
 
 `EnterpriseOrganizationRegistryTest` must pass on Ubuntu 24.04 and
 Windows Server 2022, together with E0's `EnterpriseCatalogBaselineTest`.
-The workflow also runs the full Java orchestrator regression and separate
-non-activation + Stage45 checks. CI success establishes only these
-specific tests at an exact SHA; it does not authorize a merge or deployment.
+The workflow also runs the full Java orchestrator regression and an independent
+non-activation check. **The Stage45 release-gate source/tests are NOT present
+on the E0 main-based development branch**, so this E1 workflow explicitly
+records that Stage45 certification was not executed and must NOT claim its
+13 blocker tests passed. A later integration review must execute the real
+Stage45 gate from its own audited source before promotion. CI success
+establishes only the checks actually executed at an exact SHA; it does not
+authorize a merge, desktop activation, financial action or deployment.
 
 ## Follow-on stages
 
