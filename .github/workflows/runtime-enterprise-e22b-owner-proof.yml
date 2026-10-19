@@ -1,0 +1,87 @@
+name: Enterprise E2.2B Signed Owner Proof Preflight
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e22b-postgres-contract-20261019
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseOwnerProofPreflight.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/organization/EnterpriseOwnerProofPreflightTest.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/organization/EnterpriseOwnerProofStoredIntentTest.java'
+      - 'docs/runtime/enterprise-e22b-owner-proof-preflight.md'
+      - '.github/workflows/runtime-enterprise-e22b-owner-proof.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signed-proof-and-legacy-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Signed proof and H2-stored intent on Ubuntu
+        if: runner.os == 'Linux'
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml -Dtest=EnterpriseOwnerProofPreflightTest,EnterpriseOwnerProofStoredIntentTest,EnterpriseDesignReviewIntakeServiceTest,EnterpriseCatalogBaselineTest test
+      - name: Signed proof and H2-stored intent on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -ntp -f orchestrator-service/pom.xml '-Dtest=EnterpriseOwnerProofPreflightTest,EnterpriseOwnerProofStoredIntentTest,EnterpriseDesignReviewIntakeServiceTest,EnterpriseCatalogBaselineTest' test
+          if ($LASTEXITCODE -ne 0) { throw 'E22B_OWNER_PROOF_FAILED' }
+
+  full-java-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  owner-trust-is-not-granted:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Cryptographic proof cannot become agent execution approval
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseOwnerProofPreflight.java')
+          code=path.read_text()
+          assert 'SIGNATURE_VALID_OWNER_NOT_ATTESTED_REPLAY_NOT_TRACKED' in code
+          assert 'true, false, false, false, false, false' in code
+          assert 'Signature.getInstance("Ed25519")' in code
+          assert 'DOMAIN = "AETHERIS_E22B_OWNER_PROOF_PREFLIGHT_V1"' in code
+          for banned in ('@RestController','@PostMapping','@PutMapping','@DeleteMapping',
+                        '@Service', 'ToolExecutionService', 'TaskDelegationService',
+                        'Runtime.getRuntime', 'ProcessBuilder', '@Scheduled',
+                        'Files.write','@Transactional'):
+              assert banned not in code, banned
+          print('ED25519_PROOF_VERIFIED_BUT_OWNER_AUTH_AND_EXECUTION_NEVER_GRANTED')
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists(), (
+              'Stage45 sources present: must execute actual gate before claiming promotion'
+          )
+          print('STAGE45_NOT_EXECUTED: OWNER_PC_AND_PRODUCTION_REMAIN_NO_GO')
+          PY
