@@ -1,0 +1,102 @@
+name: Enterprise E3 CI-only Cinematic Website Factory
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e22d-offline-key-trust-20261019
+      - main
+    paths:
+      - 'tools/enterprise/e3_factory/**'
+      - 'docs/runtime/enterprise-e3-ci-factory.md'
+      - '.github/workflows/runtime-enterprise-e3-factory.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generated-source-cross-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Build real site using restricted CI-only deterministic worker
+        run: python tools/enterprise/e3_factory/worker.py
+      - name: Verify safe brief, generated files, and SHA256 integrity
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+      - name: JavaScript syntax for real source and emitted site
+        run: |
+          node --check tools/enterprise/e3_factory/main.js
+          node --check target/e3-factory/site/main.js
+
+  real-chromium-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Generate site from frozen brief
+        run: python tools/enterprise/e3_factory/worker.py
+      - name: Run deterministic factory file-hash tests
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+      - name: Install fixed Playwright version only in test harness
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Browser QA — reversible scroll, mobile and reduced-motion
+        run: node tools/enterprise/e3_factory/browser_qa.mjs
+      - name: Attach real generated site and browser-evidence screenshots/report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e3-cinematic-site-and-browser-evidence
+          path: target/e3-factory/
+          if-no-files-found: error
+          retention-days: 14
+
+  strict-sandbox-and-truth-claims:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: CI worker has no host-command/network/production capability
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('tools/enterprise/e3_factory')
+          worker=(root/'worker.py').read_text()
+          html=(root/'template.html').read_text()
+          js=(root/'main.js').read_text()
+          assert 'TARGET = REPO / "target" / "e3-factory" / "site"' in worker
+          assert 'TARGET.mkdir(mode=0o700)' in worker
+          for forbidden in ('subprocess', 'os.system', 'import socket', 'import requests',
+                            'urllib.request', 'shutil.rmtree', 'eval(', 'exec(', 'Popen('):
+              assert forbidden not in worker, forbidden
+          for forbidden in ('fetch(', 'XMLHttpRequest', 'WebSocket(', 'document.cookie',
+                            'localStorage', 'eval(', 'new Function('):
+              assert forbidden not in js, forbidden
+          assert 'blenderRenderedFramesPresent": False' in worker
+          assert 'threeJsOrWebglScenePresent": False' in worker
+          assert 'productionPublished": False' in worker
+          assert 'DETERMINISTIC CI BUILD / NOT PRODUCTION' in html
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists(), (
+              'Stage45 suite integrated: run actual blockers before activation'
+          )
+          print('E3_CI_ONLY_WORKER_OUTPUT_SCOPE_AND_TRUTH_STATUS_PASSED')
+          print('STAGE45_UNEXECUTED: PHYSICAL_OWNER_PC_AND_PRODUCTION_NO_GO')
+          PY
