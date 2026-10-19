@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "evidenceClass": "PROPOSED_ADVISORY_ROLES_NOT_AGENT_IDENTITIES",
+  "roles": [
+    {
+      "id": "chief-executive-officer",
+      "title": "Chief Executive Officer (Advisory)",
+      "organization": "group-headquarters",
+      "status": "PROPOSED",
+      "executionEnabled": false,
+      "authorityGranted": false,
+      "allowedTools": [],
+      "approvalCanBeIssued": false
+    },
+    {
+      "id": "product-design-lead",
+      "title": "Product Design Lead",
+      "organization": "aetheris-creative",
+      "status": "PROPOSED",
+      "executionEnabled": false,
+      "authorityGranted": false,
+      "allowedTools": [],
+      "approvalCanBeIssued": false
+    },
+    {
+      "id": "ux-researcher",
+      "title": "UX Researcher",
+      "organization": "aetheris-creative",
+      "status": "PROPOSED",
+      "executionEnabled": false,
+      "authorityGranted": false,
+      "allowedTools": [],
+      "approvalCanBeIssued": false
+    },
+    {
+      "id": "visual-interface-designer",
+      "title": "Visual Interface Designer",
+      "organization": "aetheris-creative",
+      "status": "PROPOSED",
+      "executionEnabled": false,
+      "authorityGranted": false,
+      "allowedTools": [],
+      "approvalCanBeIssued": false
+    }
+  ]
+}
