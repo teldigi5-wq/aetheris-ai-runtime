@@ -69,7 +69,8 @@ class RealTrialContractTests(unittest.TestCase):
             self.assertFalse(result["ownerApprovalGranted"])
             self.assertEqual(result["responseClass"], "SCHEMA_VALID_ABSTAIN")
             self.assertTrue((evidence / "real-inference.json").exists())
-            self.assertFalse((root / "advisory.json").exists())
+            self.assertTrue((root / "advisory.json").exists())
+            self.assertFalse((root / "proposal.json").exists())
             # This test used mocked API responses: never count its pass as real inference.
             # Only the separate real Docker-backed CI job may claim real local model data.
 
@@ -108,7 +109,7 @@ class RealTrialContractTests(unittest.TestCase):
                            "eval_count": 14, "response": "{}"},
                           {"model": target.MODEL, "done": True,
                            "eval_count": 0, "response": "{}"}]:
-                with self.subTest(reply=reply), (
+                with (
                     mock.patch.dict(os.environ, {target.OPT_IN: "yes"}),
                     mock.patch.object(target, "OUTPUT", root / "out"),
                     mock.patch.object(target.gate, "bounded_file", return_value=source),
