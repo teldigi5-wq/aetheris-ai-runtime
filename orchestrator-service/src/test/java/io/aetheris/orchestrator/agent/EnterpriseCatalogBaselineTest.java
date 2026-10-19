@@ -60,7 +60,8 @@ class EnterpriseCatalogBaselineTest {
             identity.put("allowedTools", agent.allowedTools());
             actual.add(identity);
         }
-        assertThat(mapper.valueToTree(actual))
+        JsonNode observed = mapper.valueToTree(actual);
+        assertThat(observed)
                 .as("no identity loss, added roles, division drift, model/risk change or tool grant drift")
                 .isEqualTo(locked.path("agents"));
     }
