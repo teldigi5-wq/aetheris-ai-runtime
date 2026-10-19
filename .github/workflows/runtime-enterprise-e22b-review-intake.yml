@@ -1,0 +1,92 @@
+name: Enterprise E2.2B Quarantined Approval Intake
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e22-deterministic-design-artifacts-20261019
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseDesignReview*.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/organization/EnterpriseDesignReviewIntakeServiceTest.java'
+      - 'docs/runtime/enterprise-e22b-review-intake.md'
+      - '.github/workflows/runtime-enterprise-e22b-review-intake.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-h2-review-intake:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Real H2 review ledger plus E0-E2.2A tests on Linux
+        if: runner.os == 'Linux'
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml -Dtest=EnterpriseDesignReviewIntakeServiceTest,EnterpriseDesignArtifactServiceTest,EnterpriseAdvisoryPlanningServiceTest,EnterpriseOrganizationRegistryTest,EnterpriseCatalogBaselineTest test
+      - name: Real H2 review ledger plus E0-E2.2A tests on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -ntp -f orchestrator-service/pom.xml '-Dtest=EnterpriseDesignReviewIntakeServiceTest,EnterpriseDesignArtifactServiceTest,EnterpriseAdvisoryPlanningServiceTest,EnterpriseOrganizationRegistryTest,EnterpriseCatalogBaselineTest' test
+          if ($LASTEXITCODE -ne 0) { throw 'E22B_REVIEW_INTAKE_FAILED' }
+
+  full-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Run entire Java orchestrator test suite
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  explicit-no-approval-or-execution:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Review ledger never issues executable owner approval
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          base=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/organization')
+          f=base/'EnterpriseDesignReviewIntakeService.java'
+          src=f.read_text()
+          assert 'PENDING_OWNER_AUTHENTICATION_UNAVAILABLE' in src
+          assert 'E22B_OWNER_AUTHENTICATION_NOT_CONNECTED' in src
+          assert 'new DenialResult(intentId, reason, false,' in src
+          assert 'denials.saveAndFlush' in src
+          for forbidden in ('@RestController','@PostMapping','@PutMapping','@DeleteMapping',
+                            'ProcessBuilder','Runtime.getRuntime','TaskDelegationService',
+                            'ToolExecutionService','@Scheduled','new Socket(',
+                            'setStatus("APPROVED")','getApprovalToken()'):
+              assert forbidden not in src, forbidden
+          for suffix in ('EnterpriseDesignReviewIntent.java','EnterpriseDesignReviewDenial.java'):
+              entity=(base/suffix).read_text()
+              assert '@Entity' in entity
+              assert '@Table' in entity
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists(), (
+              'Stage45 sources integrated: replace absence guard with actual live suite'
+          )
+          print('E22B_LEDGER_NO_ACTIVATION_CONFIRMED')
+          print('STAGE45_SUITE_NOT_ON_THIS_STACK: DEVICE/PRODUCTION STILL NO_GO')
+          PY
