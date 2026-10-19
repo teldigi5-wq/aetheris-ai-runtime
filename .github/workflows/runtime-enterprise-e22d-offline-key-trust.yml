@@ -1,0 +1,89 @@
+name: Enterprise E2.2D Offline Candidate Key Trust
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e22b-durable-proof-replay-20261019
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseOfflineKeyTrust.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/organization/EnterpriseOfflineKeyTrustTest.java'
+      - 'docs/runtime/enterprise-e22d-offline-key-trust.md'
+      - '.github/workflows/runtime-enterprise-e22d-offline-key-trust.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-signature-and-prior-security-regression:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Offline signed root/candidate and inherited security tests (Ubuntu)
+        if: runner.os == 'Linux'
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml -Dtest=EnterpriseOfflineKeyTrustTest,EnterpriseSignedProofReplayLedgerTest,EnterpriseOwnerProofPreflightTest,EnterpriseOwnerProofStoredIntentTest,EnterpriseDesignReviewIntakeServiceTest,EnterpriseCatalogBaselineTest test
+      - name: Offline signed root/candidate and inherited security tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -ntp -f orchestrator-service/pom.xml '-Dtest=EnterpriseOfflineKeyTrustTest,EnterpriseSignedProofReplayLedgerTest,EnterpriseOwnerProofPreflightTest,EnterpriseOwnerProofStoredIntentTest,EnterpriseDesignReviewIntakeServiceTest,EnterpriseCatalogBaselineTest' test
+          if ($LASTEXITCODE -ne 0) { throw 'E22D_OFFLINE_KEY_TRUST_FAILED' }
+
+  full-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Entire Java orchestrator test suite
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  no-human-identity-or-execution-claims:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Candidate public keys are not authenticated owner credentials
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseOfflineKeyTrust.java')
+          code=path.read_text(encoding='utf-8')
+          assert 'ROOT_SIGNED_CANDIDATE_KEY_NOT_HUMAN_ATTESTED' in code
+          assert 'false, false, false' in code
+          assert 'MAX_BUNDLE_SECONDS = 86400L' in code
+          assert 'E22D_KEY_REVOKED' in code
+          assert 'E22D_UNTRUSTED_OR_ROLLED_BACK_GENERATION' in code
+          assert 'Signature.getInstance("Ed25519")' in code
+          assert 'EnterpriseOwnerProofPreflight.inspect(' in code
+          for banned in ('@RestController', '@Service', '@PostMapping', '@Scheduled',
+                         'ToolExecutionService', 'TaskDelegationService', 'ProcessBuilder',
+                         'Runtime.getRuntime', 'Files.write', 'privateKey', 'SecretKey'):
+              assert banned not in code, banned
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists(), (
+              'Stage45 code integrated: execute actual 13-blocker suite before release'
+          )
+          print('E22D_KEY_CANDIDATE_CRYPTOGRAPHY_ONLY_NO_OWNER_ATTESTATION')
+          print('STAGE45_ABSENT_ON_STACK: DEVICE_AND_PRODUCTION_STILL_NO_GO')
+          PY
