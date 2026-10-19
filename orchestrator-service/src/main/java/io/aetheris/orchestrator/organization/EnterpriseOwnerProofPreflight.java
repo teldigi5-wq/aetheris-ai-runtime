@@ -7,7 +7,6 @@ import java.security.interfaces.EdECPublicKey;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
-import java.util.Objects;
 import java.util.regex.Pattern;
 
 /**
@@ -85,8 +84,7 @@ public final class EnterpriseOwnerProofPreflight {
                 && !proof.issuedAt().isBefore(stored.intentIssuedAt())
                 && !proof.expiresAt().isAfter(stored.intentExpiresAt())
                 && proof.expiresAt().isAfter(proof.issuedAt())
-                && proof.expiresAt().getEpochSecond() - proof.issuedAt().getEpochSecond()
-                       <= MAX_PROOF_SECONDS,
+                && !proof.expiresAt().isAfter(proof.issuedAt().plusSeconds(MAX_PROOF_SECONDS)),
                 "E22B_PROOF_EXPIRED_OR_OUTSIDE_INTENT");
         require(proof.signatureBase64Url() != null
                 && SIGNATURE.matcher(proof.signatureBase64Url()).matches(),
