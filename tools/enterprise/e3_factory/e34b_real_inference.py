@@ -4,7 +4,7 @@
 Queries only loopback :11434 after an explicit CI opt-in and verifies a real
 locally pulled model is reported in /api/tags. API metadata is self-reported,
 not a cryptographic attestation. Stores actual raw model text and measured
-API timing for independent untrusted-proposal review. NO shell / subprocess.
+API timing for independent untrusted-proposal review. NO shell or child processes.
 """
 from __future__ import annotations
 
