@@ -14,10 +14,10 @@ class RealTrialContractTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {target.OPT_IN: "no"}):
             with self.assertRaisesRegex(ValueError, "E34B_REAL_INFERENCE_EXPLICIT_OPT_IN_REQUIRED"):
                 target.trial()
-        self.assertEqual(target.MODEL, "smollm2:135m")
+        self.assertEqual(target.MODEL, "qwen2.5-coder:0.5b")
 
     def test_tag_digest_and_size_are_checked(self):
-        valid = {"models": [{"name": "smollm2:135m", "size": 270000000,
+        valid = {"models": [{"name": "qwen2.5-coder:0.5b", "size": 270000000,
                               "digest": "a" * 64}]}
         with mock.patch.object(target, "local_json", return_value=(valid, 12)):
             m = target.local_model_metadata()
@@ -25,8 +25,8 @@ class RealTrialContractTests(unittest.TestCase):
         self.assertFalse(m["identityCryptographicallyAttested"])
         for broken in [
             {"models": []},
-            {"models": [{"name": "smollm2:135m", "size": 270000000, "digest": "fake"}]},
-            {"models": [{"name": "smollm2:135m", "size": 800000000, "digest": "a" * 64}]},
+            {"models": [{"name": "qwen2.5-coder:0.5b", "size": 270000000, "digest": "fake"}]},
+            {"models": [{"name": "qwen2.5-coder:0.5b", "size": 800000000, "digest": "a" * 64}]},
         ]:
             with self.subTest(broken=broken), mock.patch.object(
                     target, "local_json", return_value=(broken, 12)):
@@ -44,12 +44,12 @@ class RealTrialContractTests(unittest.TestCase):
             source = b"function progress() {return 1;}\nconst p = 0.24;\n"
             diagnostics = b'{"caseId":"scroll","failureCode":"E32_SCROLL_PROGRESS_STUCK"}'
             expected_metadata = {
-                "tag": "smollm2:135m", "selfReportedDigest": "a" * 64,
+                "tag": "qwen2.5-coder:0.5b", "selfReportedDigest": "a" * 64,
                 "sizeBytes": 270000000, "modelListQueryMs": 2,
                 "identityCryptographicallyAttested": False,
             }
             mocked = {
-                "model": "smollm2:135m", "done": True,
+                "model": "qwen2.5-coder:0.5b", "done": True,
                 "eval_count": 45, "prompt_eval_count": 109,
                 "total_duration": 350000000, "response": '{"operation":"abstain"}',
             }
