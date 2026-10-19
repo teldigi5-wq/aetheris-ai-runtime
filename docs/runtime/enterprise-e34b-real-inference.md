@@ -12,7 +12,15 @@
 
 That response violated the minimal strict abstention schema. The validator refused it: **0/1 verified repairs** and no source modification or release permission. Genuine evidence artifact: `e34b-real-smollm2-inference-no-authority-evidence` (GitHub artifact ID `12195778479`). It is retained separately from the subsequent trial and must never be retroactively relabeled as a successful repair.
 
-The follow-on second model trial is `qwen2.5-coder:0.5b`, run against the same known scroll-fault family with a revised response-format instruction. This is a **new experiment**, not hidden retries rolled into the first pass rate; the final result must be reported separately whether it fixes the page, abstains, or fails policy checks.
+The second [genuine Qwen2.5-Coder 0.5B run #39273399836](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/39273399836) **also COMPLETED SUCCESS 5/5**, at exact head `b762afe555218eaa1fb0a868cd7636577a1b3d01`. It produced **28 tokens in 4,685 ms**; Ollama reported `qwen2.5-coder:0.5b`, model digest `4ff64a7f502a08b7616edb8ca0a79eb1853fc363d842b7df4b46915d11a3fb09` and size 397,821,516 bytes. Raw text:
+
+```json
+{"operation":"replace","old":"uced-motion: reduce)","new":"motion.matches"}
+```
+
+The response was **syntactically valid JSON**, but the proposed source replacement was unrelated to the detected scroll-progress bug. `e34-prepare` staged the text only; the independently network-disabled E3.3 `e33-apply` worker rejected it with `E33_PATCH_GRAMMAR_DENIED`. The original source was **not modified**, and no repaired-browser claim was made. Independent real-model evidence artifact: `e34b-real-qwen-coder-inference-no-authority-evidence` (ID `12197170524`).
+
+**Honest combined exploratory result:** two distinct genuine CPU inference requests, two model responses, **0/2 browser-verified repairs**, one invalid JSON contract and one independently denied incorrect patch. This does **not** establish AI repair performance on unseen faults, nor a statistically meaningful comparison of models. All CI jobs passed because they validate real inference and fail-closed security handling, **not because the models solved the software defect**.
 
 ## Controlled real-model evaluation
 
