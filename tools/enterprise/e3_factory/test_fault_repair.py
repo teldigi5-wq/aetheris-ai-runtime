@@ -1,6 +1,7 @@
 """Adversarial unit tests for E3.1's byte-exact, diagnosis-gated repair."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -63,6 +64,7 @@ class RepairTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "E31_SOURCE_PRECONDITION_FAILED"):
             fault_repair.seed(self.site, self.evidence)
 
+    @unittest.skipIf(os.name == 'nt', 'Windows runner symlink permissions vary')
     def test_repair_refuses_script_symlink(self):
         target = self.root / "original.js"
         target.write_bytes(fault_repair.SOURCE.read_bytes())
