@@ -1,5 +1,6 @@
 package io.aetheris.orchestrator.organization;
 
+import jakarta.persistence.EntityManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,23 +28,23 @@ import java.util.HexFormat;
 public class EnterpriseSignedProofReplayLedger {
     private final EnterpriseOwnerProofPreflightBoundary boundary;
     private final EnterpriseDesignReviewIntentRepository intents;
-    private final EnterpriseReviewProofNonceRepository nonces;
+    private final EntityManager entityManager;
     private final Clock clock;
 
     @Autowired
     public EnterpriseSignedProofReplayLedger(
             EnterpriseDesignReviewIntentRepository intents,
-            EnterpriseReviewProofNonceRepository nonces) {
-        this(EnterpriseOwnerProofPreflight::inspect, intents, nonces, Clock.systemUTC());
+            EntityManager entityManager) {
+        this(EnterpriseOwnerProofPreflight::inspect, intents, entityManager, Clock.systemUTC());
     }
 
     EnterpriseSignedProofReplayLedger(
             EnterpriseOwnerProofPreflightBoundary boundary,
             EnterpriseDesignReviewIntentRepository intents,
-            EnterpriseReviewProofNonceRepository nonces, Clock clock) {
+            EntityManager entityManager, Clock clock) {
         this.boundary = boundary;
         this.intents = intents;
-        this.nonces = nonces;
+        this.entityManager = entityManager;
         this.clock = clock;
     }
 
@@ -79,7 +80,10 @@ public class EnterpriseSignedProofReplayLedger {
                 proof.nonceHex(), actual.intentId(), actual.projectId(),
                 sha256(EnterpriseOwnerProofPreflight.payload(proof)), seen,
                 proof.expiresAt().truncatedTo(ChronoUnit.MICROS));
-        nonces.saveAndFlush(row);
+        // EntityManager.persist enforces INSERT. Spring Data save() on an assigned
+        // primary key may perform MERGE and silently overwrite existing rows.
+        entityManager.persist(row);
+        entityManager.flush();
         return new SeenReceipt(row.getNonceHex(), row.getIntentId(),
                 "SIGNATURE_INSPECTED_NONCE_RESERVED_OWNER_UNVERIFIED",
                 true, false, false, false, false, false);
