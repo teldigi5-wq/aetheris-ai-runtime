@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "project_id": "aetheris-motion-lab",
+  "title": "The Shape of Motion",
+  "eyebrow": "AETHERIS / IMMERSIVE LAB",
+  "description": "A working cinematic scroll prototype: explore a dimensional product study, reverse the motion, and try the accessible reduced-motion view.",
+  "features": [
+    "Scroll-driven product orientation",
+    "Responsive design with keyboard navigation",
+    "Accessible still view for reduced motion"
+  ]
+}
