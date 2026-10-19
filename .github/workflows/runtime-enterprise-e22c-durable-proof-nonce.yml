@@ -1,0 +1,187 @@
+name: Enterprise E2.2B Durable Signed-Proof Nonce
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e22b-owner-proof-preflight-20261019
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseReviewProofNonce*.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseSignedProofReplayLedger.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/organization/EnterpriseSignedProofReplayLedgerTest.java'
+      - 'orchestrator-service/db/enterprise-review/V2__signed_review_proof_nonce_postgresql.sql'
+      - 'orchestrator-service/db/enterprise-review/test_signed_review_nonce_postgresql.sql'
+      - 'docs/runtime/enterprise-e22c-durable-proof-nonce.md'
+      - '.github/workflows/runtime-enterprise-e22c-durable-proof-nonce.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  java-cross-platform-h2:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: E2.2C nonce, E2.2B owner-proof, deny-only intake and E0 workforce (Linux)
+        if: runner.os == 'Linux'
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml -Dtest=EnterpriseSignedProofReplayLedgerTest,EnterpriseOwnerProofPreflightTest,EnterpriseOwnerProofStoredIntentTest,EnterpriseDesignReviewIntakeServiceTest,EnterpriseCatalogBaselineTest test
+      - name: E2.2C nonce, E2.2B owner-proof, deny-only intake and E0 workforce (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -ntp -f orchestrator-service/pom.xml '-Dtest=EnterpriseSignedProofReplayLedgerTest,EnterpriseOwnerProofPreflightTest,EnterpriseOwnerProofStoredIntentTest,EnterpriseDesignReviewIntakeServiceTest,EnterpriseCatalogBaselineTest' test
+          if ($LASTEXITCODE -ne 0) { throw 'E22C_CROSS_PLATFORM_NONCE_FAIL' }
+
+  postgres-real-concurrent-nonce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: aetheris_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-ci-only-not-production
+        ports: [ "5432:5432" ]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aetheris_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: local-ci-only-not-production
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/aetheris_ci
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: local-ci-only-not-production
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Install PostgreSQL client when absent
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+      - name: Apply V1 review schema and V2 nonce schema to disposable PostgreSQL only
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d aetheris_ci -f orchestrator-service/db/enterprise-review/V1__design_review_deny_only_postgresql.sql
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d aetheris_ci -f orchestrator-service/db/enterprise-review/V2__signed_review_proof_nonce_postgresql.sql
+      - name: Snapshot all three review tables before legacy test schema bootstrap
+        run: |
+          psql -X -A -t -h localhost -U postgres -d aetheris_ci -c "
+            SELECT 'column|' || table_name || '|' || column_name || '|' || data_type ||
+                 '|' || coalesce(character_maximum_length::text, '') || '|' ||
+                 is_nullable || '|' || coalesce(datetime_precision::text, '')
+            FROM information_schema.columns
+            WHERE table_schema='public' AND table_name IN (
+              'enterprise_design_review_intents','enterprise_design_review_denials','enterprise_review_proof_nonces'
+            )
+            UNION ALL
+            SELECT 'constraint|' || conrelid::regclass::text || '|' || conname || '|' || pg_get_constraintdef(oid)
+            FROM pg_constraint WHERE conrelid IN (
+              'enterprise_design_review_intents'::regclass,
+              'enterprise_design_review_denials'::regclass,
+              'enterprise_review_proof_nonces'::regclass
+            )
+            UNION ALL
+            SELECT 'index|' || tablename || '|' || indexname || '|' || indexdef
+            FROM pg_indexes
+            WHERE schemaname='public' AND tablename IN (
+              'enterprise_design_review_intents','enterprise_design_review_denials','enterprise_review_proof_nonces'
+            ) ORDER BY 1;" > "$RUNNER_TEMP/review-schema-before.txt"
+      - name: Real PostgreSQL JPA signed-proof nonce races
+        run: >
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml
+          -Dtest=EnterpriseSignedProofReplayLedgerTest,EnterpriseDesignReviewIntakeServiceTest
+          -Dspring.datasource.driver-class-name=org.postgresql.Driver
+          -Dspring.jpa.hibernate.ddl-auto=update
+          test
+      - name: Assert migrations remain unchanged by CI-only legacy Hibernate bootstrap
+        run: |
+          psql -X -A -t -h localhost -U postgres -d aetheris_ci -c "
+            SELECT 'column|' || table_name || '|' || column_name || '|' || data_type ||
+                 '|' || coalesce(character_maximum_length::text, '') || '|' ||
+                 is_nullable || '|' || coalesce(datetime_precision::text, '')
+            FROM information_schema.columns
+            WHERE table_schema='public' AND table_name IN (
+              'enterprise_design_review_intents','enterprise_design_review_denials','enterprise_review_proof_nonces'
+            )
+            UNION ALL
+            SELECT 'constraint|' || conrelid::regclass::text || '|' || conname || '|' || pg_get_constraintdef(oid)
+            FROM pg_constraint WHERE conrelid IN (
+              'enterprise_design_review_intents'::regclass,
+              'enterprise_design_review_denials'::regclass,
+              'enterprise_review_proof_nonces'::regclass
+            )
+            UNION ALL
+            SELECT 'index|' || tablename || '|' || indexname || '|' || indexdef
+            FROM pg_indexes
+            WHERE schemaname='public' AND tablename IN (
+              'enterprise_design_review_intents','enterprise_design_review_denials','enterprise_review_proof_nonces'
+            ) ORDER BY 1;" > "$RUNNER_TEMP/review-schema-after.txt"
+          diff -u "$RUNNER_TEMP/review-schema-before.txt" "$RUNNER_TEMP/review-schema-after.txt"
+      - name: Run real SQL adversarial checks from both migration stages
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d aetheris_ci -f orchestrator-service/db/enterprise-review/test_deny_only_postgresql.sql
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d aetheris_ci -f orchestrator-service/db/enterprise-review/test_signed_review_nonce_postgresql.sql
+
+  full-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  explicit-zero-authority:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Signed proof nonce never grants owner or operational authority
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          folder=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/organization')
+          source=(folder/'EnterpriseSignedProofReplayLedger.java').read_text()
+          schema=Path('orchestrator-service/db/enterprise-review/V2__signed_review_proof_nonce_postgresql.sql').read_text()
+          assert 'nonceRecorded' in source
+          assert 'true, false, false, false, false, false' in source
+          assert 'entityManager.persist(row)' in source
+          assert 'entityManager.flush()' in source
+          assert "evidence_state = 'SIGNED_BYTES_SEEN_OWNER_UNVERIFIED'" in schema
+          assert 'nonce_hex varchar(32) PRIMARY KEY' in schema
+          for prohibited in ('@RestController','@PostMapping','TaskDelegationService',
+                             'ToolExecutionService','ProcessBuilder','@Scheduled','Runtime.getRuntime'):
+              assert prohibited not in source, prohibited
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists(), 'Stage45 needs real integration verification'
+          print('E22C_PERSISTENCE_ONLY_OWNER_UNVERIFIED_NO_AUTHORITY')
+          print('STAGE45_NOT_EXECUTED_ON_THIS_STACK: PRODUCTION_AND_DEVICE_NO_GO')
+          PY
