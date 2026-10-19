@@ -58,13 +58,56 @@ jobs:
         run: |
           psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d aetheris_ci \
             -f orchestrator-service/db/enterprise-review/V1__design_review_deny_only_postgresql.sql
-      - name: Real PostgreSQL-backed Spring Data JPA tests with Hibernate validation
+      - name: Capture review-only PostgreSQL catalog before legacy test bootstrap
+        run: |
+          psql -X -A -t -h localhost -U postgres -d aetheris_ci -c "
+            SELECT 'column|' || table_name || '|' || column_name || '|' || data_type ||
+                   '|' || coalesce(character_maximum_length::text, '') ||
+                   '|' || is_nullable || '|' || coalesce(datetime_precision::text, '')
+            FROM information_schema.columns
+            WHERE table_schema='public'
+              AND table_name IN ('enterprise_design_review_intents','enterprise_design_review_denials')
+            UNION ALL
+            SELECT 'constraint|' || conrelid::regclass::text || '|' || conname ||
+                   '|' || pg_get_constraintdef(oid)
+            FROM pg_constraint
+            WHERE conrelid IN ('enterprise_design_review_intents'::regclass,
+                               'enterprise_design_review_denials'::regclass)
+            UNION ALL
+            SELECT 'index|' || tablename || '|' || indexname || '|' || indexdef
+            FROM pg_indexes
+            WHERE schemaname='public' AND tablename IN
+               ('enterprise_design_review_intents','enterprise_design_review_denials')
+            ORDER BY 1;" > "$RUNNER_TEMP/review-schema-before.txt"
+      - name: Real PostgreSQL-backed Spring JPA tests with CI-only legacy entity bootstrap
         run: >
           ./mvnw -B -ntp -f orchestrator-service/pom.xml
           -Dtest=EnterpriseDesignReviewIntakeServiceTest
           -Dspring.datasource.driver-class-name=org.postgresql.Driver
-          -Dspring.jpa.hibernate.ddl-auto=validate
+          -Dspring.jpa.hibernate.ddl-auto=update
           test
+      - name: Ensure JPA did not alter either reviewed schema table
+        run: |
+          psql -X -A -t -h localhost -U postgres -d aetheris_ci -c "
+            SELECT 'column|' || table_name || '|' || column_name || '|' || data_type ||
+                   '|' || coalesce(character_maximum_length::text, '') ||
+                   '|' || is_nullable || '|' || coalesce(datetime_precision::text, '')
+            FROM information_schema.columns
+            WHERE table_schema='public'
+              AND table_name IN ('enterprise_design_review_intents','enterprise_design_review_denials')
+            UNION ALL
+            SELECT 'constraint|' || conrelid::regclass::text || '|' || conname ||
+                   '|' || pg_get_constraintdef(oid)
+            FROM pg_constraint
+            WHERE conrelid IN ('enterprise_design_review_intents'::regclass,
+                               'enterprise_design_review_denials'::regclass)
+            UNION ALL
+            SELECT 'index|' || tablename || '|' || indexname || '|' || indexdef
+            FROM pg_indexes
+            WHERE schemaname='public' AND tablename IN
+               ('enterprise_design_review_intents','enterprise_design_review_denials')
+            ORDER BY 1;" > "$RUNNER_TEMP/review-schema-after.txt"
+          diff -u "$RUNNER_TEMP/review-schema-before.txt" "$RUNNER_TEMP/review-schema-after.txt"
       - name: Live PostgreSQL integrity and deny-only security assertions
         run: |
           psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d aetheris_ci \
