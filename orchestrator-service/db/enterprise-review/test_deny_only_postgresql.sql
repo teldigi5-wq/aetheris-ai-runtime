@@ -75,10 +75,17 @@ $e22b$;
 -- A restricted app role cannot update/rewrite/delete audit evidence.
 DO $e22b$
 BEGIN
-  IF has_table_privilege('PUBLIC', 'enterprise_design_review_intents', 'UPDATE')
-     OR has_table_privilege('PUBLIC', 'enterprise_design_review_intents', 'DELETE')
-     OR has_table_privilege('PUBLIC', 'enterprise_design_review_denials', 'UPDATE')
-     OR has_table_privilege('PUBLIC', 'enterprise_design_review_denials', 'DELETE') THEN
+  -- PostgreSQL PUBLIC is ACL grantee OID 0, not a queryable role name.
+  IF EXISTS (
+    SELECT 1
+    FROM pg_class c
+    CROSS JOIN LATERAL aclexplode(
+        coalesce(c.relacl, acldefault('r', c.relowner))) entry
+    WHERE c.oid IN ('enterprise_design_review_intents'::regclass,
+                    'enterprise_design_review_denials'::regclass)
+      AND entry.grantee = 0
+      AND entry.privilege_type IN ('UPDATE', 'DELETE', 'TRUNCATE')
+  ) THEN
     RAISE EXCEPTION 'PUBLIC must not have audit mutation privileges';
   END IF;
 END
