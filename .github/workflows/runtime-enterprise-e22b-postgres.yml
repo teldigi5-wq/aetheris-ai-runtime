@@ -62,6 +62,7 @@ jobs:
         run: >
           ./mvnw -B -ntp -f orchestrator-service/pom.xml
           -Dtest=EnterpriseDesignReviewIntakeServiceTest
+          -Dspring.datasource.driver-class-name=org.postgresql.Driver
           -Dspring.jpa.hibernate.ddl-auto=validate
           test
       - name: Live PostgreSQL integrity and deny-only security assertions
