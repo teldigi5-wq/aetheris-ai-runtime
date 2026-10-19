@@ -1,0 +1,211 @@
+name: Enterprise E3.2 Frozen Multi-Fault Patch Gate
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e31-contained-repair-loop-20261019
+      - main
+    paths:
+      - 'tools/enterprise/e3_factory/**'
+      - 'docs/runtime/enterprise-e32-multifault-patch-benchmark.md'
+      - '.github/workflows/runtime-enterprise-e32-multifault.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  adversarial-proposals-cross-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Test literal-patch policy, malicious proposals and frozen fixtures
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_multi_fault.py' -v
+      - name: Keep E3.1 repair regression passing
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_fault_repair.py' -v
+      - name: JS parse checks
+        run: |
+          node --check tools/enterprise/e3_factory/fault_contract.mjs
+          node --check tools/enterprise/e3_factory/main.js
+
+  real-docker-three-browser-faults:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Pull test-only immutable-phase Python Docker image
+        run: docker pull python:3.12-slim-bookworm
+      - name: Build full E3.0 website in locked network-none worker
+        run: bash tools/enterprise/e3_factory/run_locked_worker.sh build
+      - name: Verify built source integrity before fault cases
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+      - name: Install Playwright Chromium on disposable QA runner, outside workers
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Prove each real browser defect, reject untrusted changes, and repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          for scenario in scroll mobile reduced; do
+            echo "E32_SCENARIO_BEGIN $scenario"
+            bash tools/enterprise/e3_factory/run_locked_worker.sh e32-seed "$scenario"
+            set +e
+            node tools/enterprise/e3_factory/fault_contract.mjs "$scenario"
+            status=$?
+            set -e
+            if [[ "$status" -eq 0 ]]; then
+              echo "E32_REAL_FAULT_NOT_DETECTED:$scenario"
+              exit 1
+            fi
+            python3 - "$scenario" <<'PY'
+          import json,sys,shutil
+          from pathlib import Path
+          case=sys.argv[1]
+          folder=Path('target/e3-factory/e32')/case
+          record=json.loads((folder/'diagnosis.json').read_text())
+          codes={'scroll':'E32_SCROLL_PROGRESS_STUCK',
+                 'mobile':'E32_MOBILE_HORIZONTAL_OVERFLOW',
+                 'reduced':'E32_REDUCED_MOTION_DISABLED'}
+          assert record['evidenceClass']=='E32_REAL_CHROMIUM_FAULT_CONTRACT'
+          assert record['passed'] is False and record['failureCode']==codes[case], record
+          assert isinstance(record['browserObserved'],dict) and record['browserObserved']
+          shutil.copy2(folder/'diagnosis.json',folder/'before-diagnosis.json')
+          print('E32_ACTUAL_CHROMIUM_FAULT_OBSERVED',case,record['browserObserved'])
+          PY
+            bash tools/enterprise/e3_factory/run_locked_worker.sh e32-repair "$scenario"
+            node tools/enterprise/e3_factory/fault_contract.mjs "$scenario"
+            python3 - "$scenario" <<'PY'
+          import json,shutil,sys
+          from pathlib import Path
+          case=sys.argv[1]
+          folder=Path('target/e3-factory/e32')/case
+          report=json.loads((folder/'diagnosis.json').read_text())
+          assert report['passed'] is True and report['failureCode'] is None
+          shutil.copy2(folder/'diagnosis.json',folder/'after-diagnosis.json')
+          print('E32_REAL_CHROMIUM_REPAIR_PASS',case,report['browserObserved'])
+          PY
+            python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+          done
+      - name: Independent full E3 browser QA after all repairs
+        run: node tools/enterprise/e3_factory/browser_qa.mjs
+      - name: Validate Docker limits, exact source restoration and truthful results
+        run: |
+          python3 - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          root=Path('target/e3-factory')
+          names=('scroll','mobile','reduced')
+          result=[]
+          for name in names:
+            folder=root/'e32'/name
+            seed=json.loads((folder/'seed.json').read_text())
+            fix=json.loads((folder/'repair.json').read_text())
+            before=json.loads((folder/'before-diagnosis.json').read_text())
+            after=json.loads((folder/'after-diagnosis.json').read_text())
+            assert before['passed'] is False and after['passed'] is True
+            assert fix['sourceRestoredExactly'] is True
+            assert fix['afterSha256']==seed['cleanSha256']
+            assert fix['beforeSha256']==seed['brokenSha256']
+            assert fix['ownerApprovalGranted'] is False and fix['modelProposedPatch'] is False
+            for phase in ('seed','repair'):
+              sandbox=json.loads((root/('sandbox-e32-'+phase+'-'+name+'.json')).read_text())
+              assert sandbox['network']=='none'
+              assert sandbox['readOnlyRootfs'] is True
+              assert sandbox['cpuLimit']==1 and sandbox['memoryBytes']==268435456
+              assert sandbox['pidsLimit']==64
+              assert sandbox['allCapabilitiesDropped'] is True
+              assert sandbox['repositoryMount']=='read-only'
+              assert sandbox['targetMount']=='read-write'
+              assert sandbox['wallClockLimitSeconds']==45
+              assert sandbox['ownerPcUsed'] is False and sandbox['productionDeployment'] is False
+            result.append({'case':name,'failedBefore':True,'passedAfter':True,
+                           'browserFailureCode':before['failureCode'],
+                           'fixedFile':fix['allowedFile']})
+          final=json.loads((root/'browser-evidence/qa-report.json').read_text())
+          assert final['passed'] is True and final['errors']==[]
+          assert final['desktopEarlyProgress']<final['desktopLateProgress']-50
+          assert final['desktopReversedProgress']<final['desktopLateProgress']-50
+          summary={'evidenceClass':'E32_REAL_BROWSER_FROZEN_MULTIFAULT_BENCHMARK',
+                   'testsAttempted':len(result),'detected':len(result),'repaired':len(result),
+                   'cases':result,'modelUsed':False,'productionDeployment':False,
+                   'ownerPcUsed':False,'positiveOwnerApproval':False,
+                   'cpuLimit':1,'memoryLimitBytes':268435456,
+                   'benchmarkGeneralizesToUnseenFaults':False}
+          (root/'e32'/'benchmark-summary.json').write_text(json.dumps(summary,indent=2)+'\n')
+          print('E32_THREE_CASE_BROWSER_BENCHMARK_VERIFIED',json.dumps(summary,sort_keys=True))
+          PY
+      - name: Publish actual before/after browser and patch evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e32-three-frozen-defects-repair-and-chromium-evidence
+          path: target/e3-factory/
+          if-no-files-found: error
+          retention-days: 14
+
+  full-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Complete Java orchestrator regression
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  authority-and-executor-scope:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: No unrestricted patch execution or production tool activation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          d=Path('tools/enterprise/e3_factory')
+          patch=(d/'multi_fault.py').read_text()
+          runner=(d/'run_locked_worker.sh').read_text()
+          assert "'scroll'" in patch or '"scroll"' in patch
+          for case in ('scroll','mobile','reduced'):
+              assert '"'+case+'"' in patch
+          assert 'proposal != expected' in patch
+          assert 'target.read_bytes() != broken' in patch
+          assert 'E32_BROWSER_DIAGNOSIS_MISMATCH' in patch
+          for forbidden in ('subprocess', 'os.system', 'import requests','urllib.request',
+                            'eval(', 'exec(', 'Popen(', 'shutil.rmtree'):
+              assert forbidden not in patch, forbidden
+          for required in ('--network none','--cpus 1','--memory 256m',
+                           '--pids-limit 64','--cap-drop ALL',
+                           '--security-opt no-new-privileges',
+                           'timeout --signal=TERM --kill-after=3s 45s'):
+              assert required in runner, required
+          assert 'e32-seed|e32-repair' in runner
+          assert 'ownerApprovalGranted": False' in patch
+          assert 'modelProposedPatch": False' in patch
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists()
+          print('E32_UNTRUSTED_PATCH_GATE_WITH_ZERO_LIVE_AUTHORITY')
+          print('STAGE45_UNEXECUTED_ON_THIS_STACK: PC/PRODUCTION_NO_GO')
+          PY
