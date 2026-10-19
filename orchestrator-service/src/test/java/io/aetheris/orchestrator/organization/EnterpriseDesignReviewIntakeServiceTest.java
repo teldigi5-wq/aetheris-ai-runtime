@@ -56,7 +56,7 @@ class EnterpriseDesignReviewIntakeServiceTest {
         assertThat(persisted.getProjectId()).isEqualTo("laptop-cinematic");
         assertThat(persisted.getCompanyId()).isEqualTo("aetheris-immersive");
         assertThat(persisted.getDivisionId()).isEqualTo("scroll-experience-engineering");
-        assertThat(persisted.getStoryBoardDigest()).isEqualTo(bundle.storyboardSha256());
+        assertThat(persisted.getStoryboardDigest()).isEqualTo(bundle.storyboardSha256());
         assertThat(persisted.getManifestDigest()).isEqualTo(bundle.manifestSha256());
         assertThat(persisted.getBriefDigest()).isEqualTo(bundle.briefFingerprint());
         assertThat(receipt.expiresAt()).isEqualTo(persisted.getIssuedAt().plusSeconds(900));
