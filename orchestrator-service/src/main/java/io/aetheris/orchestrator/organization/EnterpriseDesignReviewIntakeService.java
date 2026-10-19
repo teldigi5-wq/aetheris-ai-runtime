@@ -20,7 +20,7 @@ import java.util.UUID;
  * Do not expose this internal service over HTTP or connect it to tool execution.
  */
 @Service
-public final class EnterpriseDesignReviewIntakeService {
+public class EnterpriseDesignReviewIntakeService {
     private static final String PENDING = "PENDING_OWNER_AUTHENTICATION_UNAVAILABLE";
     private final EnterpriseDesignArtifactVerifier verifier;
     private final EnterpriseDesignReviewIntentRepository intents;
