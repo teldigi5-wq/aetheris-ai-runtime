@@ -174,7 +174,7 @@ jobs:
           schema=Path('orchestrator-service/db/enterprise-review/V2__signed_review_proof_nonce_postgresql.sql').read_text()
           assert 'nonceRecorded' in source
           assert 'true, false, false, false, false, false' in source
-          assert 'nonces.saveAndFlush' in source
+          assert 'entityManager.persist(row)' in source\n          assert 'entityManager.flush()' in source
           assert "evidence_state = 'SIGNED_BYTES_SEEN_OWNER_UNVERIFIED'" in schema
           assert 'nonce_hex varchar(32) PRIMARY KEY' in schema
           for prohibited in ('@RestController','@PostMapping','TaskDelegationService',
