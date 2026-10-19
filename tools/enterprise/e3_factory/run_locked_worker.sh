@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
 # E3.1 fixed-command disposable Docker runner. Never for owner's PC.
 set -euo pipefail
-if [[ $# -ne 1 ]]; then echo "E31_PHASE_REQUIRED" >&2; exit 2; fi
+if [[ $# -lt 1 || $# -gt 2 ]]; then echo "E31_PHASE_REQUIRED" >&2; exit 2; fi
 phase="$1"
 case "$phase" in
-  build) entry="worker.py"; args=();;
-  seed|repair) entry="fault_repair.py"; args=("$phase");;
+  build) [[ $# -eq 1 ]] || exit 2; entry="worker.py"; args=();;
+  seed|repair) [[ $# -eq 1 ]] || exit 2; entry="fault_repair.py"; args=("$phase");;
+  e32-seed|e32-repair)
+    [[ $# -eq 2 ]] || exit 2
+    case "$2" in scroll|mobile|reduced) ;; *) echo "E32_UNSUPPORTED_CASE" >&2; exit 2;; esac
+    entry="multi_fault.py"
+    action="${phase#e32-}"
+    args=("$action" "$2")
+    ;;
   *) echo "E31_UNKNOWN_WORKER_PHASE" >&2; exit 2;;
 esac
+evidence_id="$phase"
+if [[ "$phase" == e32-* ]]; then evidence_id="$phase-$2"; fi
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 cd "$repo"
@@ -45,7 +54,7 @@ cid="$(docker create \
   "$image" python3 "/workspace/tools/enterprise/e3_factory/$entry" "${args[@]}")"
 inspection="$(mktemp)"
 docker inspect "$cid" > "$inspection"
-python3 - "$inspection" "target/e3-factory/sandbox-$phase.json" "$phase" <<'PY'
+python3 - "$inspection" "target/e3-factory/sandbox-$evidence_id.json" "$evidence_id" <<'PY'
 import json, sys
 from pathlib import Path
 container = json.loads(Path(sys.argv[1]).read_text())[0]
