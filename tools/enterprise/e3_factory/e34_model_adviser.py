@@ -151,7 +151,7 @@ def query(category: str, model: str, *, port: int = 11434) -> dict:
         "evidenceClass": "E34_LOCAL_OLLAMA_RESPONSE_UNATTESTED_NO_ACTION",
         "category": category, "sourceSha256": sha(source),
         "diagnosisSha256": sha(browser), "modelRequested": model,
-        "modelResponse": strict_json(text), "responseSha256": sha(text.encode("utf-8")),
+        "modelResponse": text, "responseSha256": sha(text.encode("utf-8")),
         "elapsedMs": observations["elapsedMs"],
         "transportClass": observations["transportClass"],
         "modelIdentityAttested": False, "ownerApprovalGranted": False,
@@ -186,12 +186,12 @@ def prepare(category: str) -> dict:
             or not isinstance(data["modelRequested"], str)
             or not MODEL_RE.fullmatch(data["modelRequested"])):
         raise ValueError("E34_UNTRUSTED_ADVISORY_CONTEXT")
-    candidate = data["modelResponse"]
+    if (not isinstance(data.get("modelResponse"), str)
+            or data.get("responseSha256") != sha(data["modelResponse"].encode("utf-8"))):
+        raise ValueError("E34_MODEL_RESPONSE_DIGEST_MISMATCH")
+    candidate = strict_json(data["modelResponse"])
     if candidate == {"operation": "abstain"}:
         return {"status": "ABSTAIN_NO_PROPOSAL", "ownerApprovalGranted": False}
-    if not isinstance(candidate, dict):
-        raise ValueError("E34_ADVISORY_PROPOSAL_INVALID")
-    strict_json(json.dumps(candidate, ensure_ascii=True))
     old, new = candidate["old"], candidate["new"]
     try:
         after = gate.expected_result(source, old, new)
