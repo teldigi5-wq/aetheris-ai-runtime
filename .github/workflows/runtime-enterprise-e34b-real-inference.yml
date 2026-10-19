@@ -1,4 +1,4 @@
-name: Enterprise E3.4B Genuine CPU Ollama Inference (Disposable CI)
+name: Enterprise E3.4B Genuine CPU Code-Model Inference (Disposable CI)
 on:
   pull_request:
     branches:
@@ -27,7 +27,7 @@ jobs:
       - run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e34b_real_inference.py' -v
       - run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e34_model_adviser.py' -v
       - run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_heuristic_repair.py' -v
-  real-smollm2-cpu-inference:
+  real-qwen-coder-cpu-inference:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
@@ -89,7 +89,7 @@ jobs:
       - name: Pull published small real model (no mock), only into ephemeral Ollama container
         shell: bash
         run: |
-          timeout --signal=TERM --kill-after=5s 300s docker exec e34b-real-ollama ollama pull smollm2:135m
+          timeout --signal=TERM --kill-after=5s 300s docker exec e34b-real-ollama ollama pull qwen2.5-coder:0.5b
           docker exec e34b-real-ollama ollama list
           docker image inspect "$MODEL_IMAGE" --format '{{json .RepoDigests}}' > target/e3-factory/e34b-ollama-image-digests.json
           docker inspect e34b-real-ollama --format '{{json .HostConfig}}' > "$RUNNER_TEMP/e34b-hostconfig.json"
@@ -182,7 +182,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: e34b-real-smollm2-inference-no-authority-evidence
+          name: e34b-real-qwen-coder-inference-no-authority-evidence
           path: |
             target/e3-factory/site/
             target/e3-factory/e33/
