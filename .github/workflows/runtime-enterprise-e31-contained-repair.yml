@@ -1,0 +1,192 @@
+name: Enterprise E3.1 Contained Browser Repair Loop
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e3-ci-website-factory-20261019
+      - main
+    paths:
+      - 'tools/enterprise/e3_factory/**'
+      - 'docs/runtime/enterprise-e31-contained-repair.md'
+      - '.github/workflows/runtime-enterprise-e31-contained-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repair-security-tests-cross-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Strict repair input, tamper, symlink and negative tests
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_fault_repair.py' -v
+      - name: JavaScript source parses
+        run: node --check tools/enterprise/e3_factory/main.js
+
+  real-container-fail-repair-chromium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Fetch fixed CI-only Python Docker image outside worker
+        run: docker pull python:3.12-slim-bookworm
+      - name: Build actual website in locked, non-networked container
+        run: bash tools/enterprise/e3_factory/run_locked_worker.sh build
+      - name: Verify generated site's original SHA256 and schema
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+      - name: Deliberately seed one bounded scroll bug in locked container
+        run: bash tools/enterprise/e3_factory/run_locked_worker.sh seed
+      - name: Install Playwright in CI QA harness only (not inside worker)
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Prove Chromium FAILS because scroll progress is stuck
+        shell: bash
+        run: |
+          set +e
+          node tools/enterprise/e3_factory/browser_qa.mjs
+          result=$?
+          set -e
+          if [[ "$result" -eq 0 ]]; then
+            echo 'E31_EXPECTED_REAL_BROWSER_FAILURE_NOT_DETECTED'
+            exit 1
+          fi
+          python - <<'PY'
+          import json, shutil
+          from pathlib import Path
+          root=Path('target/e3-factory')
+          bad=json.loads((root/'browser-evidence/qa-report.json').read_text())
+          assert bad['evidenceClass']=='REAL_CHROMIUM_QA_CI_ONLY_NOT_PRODUCTION'
+          assert bad['passed'] is False
+          assert 'Late progress not near end' in bad['failure'], bad['failure']
+          shutil.copy2(root/'browser-evidence/qa-report.json',
+                       root/'repair-evidence/diagnosis.json')
+          (root/'browser-evidence').rename(root/'browser-before')
+          print('E31_REAL_BROWSER_FAULT_CONFIRMED', bad['failure'])
+          PY
+      - name: Apply exact deterministic repair in second locked container
+        run: bash tools/enterprise/e3_factory/run_locked_worker.sh repair
+      - name: Verify original source hashes completely restored
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+      - name: Prove Chromium passes after narrow repair
+        run: node tools/enterprise/e3_factory/browser_qa.mjs
+      - name: Validate before/after browser evidence and Docker-enforced budgets
+        run: |
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('target/e3-factory')
+          seed=json.loads((root/'repair-evidence/seed.json').read_text())
+          repair=json.loads((root/'repair-evidence/repair.json').read_text())
+          before=json.loads((root/'browser-before/qa-report.json').read_text())
+          after=json.loads((root/'browser-evidence/qa-report.json').read_text())
+          assert before['passed'] is False and after['passed'] is True
+          assert 'Late progress not near end' in before['failure']
+          assert seed['originalSha256']==repair['repairedSha256']
+          assert repair['sourceRestoredExactly'] is True
+          assert hashlib.sha256((root/'site/main.js').read_bytes()).hexdigest()==repair['repairedSha256']
+          assert after['desktopEarlyProgress'] < after['desktopLateProgress']-40
+          assert after['desktopReversedProgress'] < after['desktopLateProgress']-40
+          assert after['reducedMotionObserved']=='reduced'
+          assert after['errors']==[]
+          for phase in ('build','seed','repair'):
+            policy=json.loads((root/('sandbox-'+phase+'.json')).read_text())
+            assert policy['network']=='none'
+            assert policy['readOnlyRootfs'] is True
+            assert policy['memoryBytes']==268435456
+            assert policy['cpuLimit']==1 and policy['pidsLimit']==64
+            assert policy['noNewPrivileges'] is True
+            assert policy['allCapabilitiesDropped'] is True
+            assert policy['repositoryMount']=='read-only'
+            assert policy['targetMount']=='read-write'
+            assert policy['wallClockLimitSeconds']==45
+            assert policy['ownerPcUsed'] is False and policy['productionDeployment'] is False
+          report={
+            'evidenceClass':'E31_MEASURED_FAIL_DIAGNOSE_REPAIR_RETEST_CI_ONLY',
+            'realBrowserFailedBefore':True, 'rootCause':'scroll progress pinned to zero',
+            'onlyRepairedFile':'site/main.js', 'workerContainerPhases':3,
+            'dockerNetwork':'none','cpuLimit':1,'memoryMb':256,
+            'browserPassedAfter':True,'originalSourceRestored':True,
+            'ownerPcUsed':False,'ownerActionApproved':False,
+            'modelGeneratedPatch':False,'published':False,
+          }
+          (root/'repair-evidence/verified-summary.json').write_text(
+              json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print('E31_REAL_REPAIR_LOOP_PASSED', json.dumps(report,sort_keys=True))
+          PY
+      - name: Upload generated site and failure/repair/browser proof
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e31-contained-website-fail-repair-retest-evidence
+          path: target/e3-factory/
+          retention-days: 14
+          if-no-files-found: error
+
+  full-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Existing complete Java orchestrator regression
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  permission-boundary-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Guard fixed worker phases, deny owner execution and production claims
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('tools/enterprise/e3_factory')
+          runner=(root/'run_locked_worker.sh').read_text()
+          code=(root/'fault_repair.py').read_text()
+          assert '--network none' in runner
+          assert '--cpus 1' in runner
+          assert '--memory 256m --memory-swap 256m' in runner
+          assert '--pids-limit 64' in runner
+          assert '--read-only --cap-drop ALL --security-opt no-new-privileges' in runner
+          assert 'timeout --signal=TERM --kill-after=3s 45s' in runner
+          assert 'case "$phase" in' in runner
+          assert 'REPO' not in code or 'worker.REPO' in code
+          for bad in ('subprocess', 'os.system', 'import socket', 'requests', 'urllib.request',
+                      'eval(', 'exec(', 'Popen(', 'shutil.rmtree'):
+            assert bad not in code, bad
+          assert 'E31_BROWSER_DIAGNOSIS_REQUIRED' in code
+          assert 'E31_UNAPPROVED_PATCH_OR_DRIFT' in code
+          assert '"ownerAuthenticated": False' in code
+          assert '"approvalGranted": False' in code
+          assert '"agentExecuted": False' in code
+          assert '"productionDeployed": False' in code
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists(), (
+              'Stage45 present: run actual blocker tests on integrated stack'
+          )
+          print('E31_WORKER_FIXED_CAPABILITIES_NO_MODEL_NO_DEPLOY_AND_STAGE45_NO_GO')
+          PY
