@@ -1,0 +1,102 @@
+name: Enterprise E2 Executive and Design Advisory Contract
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e1-readonly-registry-20261019
+      - main
+    paths:
+      - 'orchestrator-service/src/main/resources/enterprise/executive-design-advisory-v1.json'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseAdvisoryPlanningService.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/organization/EnterpriseAdvisoryPlanningServiceTest.java'
+      - 'docs/runtime/enterprise-e2-executive-design-advisory.md'
+      - '.github/workflows/runtime-enterprise-e2-advisory.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  advisory-cross-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Advisory and protected existing identity tests (Ubuntu)
+        if: runner.os == 'Linux'
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml -Dtest=EnterpriseAdvisoryPlanningServiceTest,EnterpriseOrganizationRegistryTest,EnterpriseCatalogBaselineTest test
+      - name: Advisory and protected existing identity tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -ntp -f orchestrator-service/pom.xml '-Dtest=EnterpriseAdvisoryPlanningServiceTest,EnterpriseOrganizationRegistryTest,EnterpriseCatalogBaselineTest' test
+          if ($LASTEXITCODE -ne 0) { throw 'ENTERPRISE_E2_ADVISORY_FAILED' }
+
+  full-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Full orchestrator Java tests
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  fail-closed-no-execution:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Proposed roles must never have tools or approval authority
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          config=json.loads(Path('orchestrator-service/src/main/resources/enterprise/executive-design-advisory-v1.json').read_text())
+          assert config['schemaVersion']==1
+          assert config['evidenceClass']=='PROPOSED_ADVISORY_ROLES_NOT_AGENT_IDENTITIES'
+          roles=config['roles']
+          assert len(roles)==4
+          assert {r['id'] for r in roles}=={'chief-executive-officer','product-design-lead','ux-researcher','visual-interface-designer'}
+          for role in roles:
+              assert role['status']=='PROPOSED'
+              assert role['allowedTools']==[]
+              assert role['executionEnabled'] is False and role['authorityGranted'] is False and role['approvalCanBeIssued'] is False
+          source=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseAdvisoryPlanningService.java').read_text()
+          assert 'OWNER_APPROVAL_REQUIRED_NOT_GRANTED' in source
+          assert 'new AuthorityBoundary(' in source
+          for forbidden in ('@RestController','@PostMapping','@PutMapping','@DeleteMapping',
+                            'ProcessBuilder','Runtime.getRuntime','TaskDelegationService',
+                            'ToolExecutionService','@Scheduled','EntityManager','JdbcTemplate'):
+              assert forbidden not in source, forbidden
+          print('E2_ROLE_AND_BOUNDARY_NONACTIVATION_VERIFIED')
+          PY
+      - name: Stage45 certification not available on this E1 base
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          a=Path('tools/security/stage45_pre_pilot_gate.py')
+          b=Path('tools/security/test_stage45_pre_pilot_gate.py')
+          assert not a.exists() and not b.exists(), (
+              'Stage45 sources were integrated: replace this gate with actual verified Stage45 tests'
+          )
+          print('STAGE45_UNMERGED: NOT TESTED HERE; RELEASE AND DEVICE ACTIVATION REMAIN BLOCKED')
+          PY
