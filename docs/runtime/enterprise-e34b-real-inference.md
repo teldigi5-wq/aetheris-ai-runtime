@@ -1,19 +1,31 @@
-# E3.4B — Real opt-in local SmolLM2 inference on disposable GitHub CI
+# E3.4B — Real opt-in local code-model inference on disposable GitHub CI
 
 **Review-only. This attempts one genuine model inference on a CPU-only disposable GitHub Actions runner, not the user's physical Windows PC.** E3.4A PR #124 remains the CI-verified mock-transport baseline. This slice must not be credited with any real inference until its exact-head CI confirms an actual model runtime, returned generated tokens and an independent browser outcome.
+
+## Separately preserved first genuine inference result
+
+[CI run #39272640791](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/39272640791) was **COMPLETED SUCCESS 5/5** at exact head `c0a95381115d816a7b759fc144361c66781fe1ca`. It performed genuine CPU inference using `smollm2:135m`; local Ollama reported digest `9077fe9d2ae1a4a41a868836b56b8163731a8fe16621397028c2c76f838c6907`, model size 270,898,672 bytes, 37 generated tokens and **2,051 milliseconds** measured wall-clock. The raw model response was:
+
+```json
+{"operation":"abstain","old":"EXACT CURRENT LINE","new":"ONE FIXED LINE"}
+```
+
+That response violated the minimal strict abstention schema. The validator refused it: **0/1 verified repairs** and no source modification or release permission. Genuine evidence artifact: `e34b-real-smollm2-inference-no-authority-evidence` (GitHub artifact ID `12195778479`). It is retained separately from the subsequent trial and must never be retroactively relabeled as a successful repair.
+
+The follow-on second model trial is `qwen2.5-coder:0.5b`, run against the same known scroll-fault family with a revised response-format instruction. This is a **new experiment**, not hidden retries rolled into the first pass rate; the final result must be reported separately whether it fixes the page, abstains, or fails policy checks.
 
 ## Controlled real-model evaluation
 
 - GitHub Actions explicitly opts in via `AETHERIS_E34B_REAL_CI_OPT_IN=yes`. The script also requires the command-line flag `--run-real`; both conditions are necessary. There is no automatic owner-device probing.
 - The runner starts an official Ollama container by **pinned published image digest**, tag `0.12.10`. It listens on **127.0.0.1:11434 only**, with `--cpus 2`, `--memory 3g`, `--memory-swap 3g`, `--pids-limit 128`, dropped Linux capabilities, read-only root filesystem and `no-new-privileges`. Its ephemeral model volume is destroyed at the end. **The Ollama model-service container has network access while it pulls the open model**; it is not covered by the Python patch-worker's `--network none` claim.
-- The disposable container pulls the public `smollm2:135m` model (about 271 MB) and makes it available to the host-local loopback API. CI may fail if the upstream image/model registry is unavailable. Do not fall back silently to mock results.
+- The second trial pulls the public `qwen2.5-coder:0.5b` code model (about 398 MB) and makes it available to the host-local loopback API. CI may fail if the upstream image/model registry is unavailable. Do not fall back silently to mock results.
 - After the actual Chromium browser independently records a deliberately seeded scroll failure `scroll-24`, the test-only Python adapter checks `GET /api/tags` for the real installed model name, reported digest and reasonable downloaded size. It posts one **genuine nonstreaming `/api/generate` request** with a short source excerpt, diagnostic and a strict JSON proposal schema. Model call wall-clock is measured independently; Ollama's reported response tokens, prompt tokens and generation duration are retained alongside raw model text and its SHA256.
 - The response is **never executed**. If it parses to strict `{"operation":"abstain"}` or `{"operation":"replace","old":"...","new":"..."}`, it may be staged as an untrusted advisory for the existing E3.4A network-disabled Docker `e34-prepare` and E3.3 independent `e33-apply` SHA256+grammar+canonical-output gate. Any invalid response, forbidden patch or abstention remains a recorded **nonrepair** outcome. If an actual patch is accepted, a separate Chromium check and the complete E3.0 browser QA must still pass to count a verified repair.
 - The final evidence includes one attempt, actual model token count and time, model tag and **self-reported** digest/size, full output response (bounded), proposal policy result, browser result and all refusals. Model identity is **not cryptographically attested**. No unmeasured model success-rate claim is permitted.
 
 ## Boundaries and limitations
 
-This first trial uses a **known source fault family** and is explicitly **not a truly blinded generalization benchmark**. SmolLM2 135M is intentionally tiny; it may fail the JSON format, produce an invalid patch or abstain. A truthful failing outcome is preferable to fabricated AI success. The test does not compare baseline human programmers or claim general-purpose autonomy.
+This first trial uses a **known source fault family** and is explicitly **not a truly blinded generalization benchmark**. Both tested models are intentionally small; they may fail the JSON format, produce an invalid patch or abstain. A truthful failing outcome is preferable to fabricated AI success. The test does not compare baseline human programmers or claim general-purpose autonomy.
 
 The Ollama inference service and model download operate on disposable CI infrastructure, separate from the network-disabled Python website build/patch workers. The latter retain existing Docker limits: one CPU, 256 MB RAM, 64 PIDs, read-only original repository, fixed writable generated output, no-new-privileges and 45-second wall-clock timeout. CI has Docker permissions on an ephemeral runner and cannot access the user's local operating system.
 
