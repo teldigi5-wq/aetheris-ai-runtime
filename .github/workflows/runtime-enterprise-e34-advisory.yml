@@ -1,0 +1,121 @@
+name: Enterprise E3.4 Local-Model Advisory Boundary (Mock Only)
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e33-heuristic-heldout-20261019
+      - main
+    paths:
+      - 'tools/enterprise/e3_factory/**'
+      - 'docs/runtime/enterprise-e34-local-model-advisory.md'
+      - '.github/workflows/runtime-enterprise-e34-advisory.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fake-local-model-security:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Real localhost mock HTTP and malicious/abstaining text refusal tests
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e34_model_adviser.py' -v
+      - name: Preserve E3.3 limited proposer and E3.2 patch refusal contracts
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_heuristic_repair.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_multi_fault.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_fault_repair.py' -v
+
+  real-site-browser-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Rebuild original site in network-disabled disposable worker
+        run: |
+          docker pull python:3.12-slim-bookworm
+          bash tools/enterprise/e3_factory/run_locked_worker.sh build
+      - name: Revalidate generated site and script syntax
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+          node --check tools/enterprise/e3_factory/main.js
+      - name: Install Playwright on CI host only
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Independently verify scroll, mobile, accessibility and browser errors
+        run: node tools/enterprise/e3_factory/browser_qa.mjs
+      - name: Retain real browser test artifact (NO real model inference)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e34-mock-only-advisory-and-original-browser-qa
+          path: target/e3-factory/
+          retention-days: 14
+          if-no-files-found: error
+
+  full-java-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Existing complete Java orchestrator regression
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  explicit-mock-only-and-owner-denial:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Check fixed loopback local opt-in, no agent tool execution
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('tools/enterprise/e3_factory')
+          code=(root/'e34_model_adviser.py').read_text()
+          worker=(root/'run_locked_worker.sh').read_text()
+          assert 'AETHERIS_E34_EXPLICIT_LOCAL_MODEL_OPT_IN' in code
+          assert 'HTTPConnection("127.0.0.1", port, timeout=12)' in code
+          assert 'E34_LOCAL_MODEL_EXPLICIT_OPT_IN_REQUIRED' in code
+          assert 'E34_MODEL_RESPONSE_DIGEST_MISMATCH' in code
+          assert 'UNTRUSTED_TEXT_PROPOSAL_STAGED_NOT_APPLIED' in code
+          assert 'ownerApprovalGranted": False' in code
+          assert 'modelOutputExecuted": False' in code
+          assert 'modelIdentityAttested": False' in code
+          assert 'e34-prepare)' in worker
+          assert 'e34-query)' not in worker
+          for bad in ('@RestController','subprocess','os.system','Popen(',
+                      'urllib.request','requests.post','import socket',
+                      'ssh ', 'kubectl ', 'Files.write'):
+              assert bad not in code, bad
+          for rule in ('--network none','--read-only','--memory 256m',
+                       '--cpus 1','--pids-limit 64','--cap-drop ALL',
+                       '--security-opt no-new-privileges',
+                       'timeout --signal=TERM --kill-after=3s 45s'):
+              assert rule in worker,rule
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists()
+          print('E34_LOCAL_MOCK_HTTP_TESTS_NOT_REAL_MODEL_INFERENCE')
+          print('NO_OWNER_AUTHENTICATION_NO_DEPLOYMENT_NO_PC_ACTIVATION')
+          PY
