@@ -78,12 +78,18 @@ public final class EnterpriseOfflineKeyTrust {
                 && clock.instant().isBefore(bundle.expiresAt()),
                 "E22D_BUNDLE_EXPIRED_OR_UNSUPPORTED");
         require(slug(keyId), "E22D_CANDIDATE_KEY_ID_INVALID");
-        byte[] message = canonicalBytes(bundle);
-        require(bundle.operatorRootSignatureBase64Url() != null
-                && SIG.matcher(bundle.operatorRootSignatureBase64Url()).matches(),
+        // Snapshot the untrusted roster BEFORE signing-byte verification and
+        // reuse the exact same immutable entries for key selection (no TOCTOU).
+        require(bundle.candidateKeys() != null, "E22D_BUNDLE_STRUCTURE_INVALID");
+        SignedBundle immutableBundle = new SignedBundle(bundle.schemaVersion(),
+                bundle.generation(), bundle.issuedAt(), bundle.expiresAt(),
+                List.copyOf(bundle.candidateKeys()), bundle.operatorRootSignatureBase64Url());
+        byte[] message = canonicalBytes(immutableBundle);
+        require(immutableBundle.operatorRootSignatureBase64Url() != null
+                && SIG.matcher(immutableBundle.operatorRootSignatureBase64Url()).matches(),
                 "E22D_ROOT_SIGNATURE_ENCODING_INVALID");
         try {
-            byte[] signature = Base64.getUrlDecoder().decode(bundle.operatorRootSignatureBase64Url());
+            byte[] signature = Base64.getUrlDecoder().decode(immutableBundle.operatorRootSignatureBase64Url());
             require(signature.length == 64, "E22D_ROOT_SIGNATURE_ENCODING_INVALID");
             Signature verifier = Signature.getInstance("Ed25519");
             verifier.initVerify(operatorPinnedRoot);
@@ -95,7 +101,7 @@ public final class EnterpriseOfflineKeyTrust {
             throw new IllegalArgumentException("E22D_ROOT_SIGNATURE_INVALID", e);
         }
 
-        CandidateKey candidate = bundle.candidateKeys().stream()
+        CandidateKey candidate = immutableBundle.candidateKeys().stream()
                 .filter(k -> k.keyId().equals(keyId)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("E22D_CANDIDATE_UNKNOWN"));
         require(!REVOKED.equals(candidate.state()), "E22D_KEY_REVOKED");
@@ -143,7 +149,8 @@ public final class EnterpriseOfflineKeyTrust {
                     && (KEY_STATE.equals(key.state()) || REVOKED.equals(key.state()))
                     && key.validFrom() != null && key.validUntil() != null
                     && key.validUntil().isAfter(key.validFrom())
-                    && !key.validFrom().isBefore(bundle.issuedAt())
+                    // An existing key can predate the newly signed bundle on rotation.
+                    && key.validFrom().isBefore(bundle.expiresAt())
                     && key.validUntil().isAfter(bundle.issuedAt())
                     && !key.validUntil().isAfter(bundle.expiresAt()),
                     "E22D_INVALID_OR_DUPLICATE_KEY_ENTRY");
