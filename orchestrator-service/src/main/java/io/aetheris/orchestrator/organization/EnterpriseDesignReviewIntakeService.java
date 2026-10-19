@@ -48,7 +48,8 @@ public class EnterpriseDesignReviewIntakeService {
             EnterpriseDesignArtifactService.ArtifactBundle artifact) {
         // A valid static contract is still not an authenticated approval request.
         verifier.verify(artifact);
-        // PostgreSQL and H2 persist TIMESTAMP at microsecond precision.\n        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        // PostgreSQL and H2 persist TIMESTAMP at microsecond precision.
+        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         Instant expiry = now.plus(15, ChronoUnit.MINUTES);
         EnterpriseDesignReviewIntent intent = new EnterpriseDesignReviewIntent(
                 UUID.randomUUID().toString(), artifact.projectId(), artifact.companyId(),
