@@ -120,7 +120,7 @@ class EnterpriseAdvisoryPlanningServiceTest {
                 .hasMessage("E2_OBJECTIVE_INVALID");
         var injection = new EnterpriseAdvisoryPlanningService.DesignBrief(
                 brief().projectId(), brief().companyId(), brief().divisionId(),
-                brief().objective(), List.of((String) null));
+                brief().objective(), java.util.Arrays.asList((String) null));
         assertThatThrownBy(() -> service.prepare(injection))
                 .isInstanceOf(IllegalArgumentException.class);
     }
