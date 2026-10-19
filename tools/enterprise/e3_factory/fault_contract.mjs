@@ -79,7 +79,7 @@ try {
     result.failureCode = 'E32_UNEXPECTED_JS_EXCEPTION';
   } else if (name === 'scroll' && !(observed.progress > 70 && observed.css3dTransform.length > 20)) {
     result.failureCode = 'E32_SCROLL_PROGRESS_STUCK';
-  } else if (name === 'mobile' && observed.scrollWidth > observed.innerWidth + 1) {
+  } else if (name === 'mobile' && (observed.scrollWidth > 391 || observed.innerWidth > 391)) {
     result.failureCode = 'E32_MOBILE_HORIZONTAL_OVERFLOW';
   } else if (name === 'reduced' && observed.motion !== 'reduced') {
     result.failureCode = 'E32_REDUCED_MOTION_DISABLED';
