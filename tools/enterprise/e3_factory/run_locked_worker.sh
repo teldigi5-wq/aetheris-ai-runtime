@@ -20,10 +20,16 @@ case "$phase" in
     action="${phase#e33-}"
     args=("$action" "$2")
     ;;
+  e34-prepare)
+    [[ $# -eq 2 ]] || exit 2
+    case "$2" in scroll|mobile|reduced) ;; *) echo "E34_UNSUPPORTED_CATEGORY" >&2; exit 2;; esac
+    entry="e34_model_adviser.py"
+    args=("prepare" "$2")
+    ;;
   *) echo "E31_UNKNOWN_WORKER_PHASE" >&2; exit 2;;
 esac
 evidence_id="$phase"
-if [[ "$phase" == e32-* || "$phase" == e33-* ]]; then evidence_id="$phase-$2"; fi
+if [[ "$phase" == e32-* || "$phase" == e33-* || "$phase" == e34-* ]]; then evidence_id="$phase-$2"; fi
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 cd "$repo"
