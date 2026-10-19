@@ -1,0 +1,107 @@
+name: Enterprise E1 Read-Only Company Registry
+
+on:
+  pull_request:
+    branches:
+      - audit/e0-enterprise-baseline-20261019
+      - main
+    paths:
+      - 'orchestrator-service/src/main/resources/enterprise/organization-blueprint-v1.json'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseOrganizationRegistry.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/organization/EnterpriseOrganizationRegistryTest.java'
+      - 'docs/runtime/enterprise-e1-company-registry.md'
+      - '.github/workflows/runtime-enterprise-e1-registry.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e1-cross-platform-registry:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Existing identity preservation and new enterprise registry (Linux)
+        if: runner.os == 'Linux'
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml -Dtest=EnterpriseOrganizationRegistryTest,EnterpriseCatalogBaselineTest test
+      - name: Existing identity preservation and new enterprise registry (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -ntp -f orchestrator-service/pom.xml '-Dtest=EnterpriseOrganizationRegistryTest,EnterpriseCatalogBaselineTest' test
+          if ($LASTEXITCODE -ne 0) { throw 'ENTERPRISE_E1_REGISTRY_TEST_FAILED' }
+
+  full-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Complete Java orchestrator regression
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  static-no-activation-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Verify read-only metadata and 13/100 uniqueness
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('orchestrator-service/src/main/resources/enterprise/organization-blueprint-v1.json').read_text())
+          companies=d['companies']
+          divisions=[x for c in companies for x in c['divisions']]
+          assert d['schemaVersion']==1 and d['evidenceClass']=='PROPOSED_TAXONOMY_NON_EXECUTABLE'
+          assert d['targetCompanyCount']==len(companies)==13
+          assert d['targetDivisionCount']==len(divisions)==100
+          assert len({c['id'] for c in companies})==13
+          assert len({x['id'] for x in divisions})==100
+          assert len(d['legacyDivisionCompanyAssignments'])==13
+          source=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseOrganizationRegistry.java').read_text()
+          assert '@Service' in source and 'public Snapshot snapshot()' in source
+          for forbidden in ('@RestController','@PostMapping','@PutMapping','@DeleteMapping',
+                            'ProcessBuilder','Runtime.getRuntime','ToolExecutionService',
+                            'TaskDelegationService','DesktopCommand','setAllowedTools(',
+                            'new Thread(','@Scheduled'):
+              assert forbidden not in source, forbidden
+          assert 'false, false, false, false, false' in source
+          print('ENTERPRISE_E1_NON_ACTIVATION_COUNTS_13_100_CONFIRMED')
+          PY
+      - name: Fail-closed review boundary where Stage45 tests are not on the E0 base
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          gate = Path('tools/security/stage45_pre_pilot_gate.py')
+          suite = Path('tools/security/test_stage45_pre_pilot_gate.py')
+          assert not gate.exists() and not suite.exists(), (
+              'Stage45 gate source has changed; explicitly integrate and execute its real security tests'
+          )
+          source = Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseOrganizationRegistry.java').read_text()
+          assert 'new Safety(true, false, false, false, false, false)' in source
+          assert 'NO HTTP controller' in source
+          assert '@RestController' not in source
+          print('STAGE45_SUITE_ABSENT_ON_E0_BASE: CERTIFICATION NOT EXECUTED; RELEASE REMAINS BLOCKED')
+          print('E1 METADATA ONLY: NO EXECUTION, NO PUBLIC API, NO FINANCIAL/PRODUCTION AUTHORITY')
+          PY

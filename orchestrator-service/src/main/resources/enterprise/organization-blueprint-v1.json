@@ -1,0 +1,501 @@
+{
+  "schemaVersion": 1,
+  "evidenceClass": "PROPOSED_TAXONOMY_NON_EXECUTABLE",
+  "targetCompanyCount": 13,
+  "targetDivisionCount": 100,
+  "companies": [
+    {
+      "id": "aetheris-software",
+      "name": "Aetheris Software",
+      "divisions": [
+        {
+          "id": "web-frontend-engineering",
+          "name": "Web Frontend Engineering"
+        },
+        {
+          "id": "backend-api-engineering",
+          "name": "Backend API Engineering"
+        },
+        {
+          "id": "mobile-application-engineering",
+          "name": "Mobile Application Engineering"
+        },
+        {
+          "id": "desktop-systems-engineering",
+          "name": "Desktop Systems Engineering"
+        },
+        {
+          "id": "product-architecture-qa",
+          "name": "Product Architecture QA"
+        },
+        {
+          "id": "design-to-code-engineering",
+          "name": "Design To Code Engineering"
+        },
+        {
+          "id": "visual-regression-engineering",
+          "name": "Visual Regression Engineering"
+        },
+        {
+          "id": "cross-platform-component-systems",
+          "name": "Cross Platform Component Systems"
+        },
+        {
+          "id": "browser-performance-lab",
+          "name": "Browser Performance Lab"
+        },
+        {
+          "id": "web-accessibility-engineering",
+          "name": "Web Accessibility Engineering"
+        },
+        {
+          "id": "app-crash-diagnostics",
+          "name": "App Crash Diagnostics"
+        }
+      ]
+    },
+    {
+      "id": "aetheris-intelligence",
+      "name": "Aetheris Intelligence",
+      "divisions": [
+        {
+          "id": "ai-model-engineering",
+          "name": "AI Model Engineering"
+        },
+        {
+          "id": "multi-agent-systems",
+          "name": "Multi Agent Systems"
+        },
+        {
+          "id": "data-science-analytics",
+          "name": "Data Science Analytics"
+        },
+        {
+          "id": "rag-knowledge-engineering",
+          "name": "RAG Knowledge Engineering"
+        },
+        {
+          "id": "applied-ai-research",
+          "name": "Applied AI Research"
+        },
+        {
+          "id": "generative-3d-asset-research",
+          "name": "Generative 3D Asset Research"
+        },
+        {
+          "id": "ai-assisted-storyboarding",
+          "name": "AI Assisted Storyboarding"
+        },
+        {
+          "id": "multimodal-visual-evaluation",
+          "name": "Multimodal Visual Evaluation"
+        },
+        {
+          "id": "automated-scene-reconstruction",
+          "name": "Automated Scene Reconstruction"
+        },
+        {
+          "id": "motion-planning-evaluation",
+          "name": "Motion Planning Evaluation"
+        }
+      ]
+    },
+    {
+      "id": "aetheris-cyber-defense",
+      "name": "Aetheris Cyber Defense",
+      "divisions": [
+        {
+          "id": "soc-detection-engineering",
+          "name": "SOC Detection Engineering"
+        },
+        {
+          "id": "application-security",
+          "name": "Application Security"
+        },
+        {
+          "id": "authorized-security-testing",
+          "name": "Authorized Security Testing"
+        },
+        {
+          "id": "digital-forensics-incident-response",
+          "name": "Digital Forensics Incident Response"
+        },
+        {
+          "id": "security-governance-threat-intelligence",
+          "name": "Security Governance Threat Intelligence"
+        }
+      ]
+    },
+    {
+      "id": "aetheris-creative",
+      "name": "Aetheris Creative",
+      "divisions": [
+        {
+          "id": "ui-ux-product-design",
+          "name": "UI UX Product Design"
+        },
+        {
+          "id": "brand-visual-identity",
+          "name": "Brand Visual Identity"
+        },
+        {
+          "id": "motion-3d-experiences",
+          "name": "Motion 3D Experiences"
+        },
+        {
+          "id": "video-media-production",
+          "name": "Video Media Production"
+        },
+        {
+          "id": "design-research-accessibility",
+          "name": "Design Research Accessibility"
+        },
+        {
+          "id": "virtual-production-cgi",
+          "name": "Virtual Production CGI"
+        },
+        {
+          "id": "digital-humans-character-animation",
+          "name": "Digital Humans Character Animation"
+        },
+        {
+          "id": "physics-simulation-procedural-vfx",
+          "name": "Physics Simulation Procedural VFX"
+        },
+        {
+          "id": "virtual-showrooms-product-configurators",
+          "name": "Virtual Showrooms Product Configurators"
+        },
+        {
+          "id": "ar-webxr",
+          "name": "AR Webxr"
+        },
+        {
+          "id": "video-compositing-color-grading",
+          "name": "Video Compositing Color Grading"
+        },
+        {
+          "id": "audio-reactive-experiences",
+          "name": "Audio Reactive Experiences"
+        },
+        {
+          "id": "procedural-typography",
+          "name": "Procedural Typography"
+        },
+        {
+          "id": "interactive-editorial-publishing",
+          "name": "Interactive Editorial Publishing"
+        },
+        {
+          "id": "asset-optimization-media-delivery",
+          "name": "Asset Optimization Media Delivery"
+        },
+        {
+          "id": "technical-art-tooling",
+          "name": "Technical Art Tooling"
+        },
+        {
+          "id": "render-farm-orchestration",
+          "name": "Render Farm Orchestration"
+        }
+      ]
+    },
+    {
+      "id": "aetheris-cloud",
+      "name": "Aetheris Cloud",
+      "divisions": [
+        {
+          "id": "cloud-architecture",
+          "name": "Cloud Architecture"
+        },
+        {
+          "id": "devops-ci-cd",
+          "name": "Devops CI CD"
+        },
+        {
+          "id": "sre-observability",
+          "name": "SRE Observability"
+        },
+        {
+          "id": "platform-container-engineering",
+          "name": "Platform Container Engineering"
+        },
+        {
+          "id": "infrastructure-security",
+          "name": "Infrastructure Security"
+        }
+      ]
+    },
+    {
+      "id": "aetheris-ventures",
+      "name": "Aetheris Ventures",
+      "divisions": [
+        {
+          "id": "venture-research-strategy",
+          "name": "Venture Research Strategy"
+        },
+        {
+          "id": "marketing-growth",
+          "name": "Marketing Growth"
+        },
+        {
+          "id": "sales-client-relations",
+          "name": "Sales Client Relations"
+        },
+        {
+          "id": "ecommerce-operations",
+          "name": "Ecommerce Operations"
+        },
+        {
+          "id": "real-estate-property-tech",
+          "name": "Real Estate Property Tech"
+        },
+        {
+          "id": "luxury-brand-experience-strategy",
+          "name": "Luxury Brand Experience Strategy"
+        },
+        {
+          "id": "automotive-digital-showrooms",
+          "name": "Automotive Digital Showrooms"
+        },
+        {
+          "id": "interactive-architecture-visualization",
+          "name": "Interactive Architecture Visualization"
+        }
+      ]
+    },
+    {
+      "id": "aetheris-finance",
+      "name": "Aetheris Finance",
+      "divisions": [
+        {
+          "id": "financial-planning-analysis",
+          "name": "Financial Planning Analysis"
+        },
+        {
+          "id": "quant-research-paper-trading",
+          "name": "Quant Research Paper Trading"
+        },
+        {
+          "id": "risk-portfolio-analytics",
+          "name": "Risk Portfolio Analytics"
+        },
+        {
+          "id": "fraud-anomaly-research",
+          "name": "Fraud Anomaly Research"
+        },
+        {
+          "id": "financial-operations-reporting",
+          "name": "Financial Operations Reporting"
+        }
+      ]
+    },
+    {
+      "id": "aetheris-industries",
+      "name": "Aetheris Industries",
+      "divisions": [
+        {
+          "id": "embedded-firmware-engineering",
+          "name": "Embedded Firmware Engineering"
+        },
+        {
+          "id": "iot-telemetry-platforms",
+          "name": "IOT Telemetry Platforms"
+        },
+        {
+          "id": "robotics-automation",
+          "name": "Robotics Automation"
+        },
+        {
+          "id": "digital-twins-simulation",
+          "name": "Digital Twins Simulation"
+        },
+        {
+          "id": "environmental-monitoring",
+          "name": "Environmental Monitoring"
+        }
+      ]
+    },
+    {
+      "id": "aetheris-academy",
+      "name": "Aetheris Academy",
+      "divisions": [
+        {
+          "id": "adaptive-learning-systems",
+          "name": "Adaptive Learning Systems"
+        },
+        {
+          "id": "curriculum-course-design",
+          "name": "Curriculum Course Design"
+        },
+        {
+          "id": "assessment-examination-engineering",
+          "name": "Assessment Examination Engineering"
+        },
+        {
+          "id": "developer-training",
+          "name": "Developer Training"
+        },
+        {
+          "id": "talent-development-recruitment",
+          "name": "Talent Development Recruitment"
+        }
+      ]
+    },
+    {
+      "id": "aetheris-experience",
+      "name": "Aetheris Experience",
+      "divisions": [
+        {
+          "id": "travel-technology",
+          "name": "Travel Technology"
+        },
+        {
+          "id": "hospitality-restaurant-technology",
+          "name": "Hospitality Restaurant Technology"
+        },
+        {
+          "id": "customer-support-automation",
+          "name": "Customer Support Automation"
+        },
+        {
+          "id": "crm-service-intelligence",
+          "name": "CRM Service Intelligence"
+        },
+        {
+          "id": "booking-reservation-workflows",
+          "name": "Booking Reservation Workflows"
+        },
+        {
+          "id": "ecommerce-product-storytelling",
+          "name": "Ecommerce Product Storytelling"
+        },
+        {
+          "id": "interactive-event-exhibition-design",
+          "name": "Interactive Event Exhibition Design"
+        }
+      ]
+    },
+    {
+      "id": "aetheris-science",
+      "name": "Aetheris Science",
+      "divisions": [
+        {
+          "id": "scientific-literature-research",
+          "name": "Scientific Literature Research"
+        },
+        {
+          "id": "simulation-mathematical-modeling",
+          "name": "Simulation Mathematical Modeling"
+        },
+        {
+          "id": "computer-vision-signal-processing",
+          "name": "Computer Vision Signal Processing"
+        },
+        {
+          "id": "experiment-design-evaluation",
+          "name": "Experiment Design Evaluation"
+        },
+        {
+          "id": "innovation-prototyping",
+          "name": "Innovation Prototyping"
+        }
+      ]
+    },
+    {
+      "id": "aetheris-enterprise-services",
+      "name": "Aetheris Enterprise Services",
+      "divisions": [
+        {
+          "id": "enterprise-pmo",
+          "name": "Enterprise Pmo"
+        },
+        {
+          "id": "legal-compliance-support",
+          "name": "Legal Compliance Support"
+        },
+        {
+          "id": "procurement-vendor-intelligence",
+          "name": "Procurement Vendor Intelligence"
+        },
+        {
+          "id": "enterprise-automation-rpa",
+          "name": "Enterprise Automation RPA"
+        },
+        {
+          "id": "documentation-knowledge-operations",
+          "name": "Documentation Knowledge Operations"
+        }
+      ]
+    },
+    {
+      "id": "aetheris-immersive",
+      "name": "Aetheris Immersive Technologies",
+      "divisions": [
+        {
+          "id": "cinematic-web-engineering",
+          "name": "Cinematic Web Engineering"
+        },
+        {
+          "id": "3d-modeling-asset-creation",
+          "name": "3D Modeling Asset Creation"
+        },
+        {
+          "id": "photorealistic-rendering",
+          "name": "Photorealistic Rendering"
+        },
+        {
+          "id": "scroll-experience-engineering",
+          "name": "Scroll Experience Engineering"
+        },
+        {
+          "id": "frame-sequence-animation",
+          "name": "Frame Sequence Animation"
+        },
+        {
+          "id": "realtime-3d-web-engineering",
+          "name": "Realtime 3D Web Engineering"
+        },
+        {
+          "id": "motion-graphics-vfx",
+          "name": "Motion Graphics VFX"
+        },
+        {
+          "id": "shader-visual-computing",
+          "name": "Shader Visual Computing"
+        },
+        {
+          "id": "spatial-interaction-engineering",
+          "name": "Spatial Interaction Engineering"
+        },
+        {
+          "id": "creative-direction-storyboarding",
+          "name": "Creative Direction Storyboarding"
+        },
+        {
+          "id": "3d-performance-optimization",
+          "name": "3D Performance Optimization"
+        },
+        {
+          "id": "visual-qa-accessibility",
+          "name": "Visual QA Accessibility"
+        }
+      ]
+    }
+  ],
+  "legacyDivisionCompanyAssignments": {
+    "Executive Office": "group-headquarters",
+    "Software Engineering": "aetheris-software",
+    "AI and Data": "aetheris-intelligence",
+    "DevOps and SRE": "aetheris-cloud",
+    "QA and Release": "group-headquarters",
+    "Cybersecurity": "aetheris-cyber-defense",
+    "Tools and Integrations": "aetheris-enterprise-services",
+    "Computer Operations": "aetheris-cloud",
+    "Research Lab": "aetheris-science",
+    "Syntra Academy": "aetheris-academy",
+    "Career Intelligence": "aetheris-academy",
+    "Business Intelligence": "aetheris-ventures",
+    "Financial Intelligence": "aetheris-finance"
+  }
+}
