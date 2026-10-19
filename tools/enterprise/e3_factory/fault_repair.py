@@ -71,6 +71,14 @@ def repair(site_file: Path, evidence_dir: Path) -> dict:
     if evidence_dir.is_symlink() or seed_file.is_symlink() or not seed_file.is_file():
         raise ValueError("E31_SEED_EVIDENCE_MISSING_OR_LINKED")
     evidence = json.loads(seed_file.read_text("utf-8"))
+    diagnosis_file = evidence_dir / "diagnosis.json"
+    if diagnosis_file.is_symlink() or not diagnosis_file.is_file():
+        raise ValueError("E31_BROWSER_DIAGNOSIS_REQUIRED")
+    diagnosis = json.loads(diagnosis_file.read_text("utf-8"))
+    if (diagnosis.get("evidenceClass") != "REAL_CHROMIUM_QA_CI_ONLY_NOT_PRODUCTION"
+            or diagnosis.get("passed") is not False
+            or evidence["expectedFailure"] not in str(diagnosis.get("failure", ""))):
+        raise ValueError("E31_WRONG_BROWSER_FAILURE")
     original = SOURCE.read_bytes()
     broken = original.decode("utf-8").replace(MARKER, BROKEN, 1).encode("utf-8")
     if (original.decode("utf-8").count(MARKER) != 1
