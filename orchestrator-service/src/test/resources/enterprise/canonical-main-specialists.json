@@ -1,0 +1,354 @@
+{
+  "schemaVersion": 1,
+  "sourceBranch": "main",
+  "sourcePath": "orchestrator-service/src/main/resources/application.yml",
+  "sourceBlobSha": "d7e0df3c24077ef20c24cc59df3bca902c805520",
+  "observedDate": "2026-10-19",
+  "roleCount": 26,
+  "divisionCount": 13,
+  "agents": [
+    {
+      "id": "ai-engineer",
+      "division": "AI and Data",
+      "riskLevel": "MEDIUM",
+      "preferredModelClass": "REASONING",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "model-router",
+        "ollama",
+        "mcp",
+        "datasets",
+        "evals"
+      ]
+    },
+    {
+      "id": "appsec-officer",
+      "division": "Cybersecurity",
+      "riskLevel": "HIGH",
+      "preferredModelClass": "SECURITY",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "github",
+        "security-scanners",
+        "tests",
+        "reports"
+      ]
+    },
+    {
+      "id": "authorized-redteam-officer",
+      "division": "Cybersecurity",
+      "riskLevel": "CRITICAL",
+      "preferredModelClass": "SECURITY",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "security-lab",
+        "approved-targets",
+        "reports"
+      ]
+    },
+    {
+      "id": "automation-engineer",
+      "division": "Tools and Integrations",
+      "riskLevel": "HIGH",
+      "preferredModelClass": "GENERAL",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "automation",
+        "task-graph",
+        "notifications",
+        "mcp"
+      ]
+    },
+    {
+      "id": "backend-engineer",
+      "division": "Software Engineering",
+      "riskLevel": "MEDIUM",
+      "preferredModelClass": "CODING",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "github",
+        "filesystem",
+        "terminal",
+        "mcp",
+        "tests"
+      ]
+    },
+    {
+      "id": "blue-team-officer",
+      "division": "Cybersecurity",
+      "riskLevel": "HIGH",
+      "preferredModelClass": "SECURITY",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "observability",
+        "security-scanners",
+        "endpoint-health",
+        "audit-log"
+      ]
+    },
+    {
+      "id": "business-strategist",
+      "division": "Business Intelligence",
+      "riskLevel": "MEDIUM",
+      "preferredModelClass": "REASONING",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "web",
+        "documents",
+        "spreadsheets",
+        "memory"
+      ]
+    },
+    {
+      "id": "career-director",
+      "division": "Career Intelligence",
+      "riskLevel": "HIGH",
+      "preferredModelClass": "GENERAL",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "github",
+        "browser",
+        "portfolio",
+        "documents",
+        "approvals"
+      ]
+    },
+    {
+      "id": "data-engineer",
+      "division": "AI and Data",
+      "riskLevel": "MEDIUM",
+      "preferredModelClass": "GENERAL",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "databases",
+        "filesystem",
+        "mcp",
+        "observability"
+      ]
+    },
+    {
+      "id": "desktop-engineer",
+      "division": "Software Engineering",
+      "riskLevel": "HIGH",
+      "preferredModelClass": "CODING",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "filesystem",
+        "terminal",
+        "pc-control",
+        "github",
+        "tests"
+      ]
+    },
+    {
+      "id": "devops-engineer",
+      "division": "DevOps and SRE",
+      "riskLevel": "HIGH",
+      "preferredModelClass": "CODING",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "github",
+        "terminal",
+        "docker",
+        "kubernetes",
+        "observability"
+      ]
+    },
+    {
+      "id": "executive-planner",
+      "division": "Executive Office",
+      "riskLevel": "MEDIUM",
+      "preferredModelClass": "REASONING",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "memory",
+        "task-graph",
+        "rules-engine"
+      ]
+    },
+    {
+      "id": "frontend-engineer",
+      "division": "Software Engineering",
+      "riskLevel": "MEDIUM",
+      "preferredModelClass": "CODING",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "github",
+        "filesystem",
+        "terminal",
+        "browser",
+        "tests"
+      ]
+    },
+    {
+      "id": "incident-commander",
+      "division": "Cybersecurity",
+      "riskLevel": "CRITICAL",
+      "preferredModelClass": "REASONING",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "observability",
+        "endpoint-health",
+        "runbooks",
+        "notifications",
+        "audit-log"
+      ]
+    },
+    {
+      "id": "mcp-integration-engineer",
+      "division": "Tools and Integrations",
+      "riskLevel": "HIGH",
+      "preferredModelClass": "CODING",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "mcp-registry",
+        "sandbox",
+        "credentials-vault",
+        "audit-log"
+      ]
+    },
+    {
+      "id": "pc-care-engineer",
+      "division": "Computer Operations",
+      "riskLevel": "HIGH",
+      "preferredModelClass": "GENERAL",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "pc-control",
+        "endpoint-health",
+        "filesystem",
+        "terminal",
+        "restore-points"
+      ]
+    },
+    {
+      "id": "professor-tutor",
+      "division": "Syntra Academy",
+      "riskLevel": "LOW",
+      "preferredModelClass": "GENERAL",
+      "approvalRequiredForHighImpactActions": false,
+      "allowedTools": [
+        "academy",
+        "documents",
+        "code-runner",
+        "memory"
+      ]
+    },
+    {
+      "id": "project-manager",
+      "division": "Executive Office",
+      "riskLevel": "LOW",
+      "preferredModelClass": "GENERAL",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "projects",
+        "memory",
+        "notifications"
+      ]
+    },
+    {
+      "id": "qa-engineer",
+      "division": "QA and Release",
+      "riskLevel": "LOW",
+      "preferredModelClass": "CODING",
+      "approvalRequiredForHighImpactActions": false,
+      "allowedTools": [
+        "tests",
+        "browser",
+        "terminal",
+        "github",
+        "reports"
+      ]
+    },
+    {
+      "id": "quant-researcher",
+      "division": "Financial Intelligence",
+      "riskLevel": "HIGH",
+      "preferredModelClass": "QUANT",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "market-data",
+        "aetheris-quant",
+        "research",
+        "reports"
+      ]
+    },
+    {
+      "id": "release-manager",
+      "division": "QA and Release",
+      "riskLevel": "HIGH",
+      "preferredModelClass": "GENERAL",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "github",
+        "ci-cd",
+        "artifacts",
+        "observability"
+      ]
+    },
+    {
+      "id": "research-scientist",
+      "division": "Research Lab",
+      "riskLevel": "LOW",
+      "preferredModelClass": "REASONING",
+      "approvalRequiredForHighImpactActions": false,
+      "allowedTools": [
+        "web",
+        "documents",
+        "citations",
+        "memory"
+      ]
+    },
+    {
+      "id": "security-architect",
+      "division": "Cybersecurity",
+      "riskLevel": "HIGH",
+      "preferredModelClass": "SECURITY",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "security-scanners",
+        "audit-log",
+        "github",
+        "mcp"
+      ]
+    },
+    {
+      "id": "software-architect",
+      "division": "Software Engineering",
+      "riskLevel": "MEDIUM",
+      "preferredModelClass": "CODING",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "github",
+        "filesystem",
+        "diagrams",
+        "mcp"
+      ]
+    },
+    {
+      "id": "sre-officer",
+      "division": "DevOps and SRE",
+      "riskLevel": "HIGH",
+      "preferredModelClass": "REASONING",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "observability",
+        "kubernetes",
+        "terminal",
+        "runbooks"
+      ]
+    },
+    {
+      "id": "trading-risk-officer",
+      "division": "Financial Intelligence",
+      "riskLevel": "CRITICAL",
+      "preferredModelClass": "QUANT",
+      "approvalRequiredForHighImpactActions": true,
+      "allowedTools": [
+        "aetheris-quant",
+        "risk-engine",
+        "audit-log"
+      ]
+    }
+  ]
+}
