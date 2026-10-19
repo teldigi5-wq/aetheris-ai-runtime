@@ -21,7 +21,7 @@ class HeuristicProposalTests(unittest.TestCase):
     def setup_case(self, category, broken):
         filename = h.CATEGORIES[category][0]
         source = self.site / filename
-        source.write_text(broken, encoding="utf-8")
+        source.write_bytes(broken.encode("utf-8"))  # exact cross-platform LF bytes
         # Separate clean contract for independent gate verification.
         if category == "scroll":
             clean = broken.replace("const p = 0.17;", "const p = progress();")
