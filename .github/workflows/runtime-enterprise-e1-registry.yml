@@ -89,19 +89,19 @@ jobs:
           assert 'false, false, false, false, false' in source
           print('ENTERPRISE_E1_NON_ACTIVATION_COUNTS_13_100_CONFIRMED')
           PY
-      - name: Existing Stage45 pre-pilot no-go policy
+      - name: Fail-closed review boundary where Stage45 tests are not on the E0 base
         run: |
-          python3 -m unittest discover -s tools/security -p test_stage45_pre_pilot_gate.py -v
-          python3 tools/security/stage45_pre_pilot_gate.py > "$RUNNER_TEMP/e1-stage45-gate.json"
-          python3 - "$RUNNER_TEMP/e1-stage45-gate.json" <<'PY'
-          import json,sys
+          python3 - <<'PY'
           from pathlib import Path
-          result=json.loads(Path(sys.argv[1]).read_text())
-          assert result['decision']=='NO_GO'
-          assert len(result['release_blockers'])==13
-          for key in ('production_pilot_authorized','agent_command_execution_authorized',
-                      'desktop_actions_authorized','deploy_permitted',
-                      'protected_branch_merge_permitted','windows_device_certified'):
-              assert result[key] is False, key
-          print('ENTERPRISE_E1_STAGE45_REMAINS_NO_GO')
+          gate = Path('tools/security/stage45_pre_pilot_gate.py')
+          suite = Path('tools/security/test_stage45_pre_pilot_gate.py')
+          assert not gate.exists() and not suite.exists(), (
+              'Stage45 gate source has changed; explicitly integrate and execute its real security tests'
+          )
+          source = Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseOrganizationRegistry.java').read_text()
+          assert 'new Safety(true, false, false, false, false, false)' in source
+          assert 'NO HTTP controller' in source
+          assert '@RestController' not in source
+          print('STAGE45_SUITE_ABSENT_ON_E0_BASE: CERTIFICATION NOT EXECUTED; RELEASE REMAINS BLOCKED')
+          print('E1 METADATA ONLY: NO EXECUTION, NO PUBLIC API, NO FINANCIAL/PRODUCTION AUTHORITY')
           PY
