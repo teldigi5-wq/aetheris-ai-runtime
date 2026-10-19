@@ -131,6 +131,32 @@ class EnterpriseOfflineKeyTrustTest {
     }
 
     @Test
+    void rotatingBundleCanCarryExistingCandidateThatPredatesThisBundle() throws Exception {
+        // Real signed key bundles are reissued frequently; the long-lived key
+        // may have been enrolled before the present bundle was signed.
+        var older = signed(5, List.of(key("existing-key", candidate,
+                "ACTIVE_CANDIDATE_UNATTESTED", START.minusSeconds(7200), END)),
+                root, START, END);
+        var accepted = EnterpriseOfflineKeyTrust.resolve(
+                older, root.getPublic(), 5L, "existing-key", NOW_CLOCK);
+        assertThat(accepted.signedGeneration()).isEqualTo(5L);
+        assertThat(accepted.authenticatedHumanOwner()).isFalse();
+    }
+
+    @Test
+    void mutatedRosterAfterSigningCannotAddUntrustedCandidate() throws Exception {
+        var roster = new ArrayList<EnterpriseOfflineKeyTrust.CandidateKey>();
+        roster.add(key("owner-key-v2", candidate,
+                "ACTIVE_CANDIDATE_UNATTESTED", START, END));
+        var signed = signed(2, roster, root, START, END);
+        roster.add(key("attacker-key", replacement,
+                "ACTIVE_CANDIDATE_UNATTESTED", START, END));
+        assertThatThrownBy(() -> EnterpriseOfflineKeyTrust.resolve(
+                signed, root.getPublic(), 2L, "attacker-key", NOW_CLOCK))
+                .hasMessage("E22D_ROOT_SIGNATURE_INVALID");
+    }
+
+    @Test
     void expiredBundleOrFutureIssuedBundleRejected() throws Exception {
         var expired = signed(2, List.of(key("owner-key-v2", candidate,
                 "ACTIVE_CANDIDATE_UNATTESTED", START, NOW.minusSeconds(1))),
