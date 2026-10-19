@@ -1,0 +1,105 @@
+name: Enterprise E2.2 Deterministic Design Artifact Certification
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e2-advisory-design-handoff-20261019
+      - main
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseDesignArtifactService.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseDesignArtifactVerifier.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/organization/EnterpriseDesignArtifactServiceTest.java'
+      - 'docs/runtime/enterprise-e22-design-artifacts.md'
+      - '.github/workflows/runtime-enterprise-e22-design-artifacts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-design-cross-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: E2.2 + prior E2/E1/E0 tests (Linux)
+        if: runner.os == 'Linux'
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml -Dtest=EnterpriseDesignArtifactServiceTest,EnterpriseAdvisoryPlanningServiceTest,EnterpriseOrganizationRegistryTest,EnterpriseCatalogBaselineTest test
+      - name: E2.2 + prior E2/E1/E0 tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -ntp -f orchestrator-service/pom.xml '-Dtest=EnterpriseDesignArtifactServiceTest,EnterpriseAdvisoryPlanningServiceTest,EnterpriseOrganizationRegistryTest,EnterpriseCatalogBaselineTest' test
+          if ($LASTEXITCODE -ne 0) { throw 'E22_CROSS_PLATFORM_FAILED' }
+      - name: Publish real static SVG and JSON review artifacts (Linux only)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e22-cinematic-design-static-contract
+          path: orchestrator-service/target/e22-design-evidence/
+          retention-days: 14
+          if-no-files-found: error
+
+  full-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: All Java orchestrator tests
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  static-no-execution:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: No public exposure, worker invocation or fake approval
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          paths=[
+            Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseDesignArtifactService.java'),
+            Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseDesignArtifactVerifier.java')]
+          code='\n'.join(p.read_text(encoding='utf-8') for p in paths)
+          for token in ('@RestController','@PostMapping','@DeleteMapping','@PutMapping',
+                        'ProcessBuilder','Runtime.getRuntime','TaskDelegationService',
+                        'ToolExecutionService','@Scheduled','JdbcTemplate','EntityManager',
+                        'Files.write','Files.create','new Socket(','HttpClient.newHttpClient'):
+              assert token not in code, token
+          assert 'STATIC_DESIGN_ARTIFACTS_NOT_EXECUTED' in code
+          assert 'VERIFIED_STATIC_ARTIFACT_FORMAT_ONLY' in code
+          assert 'false, false, false, false' in code
+          assert 'disallow-doctype-decl' in code
+          print('E22_NO_SIDE_EFFECTS_AND_HARDENED_SVG_VERIFIER')
+          PY
+      - name: Stage45 approval and device certification remain unexecuted
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          paths=['tools/security/stage45_pre_pilot_gate.py',
+                 'tools/security/test_stage45_pre_pilot_gate.py']
+          assert all(not Path(p).exists() for p in paths), (
+              'Stage45 sources now present: integrate and run REAL immutable policy suite'
+          )
+          print('STAGE45_NOT_AVAILABLE_IN_STACK: RELEASE/DEVICE/PRODUCTION STILL BLOCKED')
+          PY
