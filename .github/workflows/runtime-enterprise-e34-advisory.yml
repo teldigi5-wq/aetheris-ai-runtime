@@ -56,6 +56,65 @@ jobs:
         run: |
           npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
           tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Seed a frozen scroll failure and confirm actual Chromium failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/enterprise/e3_factory/e33_evaluator.py seed scroll-24
+          set +e
+          node tools/enterprise/e3_factory/fault_contract.mjs scroll
+          result=$?
+          set -e
+          if [[ "$result" -eq 0 ]]; then
+            echo 'E34_MOCK_LAB_EXPECTED_BROWSER_FAILURE_MISSING'
+            exit 1
+          fi
+          python tools/enterprise/e3_factory/e33_evaluator.py before scroll-24
+      - name: Exercise real loopback HTTP protocol against clearly FAKE model (no AI)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u tools/enterprise/e3_factory/e34_ci_fake_ollama.py &
+          fake_pid=$!
+          trap 'kill "$fake_pid" 2>/dev/null || true' EXIT
+          python3 - <<'PY'
+          import socket,time
+          for i in range(40):
+              with socket.socket() as sock:
+                  sock.settimeout(0.5)
+                  if sock.connect_ex(('127.0.0.1',11434)) == 0:
+                      print('E34_CI_FAKE_LOOPBACK_READY_NOT_REAL_MODEL')
+                      break
+              time.sleep(0.1)
+          else:
+              raise SystemExit('E34_FAKE_HTTP_NOT_READY')
+          PY
+          AETHERIS_E34_EXPLICIT_LOCAL_MODEL_OPT_IN=yes python tools/enterprise/e3_factory/e34_model_adviser.py query scroll e34-ci-mock
+          python3 - <<'PY'
+          import json,shutil
+          from pathlib import Path
+          root=Path('target/e3-factory')
+          a=json.loads((root/'e33/current/advisory.json').read_text())
+          assert a['modelRequested']=='e34-ci-mock'
+          assert a['modelIdentityAttested'] is False
+          assert a['ownerApprovalGranted'] is False
+          assert a['modelOutputExecuted'] is False
+          shutil.copy2(root/'e33/current/advisory.json',
+                       root/'e33/scroll-24/mock-http-advisory.json')
+          (root/'e33/scroll-24/mock-provenance.json').write_text(
+              json.dumps({'fixtureOnly':True,'realLLMInference':False,
+                          'scenario':'scroll-24','ownerPcUsed':False},indent=2)+'\n')
+          print('E34_MOCK_ADVISORY_CAPTURED_REAL_LLM_NOT_USED')
+          PY
+      - name: Stage untrusted model-shaped text in network-disabled Docker worker
+        run: bash tools/enterprise/e3_factory/run_locked_worker.sh e34-prepare scroll
+      - name: Run independent E3.3 grammar and SHA256 gate (also network disabled)
+        run: bash tools/enterprise/e3_factory/run_locked_worker.sh e33-apply scroll
+      - name: Prove browser success only after independent patch validation
+        run: |
+          node tools/enterprise/e3_factory/fault_contract.mjs scroll
+          python tools/enterprise/e3_factory/e33_evaluator.py after scroll-24
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
       - name: Independently verify scroll, mobile, accessibility and browser errors
         run: node tools/enterprise/e3_factory/browser_qa.mjs
       - name: Retain real browser test artifact (NO real model inference)
