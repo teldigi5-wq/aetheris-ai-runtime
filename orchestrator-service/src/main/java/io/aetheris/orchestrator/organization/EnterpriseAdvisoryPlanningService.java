@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -83,8 +82,11 @@ public final class EnterpriseAdvisoryPlanningService {
                     "E2_ROLE_AUTHORITY_OR_IDENTITY_CONFLICT");
         }
         require(seen.equals(expected), "E2_REQUIRED_ROLES_MISSING");
-        return new AdvisoryRoles(source.schemaVersion(), source.evidenceClass(),
-                List.copyOf(source.roles()));
+        List<AdvisoryRole> immutable = source.roles().stream()
+                .map(r -> new AdvisoryRole(r.id(), r.title(), r.organization(), r.status(),
+                        false, false, List.of(), false))
+                .toList();
+        return new AdvisoryRoles(source.schemaVersion(), source.evidenceClass(), immutable);
     }
 
     public List<AdvisoryRole> proposedRoles() {
