@@ -1,0 +1,185 @@
+name: Enterprise E2.2B PostgreSQL Deny-Only Ledger
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e22b-quarantined-approval-intake-20261019
+      - main
+    paths:
+      - 'orchestrator-service/db/enterprise-review/**'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/organization/EnterpriseDesignReviewIntakeServiceTest.java'
+      - 'docs/runtime/enterprise-e22b-postgres-ledger.md'
+      - '.github/workflows/runtime-enterprise-e22b-postgres.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-postgres-schema-and-jpa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: aetheris_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-ci-only-not-production
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aetheris_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: local-ci-only-not-production
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/aetheris_ci
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: local-ci-only-not-production
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Ensure postgres client is available
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+      - name: Apply reviewed SQL only to disposable CI PostgreSQL
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d aetheris_ci \
+            -f orchestrator-service/db/enterprise-review/V1__design_review_deny_only_postgresql.sql
+      - name: Capture review-only PostgreSQL catalog before legacy test bootstrap
+        run: |
+          psql -X -A -t -h localhost -U postgres -d aetheris_ci -c "
+            SELECT 'column|' || table_name || '|' || column_name || '|' || data_type ||
+                   '|' || coalesce(character_maximum_length::text, '') ||
+                   '|' || is_nullable || '|' || coalesce(datetime_precision::text, '')
+            FROM information_schema.columns
+            WHERE table_schema='public'
+              AND table_name IN ('enterprise_design_review_intents','enterprise_design_review_denials')
+            UNION ALL
+            SELECT 'constraint|' || conrelid::regclass::text || '|' || conname ||
+                   '|' || pg_get_constraintdef(oid)
+            FROM pg_constraint
+            WHERE conrelid IN ('enterprise_design_review_intents'::regclass,
+                               'enterprise_design_review_denials'::regclass)
+            UNION ALL
+            SELECT 'index|' || tablename || '|' || indexname || '|' || indexdef
+            FROM pg_indexes
+            WHERE schemaname='public' AND tablename IN
+               ('enterprise_design_review_intents','enterprise_design_review_denials')
+            ORDER BY 1;" > "$RUNNER_TEMP/review-schema-before.txt"
+      - name: Real PostgreSQL-backed Spring JPA tests with CI-only legacy entity bootstrap
+        run: >
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml
+          -Dtest=EnterpriseDesignReviewIntakeServiceTest
+          -Dspring.datasource.driver-class-name=org.postgresql.Driver
+          -Dspring.jpa.hibernate.ddl-auto=update
+          test
+      - name: Ensure JPA did not alter either reviewed schema table
+        run: |
+          psql -X -A -t -h localhost -U postgres -d aetheris_ci -c "
+            SELECT 'column|' || table_name || '|' || column_name || '|' || data_type ||
+                   '|' || coalesce(character_maximum_length::text, '') ||
+                   '|' || is_nullable || '|' || coalesce(datetime_precision::text, '')
+            FROM information_schema.columns
+            WHERE table_schema='public'
+              AND table_name IN ('enterprise_design_review_intents','enterprise_design_review_denials')
+            UNION ALL
+            SELECT 'constraint|' || conrelid::regclass::text || '|' || conname ||
+                   '|' || pg_get_constraintdef(oid)
+            FROM pg_constraint
+            WHERE conrelid IN ('enterprise_design_review_intents'::regclass,
+                               'enterprise_design_review_denials'::regclass)
+            UNION ALL
+            SELECT 'index|' || tablename || '|' || indexname || '|' || indexdef
+            FROM pg_indexes
+            WHERE schemaname='public' AND tablename IN
+               ('enterprise_design_review_intents','enterprise_design_review_denials')
+            ORDER BY 1;" > "$RUNNER_TEMP/review-schema-after.txt"
+          diff -u "$RUNNER_TEMP/review-schema-before.txt" "$RUNNER_TEMP/review-schema-after.txt"
+      - name: Live PostgreSQL integrity and deny-only security assertions
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d aetheris_ci \
+            -f orchestrator-service/db/enterprise-review/test_deny_only_postgresql.sql
+
+  inherited-h2-windows-and-ubuntu:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Inherited H2 review intake and canonical catalog regression (Linux)
+        if: runner.os == 'Linux'
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml -Dtest=EnterpriseDesignReviewIntakeServiceTest,EnterpriseDesignArtifactServiceTest,EnterpriseAdvisoryPlanningServiceTest,EnterpriseOrganizationRegistryTest,EnterpriseCatalogBaselineTest test
+      - name: Inherited H2 review intake and canonical catalog regression (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -ntp -f orchestrator-service/pom.xml '-Dtest=EnterpriseDesignReviewIntakeServiceTest,EnterpriseDesignArtifactServiceTest,EnterpriseAdvisoryPlanningServiceTest,EnterpriseOrganizationRegistryTest,EnterpriseCatalogBaselineTest' test
+          if ($LASTEXITCODE -ne 0) { throw 'E22B_POSTGRES_BRANCH_H2_REGRESSION_FAILED' }
+
+  full-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: All Java orchestrator regression
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  security-non-activation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: No approval or privileged worker activation in migration
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('orchestrator-service/db/enterprise-review/V1__design_review_deny_only_postgresql.sql')
+          sql=p.read_text().lower()
+          assert "status = 'pending_owner_authentication_unavailable'" in sql
+          assert "on delete restrict" in sql
+          assert "interval '15 minutes'" in sql
+          for unsafe in ["status = 'approved'","grant all","grant update","grant delete",
+                         "drop table","truncate table","create trigger","execute program"]:
+              assert unsafe not in sql, unsafe
+          assert 'revoke all' in sql
+          runtime=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/organization/EnterpriseDesignReviewIntakeService.java').read_text()
+          assert 'new DenialResult(intentId, reason, false,' in runtime
+          assert '@RestController' not in runtime
+          print('E22B_SQL_AND_SERVICE_REMAIN_DENY_ONLY')
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists(), (
+              'Stage45 source now integrated; real policy suite must be run instead of absence guard'
+          )
+          print('STAGE45_GATE_UNMERGED_AND_UNTESTED: PRODUCTION_AND_OWNER_PC_NO_GO')
+          PY
