@@ -27,7 +27,8 @@ def unpack(token: str):
     if match is None: raise ValueError("E39G8_FIXED_MODEL_CASE_ARM_REQUIRED")
     slug,case,arm=match.groups()
     directory=ROOT/slug/case/arm
-    if directory.is_symlink(): raise ValueError("E39G8_SYMLINK_OUTPUT_DENIED")
+    if any(p.is_symlink() for p in (ROOT,ROOT/slug,ROOT/slug/case,directory)):
+        raise ValueError("E39G8_SYMLINK_OUTPUT_DENIED")
     return slug,case,arm,directory
 
 def evidence(token):
@@ -146,9 +147,6 @@ def cleanup(token: str) -> None:
     print("E39G8_NETWORK_NONE_TEST_RESET_NO_MODEL_CREDIT",MODEL[slug],case,arm)
 
 if __name__=="__main__":
-    if len(sys.argv)!=2 or sys.argv[1] not in ("apply","cleanup"):
-        # invoked as <action> <token>, not by accepting arbitrary file paths
-        if len(sys.argv)!=3 or sys.argv[1] not in ("apply","cleanup"):
-            raise ValueError("E39G8_ONLY_FIXED_ACTION_AND_TOKEN")
-    if len(sys.argv)!=3: raise ValueError("E39G8_EXACT_TWO_ARGS")
+    if len(sys.argv)!=3 or sys.argv[1] not in ("apply","cleanup"):
+        raise ValueError("E39G8_ONLY_FIXED_ACTION_AND_TOKEN")
     {"apply":apply,"cleanup":cleanup}[sys.argv[1]](sys.argv[2])
