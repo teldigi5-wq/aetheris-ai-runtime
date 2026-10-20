@@ -103,8 +103,8 @@ try {
       JSON.stringify(report.observed));
     await context.close();
     if(phase==='before') {
-      const mustFail=cases[caseId].type==='mobile'?viewport==='mobile':true;
-      if(report.passed===mustFail){
+      const expectedPass=cases[caseId].type==='mobile' && viewport==='desktop';
+      if(report.passed!==expectedPass){
         err=err||new Error('E39G9_BEFORE_EXPECTED_FAULT_NOT_OBSERVED_'+viewport);
       }
     }
