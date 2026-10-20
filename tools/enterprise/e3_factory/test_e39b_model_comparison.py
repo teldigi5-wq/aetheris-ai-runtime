@@ -122,7 +122,7 @@ class ModelComparisonSecurityTests(TestCase):
             with self.subTest(new=new),self.assertRaises(ValueError):
                 canonical.validate(response,source,self.browser,manifest)
 
-    def test_strict_schema_and_score_labels_separate():
+    def test_strict_schema_and_score_labels_separate(self):
         self.assertEqual(score.OUTCOMES,{"POLICY_ACCEPTED","POLICY_REJECTED","ABSTAIN","INVALID"})
         self.assertFalse("DEPLOY" in score.OUTCOMES)
         self.assertFalse("RUN_SHELL" in score.OUTCOMES)
