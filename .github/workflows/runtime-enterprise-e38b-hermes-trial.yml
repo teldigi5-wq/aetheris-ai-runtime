@@ -164,7 +164,7 @@ jobs:
                     "readOnlyRoot":True,"capsDropped":True,
                     "listenBind":"127.0.0.1:11434",
                     "snapshotNotPeakMemory":True,"userPcUsed":False}
-          Path("target/e3-factory/e38b/model-resource-policy.json").write_text(json.dumps(evidence,indent=2)+"\\n")
+          Path("target/e3-factory/e38b/model-resource-policy.json").write_text(json.dumps(evidence,indent=2)+"\n")
           print("E38B_HERMES_DOCKER_RESOURCE_POLICY_VERIFIED")
           PY
       - name: Run original entire Chromium suite on safely restored disposable website
