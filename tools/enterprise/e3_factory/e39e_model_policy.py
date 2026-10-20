@@ -232,10 +232,29 @@ def score(case:str,status:str):
     else:
         if source!=e.defective_source(case) or (folder/"receipt.json").exists():
             raise ValueError("E39E_DENIED_PATCH_CHANGED_GENERATED_WEBSITE")
+    # Replay the unchanged gate to provide a deterministic sanitized refusal code.
+    # This is model-response DIAGNOSTICS, not a retry or a repair override.
+    if status == "ABSTAIN":
+        reason = "E39F_MODEL_ABSTAINED"
+    elif status == "INVALID":
+        reason = "E39F_RESPONSE_INVALID"
+    else:
+        try:
+            candidate = parse_response(item["rawResponse"])
+            validate_candidate(candidate, e.defective_source(case), e.clean_source())
+        except ValueError as exc:
+            reason = str(exc)
+            if (not reason.startswith("E39E_") or status != "POLICY_REJECTED"):
+                raise ValueError("E39F_REFUSAL_STATUS_INCONSISTENT") from exc
+        else:
+            if status != "POLICY_ACCEPTED":
+                raise ValueError("E39F_VALID_PATCH_MISCLASSIFIED")
+            reason = ("E39F_REAL_CHROMIUM_VERIFIED" if passed
+                      else "E39F_ACCEPTED_BROWSER_NOT_VERIFIED")
     report={
         "evidenceClass":"E39E_ACTUAL_LOCAL_MODEL_BROWSER_SCORED",
         "caseId":case,"modelTag":item["model"]["tag"],
-        "responseClass":kind,"policyOutcome":status,
+        "responseClass":kind,"policyOutcome":status,"reasonCode":reason,
         "policyAccepted":status=="POLICY_ACCEPTED",
         "chromiumVerifiedModelRepair":passed,
         "selfReportedGeneratedTokens":item["selfReportedGeneratedTokens"],
