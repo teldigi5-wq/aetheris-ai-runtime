@@ -80,7 +80,7 @@ public final class GovernedSkillAdviceService {
         } catch (IOException err) {
             throw new IllegalStateException("E39G3_POLICY_UNREADABLE", err);
         }
-        require(root != null && root.isObject() && root.size() == 6
+        require(root != null && root.isObject() && root.size() == 7
                 && root.path("schemaVersion").asInt(-1) == 1
                 && EVIDENCE.equals(root.path("evidenceClass").asText())
                 && root.path("enabledByDefault").isBoolean()
