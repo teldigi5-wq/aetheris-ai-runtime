@@ -108,8 +108,8 @@ class EightCaseIndependentPolicy(unittest.TestCase):
             gate.source_property(broken,manipulated)
 
     def test_no_model_run_without_second_stage_opt_in(self):
-        with mock.patch.dict(os.environ,{advisor.CONSENT:"no"}),(
-                mock.patch.object(advisor.transport,"local_json") as send):
+        with (mock.patch.dict(os.environ,{advisor.CONSENT:"no"}),
+              mock.patch.object(advisor.transport,"local_json") as send):
             with self.assertRaisesRegex(ValueError,"E39E_EXPLICIT_REAL_INFERENCE_CONSENT"):
                 advisor.run("hermes3:3b","top-40")
             send.assert_not_called()
