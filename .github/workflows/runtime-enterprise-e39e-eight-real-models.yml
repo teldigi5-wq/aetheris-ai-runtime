@@ -1,9 +1,10 @@
-name: Enterprise E3.9C-2B2 Genuine Eight-Fault Hermes vs Granite Browser Benchmark
+name: Enterprise E3.9F Genuine Model Typed-Evidence Benchmark and Security Regression
 
 on:
   pull_request:
     branches:
       - feature/enterprise-e39c2b-eight-browser-faults-20261020
+      - feature/enterprise-e39e-eight-case-real-model-trial-20261020
       - main
     paths:
       - 'tools/enterprise/e3_factory/**'
@@ -33,6 +34,7 @@ jobs:
         run: |
           python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39c2_model_protocol.py' -v
           python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39e_eight_model_policy.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39f_forensics.py' -v
           python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39d_focus_variants.py' -v
           python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39c_selector_policy.py' -v
       - name: Preserve independent E3.9A keyboard policy and E3.8C schema tests
@@ -180,6 +182,7 @@ jobs:
             "userPcUsed":False,"ownerApprovalGranted":False,
             "productionPublished":False,"generalizationCertified":False,
             "cases":[{"case":x["caseId"],"outcome":x["policyOutcome"],
+                      "reasonCode":x["reasonCode"],
                       "browserVerified":x["chromiumVerifiedModelRepair"]} for x in cases]
           }
           out=Path("target/e3-factory/e39d/summary-"+tag.split(":")[0]+".json")
