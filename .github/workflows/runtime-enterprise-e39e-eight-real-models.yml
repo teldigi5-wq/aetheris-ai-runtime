@@ -1,0 +1,285 @@
+name: Enterprise E3.9C-2B2 Genuine Eight-Fault Hermes vs Granite Browser Benchmark
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e39c2b-eight-browser-faults-20261020
+      - main
+    paths:
+      - 'tools/enterprise/e3_factory/**'
+      - '.github/workflows/runtime-enterprise-e39e-eight-real-models.yml'
+      - 'docs/runtime/enterprise-e39e-eight-real-model-trials.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cross-platform-untrusted-model-text:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Refuse bad model IDs, owner authority and malicious untrusted CSS
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39c2_model_protocol.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39e_eight_model_policy.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39d_focus_variants.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39c_selector_policy.py' -v
+      - name: Preserve independent E3.9A keyboard policy and E3.8C schema tests
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39_keyboard_patch_gate.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e38c_structured_inference.py' -v
+      - name: Preserve old model refusal tests and syntax of both browser checks
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39b_model_comparison.py' -v
+          node --check tools/enterprise/e3_factory/e39_keyboard_browser.mjs
+          node --check tools/enterprise/e3_factory/e39c_desktop_browser.mjs
+
+  genuine-eight-case-local-model:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: hermes3-3b
+            tag: 'hermes3:3b'
+          - label: granite4-3b
+            tag: 'granite4:3b'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      AETHERIS_E39E_REAL_MODEL_CI_OPT_IN: 'yes'
+      MODEL_IMAGE: 'ollama/ollama:0.12.10@sha256:e8c3d1f6ad16323bc40dc63eff0701d4fc32113f75a86b54b3e836eef8290de6'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Original generated website in locked network-none Docker
+        run: |
+          docker pull python:3.12-slim-bookworm
+          bash tools/enterprise/e3_factory/run_locked_worker.sh build
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+      - name: Install Chromium only on disposable browser test host
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Start pinned local CPU model with enforced resource caps
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "$MODEL_IMAGE"
+          docker run -d --name e39e-model --cpus 2 \
+            --memory 5g --memory-swap 5g --pids-limit 128 \
+            --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,nosuid,size=512m \
+            --mount type=volume,dst=/root/.ollama \
+            -e OLLAMA_NUM_PARALLEL=1 -e OLLAMA_MAX_LOADED_MODELS=1 \
+            -p 127.0.0.1:11434:11434 "$MODEL_IMAGE"
+          docker inspect e39e-model > "$RUNNER_TEMP/e39e-model-inspect.json"
+          python3 - "$RUNNER_TEMP/e39e-model-inspect.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          host=json.loads(Path(sys.argv[1]).read_text())[0]["HostConfig"]
+          assert host["NanoCpus"]==2000000000
+          assert host["Memory"]==5368709120 and host["MemorySwap"]==5368709120
+          assert host["PidsLimit"]==128 and host["ReadonlyRootfs"] is True
+          assert "ALL" in host["CapDrop"] and "no-new-privileges" in host["SecurityOpt"]
+          assert host["PortBindings"]["11434/tcp"][0]["HostIp"]=="127.0.0.1"
+          print("E39E_REAL_MODEL_CONTAINER_RESOURCE_AND_LOOPBACK_BOUNDS_VERIFIED")
+          PY
+      - name: Pull one real reviewed model, never to owner computer
+        shell: bash
+        env:
+          MODEL_TAG: ${{ matrix.tag }}
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=5s 420s \
+            docker exec e39e-model ollama pull "$MODEL_TAG"
+          docker exec e39e-model ollama list
+      - name: Eight one-shot real-model trials with independent Chrome and network-none policy
+        shell: bash
+        env:
+          MODEL_TAG: ${{ matrix.tag }}
+        run: |
+          set -euo pipefail
+          cases="top-40 top-120 left-120 left-240 opacity-zero visibility-hidden transform-up transform-left"
+          for case_id in $cases; do
+            echo "E39E_REAL_MODEL_CASE_START $MODEL_TAG $case_id"
+            python tools/enterprise/e3_factory/e39d_heldout_focus_evaluator.py seed "$case_id"
+            node tools/enterprise/e3_factory/e39d_heldout_browser.mjs "$case_id" before
+            python tools/enterprise/e3_factory/e39d_heldout_focus_evaluator.py before "$case_id"
+            timeout --signal=TERM --kill-after=5s 125s \
+              python tools/enterprise/e3_factory/e39e_real_model_adviser.py "$MODEL_TAG" "$case_id"
+            classification="$(python3 - "$case_id" <<'PY'
+          import json,sys
+          from pathlib import Path
+          path=Path("target/e3-factory/e39d")/sys.argv[1]/"model-response.json"
+          x=json.loads(path.read_text())
+          assert x["realModelCalls"]==1 and x["selfReportedGeneratedTokens"]>0
+          assert x["ownerApproved"] is False and x["productionPublished"] is False
+          assert x["oracleExpectedPatchLoaded"] is False
+          print(x["responseClass"])
+          PY
+          )"
+            outcome=POLICY_REJECTED
+            if [[ "$classification" == "ABSTAIN" ]]; then
+              outcome=ABSTAIN
+            elif [[ "$classification" == "INVALID_MODEL_RESPONSE" ]]; then
+              outcome=INVALID
+            elif [[ "$classification" == "SELECTOR_PROPOSAL" ]]; then
+              if bash tools/enterprise/e3_factory/run_locked_worker.sh e39e-apply "$case_id"; then
+                outcome=POLICY_ACCEPTED
+                set +e
+                node tools/enterprise/e3_factory/e39d_heldout_browser.mjs "$case_id" after
+                browser_status=$?
+                set -e
+                echo "E39E_AFTER_BROWSER_EXIT=$browser_status MODEL=$MODEL_TAG CASE=$case_id"
+              fi
+            else
+              echo "E39E_UNEXPECTED_MODEL_CLASS"
+              exit 2
+            fi
+            python tools/enterprise/e3_factory/e39e_model_policy.py score "$case_id" "$outcome"
+            bash tools/enterprise/e3_factory/run_locked_worker.sh e39e-cleanup "$case_id"
+          done
+          python3 - "$MODEL_TAG" <<'PY'
+          import json,sys
+          from pathlib import Path
+          tag=sys.argv[1]
+          ids=("top-40","top-120","left-120","left-240","opacity-zero",
+               "visibility-hidden","transform-up","transform-left")
+          cases=[json.loads((Path("target/e3-factory/e39d")/case/"score.json").read_text())
+                 for case in ids]
+          assert len(cases)==8
+          assert all(x["modelTag"]==tag and x["realModelCalls"]==1 for x in cases)
+          assert all((Path("target/e3-factory/e39d")/case/"cleanup.json").is_file()
+                     for case in ids)
+          summary={
+            "evidenceClass":"E39E_EIGHT_GENUINE_LOCAL_MODEL_CASES",
+            "modelTag":tag,"attempted":len(cases),
+            "policyAccepted":sum(x["policyAccepted"] for x in cases),
+            "chromiumVerified":sum(x["chromiumVerifiedModelRepair"] for x in cases),
+            "abstained":sum(x["policyOutcome"]=="ABSTAIN" for x in cases),
+            "invalid":sum(x["policyOutcome"]=="INVALID" for x in cases),
+            "policyRejected":sum(x["policyOutcome"]=="POLICY_REJECTED" for x in cases),
+            "acceptedButBrowserFailed":sum(x["policyAccepted"] and not x["chromiumVerifiedModelRepair"] for x in cases),
+            "generatedTokens":sum(x["selfReportedGeneratedTokens"] for x in cases),
+            "wallMs":sum(x["wallMs"] for x in cases),
+            "userPcUsed":False,"ownerApprovalGranted":False,
+            "productionPublished":False,"generalizationCertified":False,
+            "cases":[{"case":x["caseId"],"outcome":x["policyOutcome"],
+                      "browserVerified":x["chromiumVerifiedModelRepair"]} for x in cases]
+          }
+          out=Path("target/e3-factory/e39d/summary-"+tag.split(":")[0]+".json")
+          out.write_text(json.dumps(summary,indent=2,sort_keys=True)+"\n")
+          print("E39E_REAL_EIGHT_CASE_SUMMARY",json.dumps(summary,sort_keys=True))
+          PY
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+          node tools/enterprise/e3_factory/browser_qa.mjs
+      - name: Snapshot Docker resource use (NOT peak RAM) and image provenance
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p target/e3-factory/e39d
+          docker stats --no-stream --format '{{json .}}' e39e-model \
+            > target/e3-factory/e39d/model-resource-snapshot.jsonl || true
+          docker image inspect "$MODEL_IMAGE" --format '{{json .RepoDigests}}' \
+            > target/e3-factory/e39d/ollama-image-digests.json || true
+          echo "E39E_RESOURCE_SNAPSHOT_NOT_PEAK_MEMORY"
+      - name: Destroy disposable CPU model and ephemeral weights
+        if: always()
+        run: docker rm -fv e39e-model || true
+      - name: Upload raw real-model responses, source/checksum and Chromium evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e39e-${{ matrix.label }}-eight-real-inference-browser-results
+          path: |
+            target/e3-factory/e39d/
+            target/e3-factory/sandbox-e39e-*.json
+            target/e3-factory/browser-evidence/
+          if-no-files-found: warn
+          retention-days: 14
+
+  unchanged-original-site-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - run: |
+          docker pull python:3.12-slim-bookworm
+          bash tools/enterprise/e3_factory/run_locked_worker.sh build
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+      - run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - run: node tools/enterprise/e3_factory/browser_qa.mjs
+
+  full-java-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  explicit-no-owner-authority:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: No model shell, secret, owner token, paid endpoint or Stage45 release
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          adviser=Path('tools/enterprise/e3_factory/e39c2_selector_adviser.py').read_text()
+          policy=Path('tools/enterprise/e3_factory/e39c2_model_policy.py').read_text()
+          worker=Path('tools/enterprise/e3_factory/run_locked_worker.sh').read_text()
+          scorer=Path('tools/enterprise/e3_factory/e39c2_score.py').read_text()
+          assert 'AETHERIS_E39C2_REAL_MODEL_CI_OPT_IN' in adviser
+          assert 'E39C2_GENUINE_SELECTOR_MODEL_REPLY' in adviser
+          assert 'e39_keyboard_evaluator' not in adviser
+          assert 'e39c_selector_policy' not in adviser
+          assert 'css.candidate_result(' in policy
+          assert 'e39c2-apply)' in worker and '--network none' in worker
+          assert 'chromiumVerifiedModelRepair' in scorer
+          for dangerous in ('subprocess','os.system','Popen(','import requests',
+                            'openrouter.ai','eval(','exec('):
+              assert dangerous not in adviser,dangerous
+          new=Path('tools/enterprise/e3_factory/e39e_real_model_adviser.py').read_text()
+          independent=Path('tools/enterprise/e3_factory/e39e_model_policy.py').read_text()
+          runner=Path('tools/enterprise/e3_factory/run_locked_worker.sh').read_text()
+          assert 'E39E_GENUINE_INFERENCE' in new
+          assert 'e39d_heldout_focus_evaluator' not in new
+          assert 'import e39e_model_policy' not in new
+          assert 'e39e-apply|e39e-cleanup)' in runner
+          assert 'E39E_MODEL_PATCH_ACCEPTED_BROWSER_PENDING' in independent
+          assert 'E39E_BENCHMARK_CLEANUP_NEVER_CREDIT_MODEL' in independent
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists()
+          print('E39C2_HERMES_AND_GRANITE_TEXT_ONLY_NO_OWNER_PC_NO_STAGE45')
+          PY

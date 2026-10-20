@@ -56,10 +56,20 @@ case "$phase" in
     entry="e39d_heldout_focus_evaluator.py"
     args=("restore" "$2")
     ;;
+  e39e-apply|e39e-cleanup)
+    [[ $# -eq 2 ]] || exit 2
+    case "$2" in
+      top-40|top-120|left-120|left-240|opacity-zero|visibility-hidden|transform-up|transform-left)
+        ;;
+      *) echo "E39E_UNKNOWN_MODEL_BENCHMARK_CASE" >&2; exit 2;;
+    esac
+    entry="e39e_model_policy.py"
+    args=("${phase#e39e-}" "$2")
+    ;;
   *) echo "E31_UNKNOWN_WORKER_PHASE" >&2; exit 2;;
 esac
 evidence_id="$phase"
-if [[ "$phase" == e32-* || "$phase" == e33-* || "$phase" == e34-* || "$phase" == e39d-* ]]; then evidence_id="$phase-$2"; fi
+if [[ "$phase" == e32-* || "$phase" == e33-* || "$phase" == e34-* || "$phase" == e39d-* || "$phase" == e39e-* ]]; then evidence_id="$phase-$2"; fi
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 cd "$repo"
