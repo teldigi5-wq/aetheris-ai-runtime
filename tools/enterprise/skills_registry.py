@@ -93,7 +93,12 @@ def frontmatter(content: bytes, expected_name: str) -> str:
 
 
 def git_blob_sha(raw: bytes) -> str:
-    return hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
+    # GitHub Windows runners may checkout text with CRLF. Compare against the
+    # exact pinned Git blob LF representation; do not ignore any other edits.
+    if b"\r" in raw.replace(b"\r\n", b""):
+        raise ValueError("E39G_UNEXPECTED_CARRIAGE_RETURN")
+    canonical = raw.replace(b"\r\n", b"\n")
+    return hashlib.sha1(b"blob " + str(len(canonical)).encode() + b"\0" + canonical).hexdigest()
 
 
 def load_registry(root: Path = SKILLS_ROOT) -> list[dict]:
