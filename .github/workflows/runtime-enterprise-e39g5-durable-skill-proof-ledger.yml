@@ -109,7 +109,7 @@ jobs:
           assert "boolean humanOwnerAuthenticated" in service
           assert "boolean durableActionReplayCertified" in service
           assert "boolean stage45Released" in service
-          assert "JpaRepository.save(" not in service
+          assert "repository.save(nonce)" not in service
           for code in (service,entity):
               for unsafe in ("@RestController","@PostMapping","Runtime.getRuntime()",
                              "ProcessBuilder(", "HttpClient.newHttpClient()","KeyPairGenerator",
