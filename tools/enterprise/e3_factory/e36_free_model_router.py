@@ -33,8 +33,32 @@ LOCAL_CANDIDATES = (
     "qwen2.5-coder:1.5b",
     "qwen2.5-coder:0.5b",
     "smollm2:135m",
+    # Ollama-confirmed open-weight local candidates; installed-model proof still required.
+    "hermes3:3b",
+    "hermes3:8b",
+    "qwen3.5:2b",
+    "qwen3.5:4b",
+    "qwen3.5:9b",
+    "gemma3:4b",
+    "deepseek-r1:7b",
+    "qwen3-coder:30b",
 )
-UNKNOWN_CANDIDATES = {"artemis": "UNRESOLVED_ID_NOT_CALLABLE"}
+# Distinguish the real Nous family from unverified local Ollama tags.
+# Hermes 4 weights are verified at Hugging Face; an exact local inference
+# package, runtime template and memory fit must be reviewed before adding a callable ID.
+RESEARCH_ONLY_MODELS = {
+    "NousResearch/Hermes-4-14B": {
+        "status": "OPEN_WEIGHT_REFERENCE_NOT_OLLAMA_ROUTABLE",
+        "modelCard": "https://huggingface.co/NousResearch/Hermes-4-14B",
+        "localRuntimeValidated": False,
+    },
+    "NousResearch/Hermes-4-70B": {
+        "status": "OPEN_WEIGHT_REFERENCE_NOT_OLLAMA_ROUTABLE",
+        "modelCard": "https://huggingface.co/NousResearch/Hermes-4-70B",
+        "localRuntimeValidated": False,
+    },
+}
+UNKNOWN_CANDIDATES = {"artemis": "MISIDENTIFICATION_CORRECTED_TO_HERMES"}
 MODELS = {"openrouter": CLOUD_CANDIDATES, "ollama": LOCAL_CANDIDATES}
 OPT_CLOUD = "AETHERIS_E36_REMOTE_INFERENCE_OPT_IN"
 OPT_SHARE = "AETHERIS_E36_EXTERNAL_CODE_DISCLOSURE_OPT_IN"
@@ -156,7 +180,8 @@ def catalog_status() -> dict:
         "evidenceClass": "E36_STATIC_CANDIDATES_NOT_LIVE_VERIFIED",
         "ollamaLocalCandidatesNotNecessarilyInstalled": list(LOCAL_CANDIDATES),
         "openrouterZeroPriceCandidatesRequireLiveCheck": list(CLOUD_CANDIDATES),
-        "unresolvedCandidates": UNKNOWN_CANDIDATES,
+        "historicalNameCorrection": UNKNOWN_CANDIDATES,
+        "researchOnlyNotCallable": RESEARCH_ONLY_MODELS,
         "automaticModelFallback": False,
         "autoRemoteRequests": False, "ownerApprovalGranted": False,
         "productionEnabled": False,
