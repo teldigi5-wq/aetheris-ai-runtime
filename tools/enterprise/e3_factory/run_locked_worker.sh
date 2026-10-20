@@ -66,10 +66,19 @@ case "$phase" in
     entry="e39e_model_policy.py"
     args=("${phase#e39e-}" "$2")
     ;;
+  e39f-restore)
+    [[ $# -eq 2 ]] || exit 2
+    case "$2" in
+      challenge-0[1-8]) ;;
+      *) echo "E39F_UNSUPPORTED_RUNTIME_CHALLENGE" >&2; exit 2;;
+    esac
+    entry="e39f_runtime_sealed_challenge.py"
+    args=("restore" "$2")
+    ;;
   *) echo "E31_UNKNOWN_WORKER_PHASE" >&2; exit 2;;
 esac
 evidence_id="$phase"
-if [[ "$phase" == e32-* || "$phase" == e33-* || "$phase" == e34-* || "$phase" == e39d-* || "$phase" == e39e-* ]]; then evidence_id="$phase-$2"; fi
+if [[ "$phase" == e32-* || "$phase" == e33-* || "$phase" == e34-* || "$phase" == e39d-* || "$phase" == e39e-* || "$phase" == e39f-* ]]; then evidence_id="$phase-$2"; fi
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 cd "$repo"
