@@ -142,7 +142,7 @@ def model_evidence(case:str,source:bytes):
             or item.get("productionPublished") is not False
             or item.get("modelTextExecutedDirectly") is not False
             or item.get("oracleExpectedPatchLoaded") is not False
-            or item.get("promptVersion")!="E39E_EIGHT_CASES_SELECTOR_SCALAR_NONORACLE_V1"
+            or item.get("promptVersion")!="E39F_TWO_VIEWPORT_TYPED_SOURCE_NONORACLE_V2"
             or expected.get("beforeSourceSha256")!=sha(source)):
         raise ValueError("E39E_MODEL_PROVENANCE_OR_AUTHORITY_DENIED")
     for viewport in ("mobile","desktop"):
