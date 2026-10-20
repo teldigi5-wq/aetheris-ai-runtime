@@ -108,7 +108,7 @@ def reset(token):
 
 def done(token):
     slug,case,arm,folder=trial(token)
-    if arm!="original":raise ValueError("E39G11_EXPECT_ORIGINAL_TOKEN")
+    if arm!="targeted":raise ValueError("E39G11_EXPECT_TARGETED_TOKEN")
     path,original,broken,_=frozen.before_source_only(case)
     if frozen.read(path,25000)!=broken:raise ValueError("E39G11_FINISH_NOT_DEFECTIVE")
     for a in ARMS:
