@@ -1,0 +1,165 @@
+name: Enterprise E3.9C-2B1 Eight Real Keyboard Defect Browser Trials
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e39c2-real-selector-model-advice-20261020
+      - main
+    paths:
+      - 'tools/enterprise/e3_factory/**'
+      - 'docs/runtime/enterprise-e39d-eight-focus-cases.md'
+      - '.github/workflows/runtime-enterprise-e39d-eight-chromium-faults.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  adversarial-case-security:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Test eight exact seeded cases, source checks and browser-proof refusal
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39d_focus_variants.py' -v
+      - name: Preserve older model proposal and selector authorization tests
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39c2_model_protocol.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39c_selector_policy.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39b_model_comparison.py' -v
+      - name: Check genuine Chromium harness JavaScript
+        run: node --check tools/enterprise/e3_factory/e39d_heldout_browser.mjs
+
+  actual-chromium-eight-faults:
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [geometry, visibility]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CASE_GROUP: ${{ matrix.group }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Build original synthetic website inside network-none Docker
+        run: |
+          docker pull python:3.12-slim-bookworm
+          bash tools/enterprise/e3_factory/run_locked_worker.sh build
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+      - name: Install actual Chromium on the disposable test host only
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Observe every seeded defect at 390px and 1280px, then verify safe fixture restoration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$CASE_GROUP" == "geometry" ]]; then
+            case_names="top-40 top-120 left-120 left-240"
+          elif [[ "$CASE_GROUP" == "visibility" ]]; then
+            case_names="opacity-zero visibility-hidden transform-up transform-left"
+          else
+            echo "E39D_INVALID_CASE_GROUP"
+            exit 2
+          fi
+          for case_id in $case_names; do
+            echo "E39D_START_CASE=$case_id"
+            python tools/enterprise/e3_factory/e39d_heldout_focus_evaluator.py seed "$case_id"
+            node tools/enterprise/e3_factory/e39d_heldout_browser.mjs "$case_id" before
+            python tools/enterprise/e3_factory/e39d_heldout_focus_evaluator.py before "$case_id"
+            bash tools/enterprise/e3_factory/run_locked_worker.sh e39d-restore "$case_id"
+            node tools/enterprise/e3_factory/e39d_heldout_browser.mjs "$case_id" after
+            python tools/enterprise/e3_factory/e39d_heldout_focus_evaluator.py after "$case_id"
+            python3 - "$case_id" <<'PY'
+          import json,sys
+          from pathlib import Path
+          case_id=sys.argv[1]
+          target=Path("target/e3-factory")
+          folder=target/"e39d"/case_id
+          sandbox=json.loads((target/("sandbox-e39d-restore-"+case_id+".json")).read_text())
+          receipt=json.loads((folder/"receipt.json").read_text())
+          assert sandbox["network"]=="none" and sandbox["readOnlyRootfs"] is True
+          assert sandbox["repositoryMount"]=="read-only"
+          assert sandbox["allCapabilitiesDropped"] is True
+          assert sandbox["cpuLimit"]==1 and sandbox["memoryBytes"]==268435456
+          assert receipt["modelWasCalled"] is False and receipt["modelGeneratedRepair"] is False
+          assert receipt["ownerApproved"] is False and receipt["productionPublished"] is False
+          for view in ("mobile","desktop"):
+              a=json.loads((folder/(view+"-before.json")).read_text())
+              b=json.loads((folder/(view+"-after.json")).read_text())
+              assert a["passed"] is False and b["passed"] is True
+              assert b["pageJavaScriptErrors"] == []
+          print("E39D_TWO_ACTUAL_CHROMIUM_VIEWPORTS_PASS_AND_NOT_AI",case_id)
+          PY
+          done
+      - name: Full original site scroll, mobile and reduced-motion regression
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+          node tools/enterprise/e3_factory/browser_qa.mjs
+      - name: Retain real Chromium screenshots, DOM, digests and Docker receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e39d-${{ matrix.group }}-eight-case-chromium-proof
+          path: |
+            target/e3-factory/e39d/
+            target/e3-factory/sandbox-e39d-restore-*.json
+            target/e3-factory/browser-evidence/
+          if-no-files-found: warn
+          retention-days: 14
+
+  full-java-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  no-owner-no-autonomy-no-model:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Guard no model invocation or evaluator-oracle leakage
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          e=Path("tools/enterprise/e3_factory/e39d_heldout_focus_evaluator.py").read_text()
+          m=Path("tools/enterprise/e3_factory/e39c2_selector_adviser.py").read_text()
+          w=Path("tools/enterprise/e3_factory/run_locked_worker.sh").read_text()
+          js=Path("tools/enterprise/e3_factory/e39d_heldout_browser.mjs").read_text()
+          assert "e39d-restore)" in w and "--network none" in w
+          assert '"modelWasCalled": False' in e
+          assert '"modelGeneratedRepair": False' in e
+          assert '"ownerApproved": False' in e
+          assert "page.keyboard.press('Tab')" in js
+          assert "e39d_heldout_focus_evaluator" not in m
+          assert "opacity-zero" not in m
+          for bad in ("subprocess","os.system","Popen(","import requests","ollama pull ","openrouter.ai"):
+              assert bad not in e,bad
+          assert not Path("tools/security/stage45_pre_pilot_gate.py").exists()
+          print("E39D_NO_MODEL_NO_OWNER_PC_NO_PRODUCTION_ONLY_FIXTURE_VERIFICATION")
+          PY
