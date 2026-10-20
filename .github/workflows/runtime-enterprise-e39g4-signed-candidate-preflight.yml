@@ -35,7 +35,7 @@ jobs:
           java-version: '21.0.12'
           cache: maven
       - name: Real JDK Ed25519 candidate skill signature tests
-        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml -Dtest=CandidateSkillProofPreflightTest,GovernedSkillAdviceServiceTest test
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml '-Dtest=CandidateSkillProofPreflightTest,GovernedSkillAdviceServiceTest' test
 
   full-java-orchestrator-regression:
     runs-on: ubuntu-24.04
