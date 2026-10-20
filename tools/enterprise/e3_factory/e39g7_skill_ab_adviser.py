@@ -114,13 +114,14 @@ def run(model: str, case: str) -> list[dict]:
         raise ValueError("E39G7_EXPLICIT_MODEL_TRIAL_OPT_IN_REQUIRED")
     folder,source,observations,css=base.inputs(case)
     skill_text,skill_receipts = pinned_skill_context()
-    model_meta=metadata.model_metadata(model)
     arm_sequence=ARMS if case == "top-120" else tuple(reversed(ARMS))
     # Strict pair atomicity: fail closed if either output exists.
     dests = [folder/("e39g7-"+model.replace(":","-")+"-"+arm+".json")
              for arm in ARMS]
     if any(p.exists() or p.is_symlink() for p in dests):
         raise ValueError("E39G7_TRIAL_EVIDENCE_ALREADY_PRESENT")
+    # Reject duplicate output BEFORE any metadata query or generation request.
+    model_meta=metadata.model_metadata(model)
     before = {viewport:sha((folder/(viewport+"-before.json")).read_bytes())
               for viewport in ("mobile","desktop")}
     results=[]
