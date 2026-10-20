@@ -210,10 +210,12 @@ jobs:
           for forbidden in ('subprocess','os.system','Popen(', 'urllib.request',
                             'requests.post', 'import socket','exec('):
               assert forbidden not in script, forbidden
-          for required in ('AETHERIS_E35_REAL_MODEL_CI_OPT_IN','127.0.0.1',
+          for required in ('AETHERIS_E35_REAL_MODEL_CI_OPT_IN',
                            'ownerApproved": False','textWasExecuted": False',
                            'modelIdentityCryptographicallyAttested": False'):
               assert required in (script+scorer),required
+          transport=Path('tools/enterprise/e3_factory/e34b_real_inference.py').read_text()
+          assert 'HTTPConnection("127.0.0.1", 11434, timeout=95)' in transport
           assert 'E35_REJECTED_MODEL_ADVICE_MUTATED_SOURCE' in scorer
           assert 'fixtureResetPerformedByCIForNextCase' in scorer
           assert not Path('tools/security/stage45_pre_pilot_gate.py').exists()
