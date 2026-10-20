@@ -67,8 +67,7 @@ class MultiModelSafetyTests(unittest.TestCase):
 
     def test_remote_source_upload_needs_both_permissions_and_key(self):
         model = router.CLOUD_CANDIDATES[1]
-        with mock.patch.object(router, "create_context", return_value=self.synthetic), (
-                mock.patch.object(router, "send") as send):
+        with mock.patch.object(router, "create_context", return_value=self.synthetic), mock.patch.object(router, "send") as send:
             for env in (
                 {router.OPT_CLOUD: "no", router.OPT_SHARE: "yes",
                  router.KEY_ENV: "long-example-nonsecret"},
@@ -96,9 +95,7 @@ class MultiModelSafetyTests(unittest.TestCase):
                 "usage": {"cost": 0}}, 9)
         env = {router.OPT_CLOUD: "yes", router.OPT_SHARE: "yes",
                router.KEY_ENV: key}
-        with mock.patch.dict(os.environ, env), (
-                mock.patch.object(router, "create_context", return_value=self.synthetic)), (
-                mock.patch.object(router, "send", side_effect=fake)):
+        with mock.patch.dict(os.environ, env), mock.patch.object(router, "create_context", return_value=self.synthetic), mock.patch.object(router, "send", side_effect=fake):
             result = router.request_advice("openrouter", model, "scroll")
         self.assertEqual([x[1] for x in calls], ["GET", "POST"])
         self.assertEqual(calls[1][2], "/api/v1/chat/completions")
@@ -122,15 +119,12 @@ class MultiModelSafetyTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {router.OPT_CLOUD: "yes",
                                           router.OPT_SHARE: "yes",
                                           router.KEY_ENV: "fake-long-nonsecret"}), (
-                mock.patch.object(router, "create_context", return_value=self.synthetic)), (
-                mock.patch.object(router, "send", side_effect=mocked)):
+                mock.patch.object(router, "create_context", return_value=self.synthetic), mock.patch.object(router, "send", side_effect=mocked):
             with self.assertRaisesRegex(ValueError, "E36_PROVIDER_REPORTED_NONZERO_COST"):
                 router.request_advice("openrouter", model, "scroll")
 
     def test_local_model_uninstalled_fails_and_no_remote_fallback(self):
-        with mock.patch.dict(os.environ, {router.OPT_LOCAL: "yes"}), (
-                mock.patch.object(router, "create_context", return_value=self.synthetic)), (
-                mock.patch.object(router, "send", return_value=({"models": []}, 1)) as send):
+        with mock.patch.dict(os.environ, {router.OPT_LOCAL: "yes"}), mock.patch.object(router, "create_context", return_value=self.synthetic), mock.patch.object(router, "send", return_value=({"models": []}, 1)) as send:
             with self.assertRaisesRegex(ValueError, "E36_LOCAL_MODEL_NOT_INSTALLED"):
                 router.request_advice("ollama", router.LOCAL_CANDIDATES[0], "scroll")
             self.assertEqual(send.call_count, 1)
@@ -144,9 +138,7 @@ class MultiModelSafetyTests(unittest.TestCase):
             return {"model": model, "done": True,
                     "response": '{"operation":"replace","old":"const p = 0.24;",'
                                 '"new":"const p = progress();"}'}, 7
-        with mock.patch.dict(os.environ, {router.OPT_LOCAL: "yes"}), (
-                mock.patch.object(router, "create_context", return_value=self.synthetic)), (
-                mock.patch.object(router, "send", side_effect=mocked)):
+        with mock.patch.dict(os.environ, {router.OPT_LOCAL: "yes"}), mock.patch.object(router, "create_context", return_value=self.synthetic), mock.patch.object(router, "send", side_effect=mocked):
             result = router.request_advice("ollama", model, "scroll")
         self.assertEqual(result["responseClass"], "TEXT_PROPOSAL_REQUIRES_INDEPENDENT_PATCH_GATE")
         self.assertFalse(result["responseWasExecuted"])
