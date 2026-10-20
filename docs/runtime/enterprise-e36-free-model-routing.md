@@ -12,11 +12,15 @@
 | OpenRouter | `openrouter/free` | Free-variant routing, **live catalog zero-price check required** |
 | OpenRouter | `qwen/qwen3.8-27b:free` | Provider currently lists $0 prompt and completion pricing; live verification required |
 | OpenRouter | `google/gemma-4-26b-a4b-it:free` | Provider currently lists $0 prompt and completion pricing; live verification required |
+| OpenRouter | `minimax/minimax-m3.1-flash:free` | Currently listed free; coding-oriented, zero-price live verification required |
+| OpenRouter | `nvidia/nemotron-3-ultra-550b-a55b:free` | Currently listed free; provider states free endpoint logs data, explicit external-source consent required |
 | Artemis | **NO verified model identifier** | Not callable; `artemis` is deliberately rejected |
 
 References checked 20 October 2026:
 - <https://openrouter.ai/qwen/qwen3.8-27b:free>
 - <https://openrouter.ai/google/gemma-4-26b-a4b-it:free>
+- <https://openrouter.ai/minimax/minimax-m3.1-flash:free>
+- <https://openrouter.ai/nvidia/nemotron-3-ultra-550b-a55b:free>
 - <https://openrouter.ai/openrouter/free>
 - <https://openrouter.ai/pricing>
 - <https://openrouter.ai/docs/api/api-reference/models/get-model>
@@ -33,7 +37,7 @@ OpenRouter's catalog and free availability can change. Its free tier currently d
 - All model output is untrusted. Results provide raw bounded text and a SHA256 receipt, classify strict JSON abstentions / short replacement suggestions / invalid formats, report actual model/provider name, and permanently mark **not executed, no GitHub write, no production, no owner approval, no cryptographic model attestation**. This **does not automatically stage or apply a patch**. Any future patch still requires the reviewed E3.4A/E3.3 network-disabled Docker source/grammar/hash gate and independent Chromium QA.
 - No dynamic hosts/URLs, redirects, arbitrary user model IDs, imported HTTP clients, shell commands, secrets in emitted evidence, unauthorized source paths or background inference.
 
-The external source excerpt is *only* a bounded generated **test fixture**. Nonetheless, a remote provider receives the actual prompt content. **Do not connect sensitive/private repositories** to OpenRouter without a separate explicit privacy review. Use a limited-scope OpenRouter key stored in your own environment or runner secrets, never hard-code or commit an API key.
+**NVIDIA free-endpoint privacy warning:** its model page expressly cautions against sending confidential or personal information and states prompts can be logged for security and product improvement; this integration does not offer private retention guarantees. The external source excerpt is *only* a bounded generated **test fixture**. Nonetheless, a remote provider receives the actual prompt content. **Do not connect sensitive/private repositories** to OpenRouter without a separate explicit privacy review. Use a limited-scope OpenRouter key stored in your own environment or runner secrets, never hard-code or commit an API key.
 
 ## CI and security evidence
 
