@@ -110,8 +110,10 @@ class SelectorScopedAccessibilityTests(unittest.TestCase):
 
     def test_source_not_exact_broken_manifest_forgery_and_wrong_hash_denied(self):
         p=self.proposal(0)
+        tampered=self.broken+b"/*evil*/"
+        tampered_proposal=dict(p,baseSha256=base.sha(tampered))
         with self.assertRaisesRegex(ValueError,"E39C_SOURCE_NOT_EXACT_SINGLE_CSS_FAULT"):
-            policy.candidate_result(p,self.broken+b"/*evil*/",self.browser,
+            policy.candidate_result(tampered_proposal,tampered,self.browser,
                                     self.clean,self.manifest)
         duplicated=self.broken+b"\n"+base.BEFORE.encode()
         bad=dict(p,baseSha256=base.sha(duplicated))
