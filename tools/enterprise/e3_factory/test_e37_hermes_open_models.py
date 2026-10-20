@@ -9,9 +9,9 @@ import e36_free_model_router as router
 
 class VerifiedOpenWeightCatalogTest(unittest.TestCase):
     def test_11_local_and_5_free_remote_candidates_are_exact(self):
-        self.assertEqual(len(router.LOCAL_CANDIDATES), 11)
-        self.assertEqual(len(set(router.LOCAL_CANDIDATES)), 11)
-        self.assertEqual(len(router.CLOUD_CANDIDATES), 5)
+        self.assertEqual(len(router.LOCAL_CANDIDATES), 20)
+        self.assertEqual(len(set(router.LOCAL_CANDIDATES)), 20)
+        self.assertEqual(len(router.CLOUD_CANDIDATES), 6)
         self.assertIn("hermes3:3b", router.LOCAL_CANDIDATES)
         self.assertIn("hermes3:8b", router.LOCAL_CANDIDATES)
         for tag in ("qwen3.5:2b", "qwen3.5:4b", "qwen3.5:9b",
