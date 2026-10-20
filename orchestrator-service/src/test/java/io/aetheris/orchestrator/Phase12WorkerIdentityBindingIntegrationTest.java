@@ -29,6 +29,7 @@ import io.aetheris.orchestrator.task.TaskTransitionRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.DirtiesContext;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -38,7 +39,10 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+// Each method exercises the global scheduler and must not inherit unrelated
+// queued tickets or worker capabilities from other Spring Boot test classes.
 @SpringBootTest
+@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
 class Phase12WorkerIdentityBindingIntegrationTest {
 
     @Autowired TaskService tasks;
