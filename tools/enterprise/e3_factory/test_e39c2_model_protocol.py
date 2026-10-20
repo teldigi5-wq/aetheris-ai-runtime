@@ -122,9 +122,9 @@ class SelectorModelProtocolSecurityTests(TestCase):
         self.assertLess(len(result.encode()),3000)
 
     def test_operator_opt_in_is_separate_from_old_stage(self):
-        with mock.patch.dict(os.environ,{proposer.CONSENT:"no",
-                            proposer.baseline.CONSENT:"yes"}),(
-             mock.patch.object(proposer.transport,"local_json") as remote):
+        with (mock.patch.dict(os.environ,{proposer.CONSENT:"no",
+                                         proposer.baseline.CONSENT:"yes"}),
+              mock.patch.object(proposer.transport,"local_json") as remote):
             with self.assertRaisesRegex(ValueError,"E39C2_EXPLICIT_CI_OPT_IN_REQUIRED"):
                 proposer.run("hermes3:3b")
             remote.assert_not_called()
