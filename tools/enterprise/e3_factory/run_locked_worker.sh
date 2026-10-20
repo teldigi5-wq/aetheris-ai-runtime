@@ -66,6 +66,15 @@ case "$phase" in
     entry="e39e_model_policy.py"
     args=("${phase#e39e-}" "$2")
     ;;
+  e39g10-apply|e39g10-reset|e39g10-done)
+    [[ $# -eq 2 ]] || exit 2
+    case "$2" in
+      granite4-3b--mobile-940--original|granite4-3b--mobile-940--targeted|granite4-3b--reduced-boolean--original|granite4-3b--reduced-boolean--targeted|granite4-3b--scroll-24--original|granite4-3b--scroll-24--targeted|hermes3-3b--mobile-940--original|hermes3-3b--mobile-940--targeted|hermes3-3b--reduced-boolean--original|hermes3-3b--reduced-boolean--targeted|hermes3-3b--scroll-24--original|hermes3-3b--scroll-24--targeted) ;;
+      *) echo "E39G10_TOKEN_NOT_APPROVED" >&2; exit 2;;
+    esac
+    entry="e39g10_targeted_gate.py"
+    args=("${phase#e39g10-}" "$2")
+    ;;
   e39g9-seed)
     [[ $# -eq 2 ]] || exit 2
     case "$2" in mobile-940|reduced-boolean|scroll-24) ;; *) echo "E39G9_SEED_CASE_DENIED" >&2; exit 2;; esac
@@ -102,7 +111,7 @@ case "$phase" in
   *) echo "E31_UNKNOWN_WORKER_PHASE" >&2; exit 2;;
 esac
 evidence_id="$phase"
-if [[ "$phase" == e32-* || "$phase" == e33-* || "$phase" == e34-* || "$phase" == e39d-* || "$phase" == e39e-* || "$phase" == e39f-* || "$phase" == e39g8-* || "$phase" == e39g9-* ]]; then evidence_id="$phase-$2"; fi
+if [[ "$phase" == e32-* || "$phase" == e33-* || "$phase" == e34-* || "$phase" == e39d-* || "$phase" == e39e-* || "$phase" == e39f-* || "$phase" == e39g8-* || "$phase" == e39g9-* || "$phase" == e39g10-* ]]; then evidence_id="$phase-$2"; fi
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 cd "$repo"
