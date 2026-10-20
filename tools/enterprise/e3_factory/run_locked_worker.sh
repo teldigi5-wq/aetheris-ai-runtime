@@ -36,6 +36,11 @@ case "$phase" in
     entry="e39b_model_patch_gate.py"
     args=("apply")
     ;;
+  e39c-apply)
+    [[ $# -eq 1 ]] || exit 2
+    entry="e39c_selector_policy.py"
+    args=("apply")
+    ;;
   *) echo "E31_UNKNOWN_WORKER_PHASE" >&2; exit 2;;
 esac
 evidence_id="$phase"

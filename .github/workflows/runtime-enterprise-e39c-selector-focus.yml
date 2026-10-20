@@ -1,0 +1,187 @@
+name: Enterprise E3.9C Selector-Scoped CSS Safety and Real Browser Proof
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e39b-hermes-granite-keyboard-benchmark-20261020
+      - main
+    paths:
+      - 'tools/enterprise/e3_factory/**'
+      - '.github/workflows/runtime-enterprise-e39c-selector-focus.yml'
+      - 'docs/runtime/enterprise-e39c-selector-focus.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  selector-security-cross-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Reject selector edits, hostile CSS values, stale hashes and forged owner claims
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39c_selector_policy.py' -v
+      - name: Preserve original keyboard policy, model-text and prompt schema denials
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39_keyboard_patch_gate.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39b_model_comparison.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e38c_structured_inference.py' -v
+      - name: Check scripts before any browser run
+        run: |
+          python -m py_compile tools/enterprise/e3_factory/e39c_selector_policy.py
+          node --check tools/enterprise/e3_factory/e39c_desktop_browser.mjs
+
+  actual-chromium-two-review-values:
+    strategy:
+      fail-fast: false
+      matrix:
+        top: [0, 12]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Build canonical synthetic website in network-none worker
+        run: |
+          docker pull python:3.12-slim-bookworm
+          bash tools/enterprise/e3_factory/run_locked_worker.sh build
+      - name: Baseline source-integrity tests
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+      - name: Install real Chromium in disposable host harness
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Real keyboard Tab must confirm invisible focus before patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/enterprise/e3_factory/e39_keyboard_evaluator.py seed
+          set +e
+          node tools/enterprise/e3_factory/e39_keyboard_browser.mjs before
+          result=$?
+          set -e
+          if [[ "$result" == 0 ]]; then
+            echo "E39C_EXPECTED_KEYBOARD_FOCUS_FAILURE_NOT_FOUND"
+            exit 1
+          fi
+          python tools/enterprise/e3_factory/e39_keyboard_evaluator.py before
+      - name: Stage deterministic TEST-ONLY selector-specific proposal
+        run: python tools/enterprise/e3_factory/e39c_selector_policy.py fixture-proposal ${{ matrix.top }}
+      - name: Allow only selector-reviewed CSS edit inside existing network-none Docker worker
+        run: bash tools/enterprise/e3_factory/run_locked_worker.sh e39c-apply
+      - name: Independently prove keyboard accessibility at mobile AND desktop viewports
+        run: |
+          node tools/enterprise/e3_factory/e39_keyboard_browser.mjs after
+          node tools/enterprise/e3_factory/e39c_desktop_browser.mjs
+          python tools/enterprise/e3_factory/e39c_selector_policy.py verify
+      - name: Inspect actual network-none, no-capability and resource boundary
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          base=Path('target/e3-factory')
+          sandbox=json.loads((base/'sandbox-e39c-apply.json').read_text())
+          receipt=json.loads((base/'e39/receipt.json').read_text())
+          before=json.loads((base/'e39/browser-before.json').read_text())
+          mobile=json.loads((base/'e39/browser-after.json').read_text())
+          desktop=json.loads((base/'e39/desktop-after.json').read_text())
+          assert sandbox['network']=='none' and sandbox['readOnlyRootfs'] is True
+          assert sandbox['repositoryMount']=='read-only'
+          assert sandbox['allCapabilitiesDropped'] is True
+          assert sandbox['cpuLimit']==1 and sandbox['memoryBytes']==268435456
+          assert receipt['modelWasCalled'] is False
+          assert receipt['modelGeneratedThisPatch'] is False
+          assert receipt['ownerApproved'] is False
+          assert receipt['productionPublished'] is False
+          assert before['passed'] is False and before['geometry']['top']==-80
+          assert mobile['passed'] is True and desktop['passed'] is True
+          print('E39C_GENUINE_TWO_VIEWPORT_BROWSER_AND_DOCKER_POLICY_VERIFIED_TEST_FIXTURE_ONLY')
+          PY
+      - name: Preserve genuine browser screenshots, before/after receipt and manifest
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e39c-safe-focus-top-${{ matrix.top }}-real-chromium-policy
+          path: |
+            target/e3-factory/e39/
+            target/e3-factory/sandbox-e39c-apply.json
+          retention-days: 14
+          if-no-files-found: warn
+
+  unchanged-website-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Rebuild ORIGINAL untouched site in network-none CI sandbox
+        run: |
+          docker pull python:3.12-slim-bookworm
+          bash tools/enterprise/e3_factory/run_locked_worker.sh build
+      - run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+      - name: Install actual browser harness
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Verify original CSS3D website scroll/mobile/reduced motion
+        run: node tools/enterprise/e3_factory/browser_qa.mjs
+
+  full-java-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  explicit-zero-model-and-zero-production:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: No oracle exposure to proposer, model calls, shell or positive owner grant
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tools/enterprise/e3_factory/e39c_selector_policy.py').read_text()
+          model=Path('tools/enterprise/e3_factory/e39b_real_model_adviser.py').read_text()
+          runner=Path('tools/enterprise/e3_factory/run_locked_worker.sh').read_text()
+          assert 'e39c-apply)' in runner and '--network none' in runner
+          assert 'E39C_SOURCE_NOT_EXACT_SINGLE_CSS_FAULT' in p
+          assert 'E39C_SELECTOR_OR_SOURCE_SCOPE_REFUSED' in p
+          assert 'modelGeneratedThisPatch": False' in p
+          assert 'ownerApproved": False' in p
+          assert 'e39c_selector_policy' not in model
+          assert 'fixture-proposal' not in model
+          for forbidden in ('subprocess','Popen(','os.system','requests.post',
+                            'ollama pull','import requests','eval(','exec('):
+              assert forbidden not in p,forbidden
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists()
+          print('E39C_DSL_REVIEW_ONLY_NO_MODEL_INFERENCE_NO_OWNER_PC_NO_RELEASE_AUTHORITY')
+          PY
