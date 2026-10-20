@@ -26,6 +26,8 @@ CLOUD_CANDIDATES = (
     "openrouter/free",
     "qwen/qwen3.8-27b:free",
     "google/gemma-4-26b-a4b-it:free",
+    "minimax/minimax-m3.1-flash:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
 )
 LOCAL_CANDIDATES = (
     "qwen2.5-coder:1.5b",
