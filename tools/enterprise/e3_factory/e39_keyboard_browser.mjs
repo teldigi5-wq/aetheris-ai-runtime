@@ -45,6 +45,11 @@ try {
   const response=await page.goto(endpoint + '/index.html',{waitUntil:'networkidle'});
   assert.equal(response.status(),200);
   await page.keyboard.press('Tab');
+  // Chromium may report activeElement before the corresponding :focus style
+  // has painted. Two animation frames ensure measured geometry reflects CSS,
+  // as confirmed by the genuine before/after screenshots in the first run.
+  await page.evaluate(() => new Promise(resolve =>
+    requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const observed=await page.evaluate(()=>{
     const item=document.querySelector('.skip-link');
     if(!item)return {focusReached:false};
