@@ -102,7 +102,21 @@ jobs:
           pg_dump -s --no-owner --no-acl -h localhost -U postgres -d aetheris_skills_ci \
             -t public.enterprise_skill_candidate_proof_nonces \
             > "$RUNNER_TEMP/skill-nonce-schema-after.sql"
-          diff -u "$RUNNER_TEMP/skill-nonce-schema-before.sql" "$RUNNER_TEMP/skill-nonce-schema-after.sql"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          root=Path(os.environ["RUNNER_TEMP"])
+          before=root/"skill-nonce-schema-before.sql"
+          after=root/"skill-nonce-schema-after.sql"
+          def schema(p):
+              # pg_dump 16.15 generates a fresh client \restrict / \unrestrict
+              # random token per dump. Those two psql directives are NOT DDL.
+              # Compare every other byte including all constraints/indexes.
+              return "".join(line for line in p.read_text().splitlines(keepends=True)
+                             if not line.startswith(("\\restrict ", "\\unrestrict ")))
+          assert schema(before) == schema(after), "E39G6_REVIEWED_NONCE_SCHEMA_DRIFT"
+          print("E39G6_PG_DUMP_SCHEMA_IDENTICAL_EXCEPT_RANDOM_PSQL_RESTRICT_KEYS")
+          PY
       - name: Confirm no positive owner authorization was recorded
         run: |
           psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d aetheris_skills_ci <<'SQL'
