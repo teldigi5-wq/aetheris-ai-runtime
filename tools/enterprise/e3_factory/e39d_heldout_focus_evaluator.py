@@ -20,7 +20,7 @@ STYLE = SITE / "styles.css"
 OUTPUT = ROOT / "e39d"
 CANONICAL = worker.HERE / "styles.css"
 ORIGINAL = ".skip-link:focus{top:12px}"
-# Four failure *mechanisms*, two different seeded variants per mechanism.
+# Five CSS-failure mechanisms, eight distinct seeded source variants.
 FAULTS = {
     "top-40": (".skip-link:focus{top:-40px}", "E39D_FOCUS_OFFSCREEN"),
     "top-120": (".skip-link:focus{top:-120px}", "E39D_FOCUS_OFFSCREEN"),
