@@ -1,0 +1,101 @@
+name: Enterprise E3.9G Governed Design and Security Skills
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e39f-runtime-seeded-browser-challenges-20261020
+    paths:
+      - 'skills/**'
+      - 'tools/enterprise/skills_registry.py'
+      - 'tools/enterprise/test_skills_registry.py'
+      - '.github/workflows/runtime-enterprise-e39g-skill-trust.yml'
+      - 'docs/runtime/enterprise-e39g-governed-skills.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  skill-provenance-and-adversarial-regression:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Validate exact upstream pinned skills and native references
+        run: |
+          python tools/enterprise/skills_registry.py validate
+          python -m unittest discover -s tools/enterprise -p 'test_skills_registry.py' -v
+      - name: Demonstrate read-only design and security skill discovery
+        run: |
+          python tools/enterprise/skills_registry.py match animation
+          python tools/enterprise/skills_registry.py match security
+
+  existing-python-security-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39f_runtime_blind.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39f_forensics.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39e_eight_model_policy.py' -v
+      - name: Refuse model execution and owner authority from reference skills
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path('tools/enterprise/skills_registry.py').read_text()
+          assert 'READ_ONLY_SKILL_REFERENCES_NO_AGENT_TOOLS' in code
+          assert 'E39G_CAPABILITY_ESCALATION_DENIED' in code
+          assert 'E39G_THIRD_PARTY_CONTENT_DRIFT_OR_UNPINNED' in code
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists()
+          print('E39G_REFERENCE_ONLY_SKILLS_NO_PERMISSION_ESCALATION')
+          PY
+
+  full-java-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  existing-real-browser-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Generate original site in network-disabled disposable worker
+        run: |
+          docker pull python:3.12-slim-bookworm
+          bash tools/enterprise/e3_factory/run_locked_worker.sh build
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+      - name: Real Chromium website QA without skills execution
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+          node tools/enterprise/e3_factory/browser_qa.mjs
