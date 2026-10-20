@@ -17,8 +17,8 @@ class MultiModelSafetyTests(unittest.TestCase):
 
     def test_lists_three_local_and_three_free_candidates_and_unresolved_artemis(self):
         record = router.catalog_status()
-        self.assertEqual(len(record["ollamaLocalCandidatesNotNecessarilyInstalled"]), 11)
-        self.assertEqual(len(record["openrouterZeroPriceCandidatesRequireLiveCheck"]), 5)
+        self.assertEqual(len(record["ollamaLocalCandidatesNotNecessarilyInstalled"]), 20)
+        self.assertEqual(len(record["openrouterZeroPriceCandidatesRequireLiveCheck"]), 6)
         self.assertEqual(record["historicalNameCorrection"]["artemis"],
                          "MISIDENTIFICATION_CORRECTED_TO_HERMES")
         self.assertFalse(record["researchOnlyNotCallable"]["NousResearch/Hermes-4-14B"]["localRuntimeValidated"])

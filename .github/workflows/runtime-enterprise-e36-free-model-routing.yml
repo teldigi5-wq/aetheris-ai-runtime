@@ -55,8 +55,8 @@ jobs:
           from pathlib import Path
           doc=json.loads(Path('/tmp/e36-candidates.json').read_text())
           assert doc['historicalNameCorrection']['artemis']=='MISIDENTIFICATION_CORRECTED_TO_HERMES'
-          assert len(doc['ollamaLocalCandidatesNotNecessarilyInstalled'])==11
-          assert len(doc['openrouterZeroPriceCandidatesRequireLiveCheck'])==5
+          assert len(doc['ollamaLocalCandidatesNotNecessarilyInstalled'])==20
+          assert len(doc['openrouterZeroPriceCandidatesRequireLiveCheck'])==6
           assert doc['autoRemoteRequests'] is False
           assert doc['productionEnabled'] is False
           print('E36_CATALOG_ADVISORY_ONLY',json.dumps(doc,sort_keys=True))
