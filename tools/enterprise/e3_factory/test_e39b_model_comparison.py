@@ -81,11 +81,11 @@ class ModelComparisonSecurityTests(TestCase):
         }
         legitimate["rawResponseSha256"]=gate.digest(legitimate["rawResponse"].encode())
         def evaluate(incoming):
-            with mock.patch.object(gate.gate,"ensure_workspace"), (
-                 mock.patch.object(gate.gate,"actual_browser_failure",
-                                  return_value=self.browser)), (
-                 mock.patch.object(gate.gate,"checked",
-                      side_effect=[self.original,json.dumps(incoming).encode()])):
+            with (mock.patch.object(gate.gate,"ensure_workspace"),
+                  mock.patch.object(gate.gate,"actual_browser_failure",
+                                    return_value=self.browser),
+                  mock.patch.object(gate.gate,"checked",
+                                    side_effect=[self.original,json.dumps(incoming).encode()])):
                 return gate.model_proposal()
         good,source,_,which=evaluate(legitimate)
         self.assertEqual(which,"hermes3:3b")
