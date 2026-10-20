@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "evidenceClass": "E39G3_TASK_BOUND_SKILL_REFERENCE_ONLY_NO_EXECUTION",
+  "enabledByDefault": false,
+  "originalSourceCommit": "2d228630ba1446365f614a108cb8252f1feda202",
+  "upstreamLicense": "MIT",
+  "roles": {
+    "frontend-engineer": [
+      "emil-design-eng",
+      "animate",
+      "animation-performance",
+      "aetheris-web-experience",
+      "aetheris-web-accessibility",
+      "aetheris-web-performance"
+    ],
+    "qa-engineer": [
+      "break-ui",
+      "review-animations",
+      "aetheris-web-accessibility",
+      "aetheris-code-review",
+      "aetheris-skills-safety"
+    ],
+    "software-architect": [
+      "emil-design-eng",
+      "aetheris-web-experience",
+      "aetheris-threat-model",
+      "aetheris-code-review"
+    ],
+    "appsec-officer": [
+      "aetheris-security-audit",
+      "aetheris-threat-model",
+      "aetheris-supply-chain-audit",
+      "aetheris-skills-safety",
+      "aetheris-code-review"
+    ],
+    "security-architect": [
+      "aetheris-threat-model",
+      "aetheris-security-audit",
+      "aetheris-supply-chain-audit",
+      "aetheris-skills-safety"
+    ],
+    "devops-engineer": [
+      "aetheris-supply-chain-audit",
+      "aetheris-code-review"
+    ],
+    "mcp-integration-engineer": [
+      "aetheris-skills-safety",
+      "aetheris-threat-model"
+    ]
+  },
+  "skills": [
+    {
+      "name": "emil-design-eng",
+      "trust": "third-party-pinned-reference",
+      "summary": "Review UI hierarchy and interaction craft; reject unnecessary visual noise.",
+      "sourcePath": "third-party/emilkowalski/emil-design-eng/SKILL.md"
+    },
+    {
+      "name": "animate",
+      "trust": "third-party-pinned-reference",
+      "summary": "Review whether motion is needed, plus easing, timing and interruption.",
+      "sourcePath": "third-party/emilkowalski/animate/SKILL.md"
+    },
+    {
+      "name": "animation-performance",
+      "trust": "third-party-pinned-reference",
+      "summary": "Analyze compositing, expensive layout animation and dropped frame risks.",
+      "sourcePath": "third-party/emilkowalski/animation-performance/SKILL.md"
+    },
+    {
+      "name": "review-animations",
+      "trust": "third-party-pinned-reference",
+      "summary": "Critique a motion implementation against usability and reduced-motion constraints.",
+      "sourcePath": "third-party/emilkowalski/review-animations/SKILL.md"
+    },
+    {
+      "name": "break-ui",
+      "trust": "third-party-pinned-reference",
+      "summary": "Stress test layouts against adversarial but realistic content and viewports.",
+      "sourcePath": "third-party/emilkowalski/break-ui/SKILL.md"
+    },
+    {
+      "name": "improve-animations",
+      "trust": "third-party-pinned-reference",
+      "summary": "Read-only motion audit with prioritized, independently testable proposals.",
+      "sourcePath": "third-party/emilkowalski/improve-animations/SKILL.md"
+    },
+    {
+      "name": "aetheris-web-experience",
+      "trust": "first-party-advisory",
+      "summary": "Plan premium responsive web visuals with brand and accessibility evidence.",
+      "sourcePath": "native/aetheris-web-experience/SKILL.md"
+    },
+    {
+      "name": "aetheris-web-accessibility",
+      "trust": "first-party-advisory",
+      "summary": "Audit keyboard use, focus, contrast, zoom, semantics and reduced motion.",
+      "sourcePath": "native/aetheris-web-accessibility/SKILL.md"
+    },
+    {
+      "name": "aetheris-web-performance",
+      "trust": "first-party-advisory",
+      "summary": "Audit browser payload, images, render cost, motion and 3D fallbacks.",
+      "sourcePath": "native/aetheris-web-performance/SKILL.md"
+    },
+    {
+      "name": "aetheris-security-audit",
+      "trust": "first-party-advisory",
+      "summary": "Defensive scoped app security code review with evidenced findings.",
+      "sourcePath": "native/aetheris-security-audit/SKILL.md"
+    },
+    {
+      "name": "aetheris-threat-model",
+      "trust": "first-party-advisory",
+      "summary": "Review STRIDE-style trust boundaries and agent-specific abuse cases.",
+      "sourcePath": "native/aetheris-threat-model/SKILL.md"
+    },
+    {
+      "name": "aetheris-supply-chain-audit",
+      "trust": "first-party-advisory",
+      "summary": "Review dependency pinning, SBOM, advisories and CI provenance.",
+      "sourcePath": "native/aetheris-supply-chain-audit/SKILL.md"
+    },
+    {
+      "name": "aetheris-code-review",
+      "trust": "first-party-advisory",
+      "summary": "Review code correctness, scope, regressions and verified tests.",
+      "sourcePath": "native/aetheris-code-review/SKILL.md"
+    },
+    {
+      "name": "aetheris-skills-safety",
+      "trust": "first-party-advisory",
+      "summary": "Review untrusted imported skills for provenance and tool escalation.",
+      "sourcePath": "native/aetheris-skills-safety/SKILL.md"
+    }
+  ]
+}
