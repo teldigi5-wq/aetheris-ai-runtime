@@ -13,7 +13,7 @@ import re
 import sys
 from pathlib import Path
 
-SKILLS_ROOT = Path(__file__).resolve().parents[3] / "skills"
+SKILLS_ROOT = Path(__file__).resolve().parents[2] / "skills"
 REGISTRY = SKILLS_ROOT / "registry.json"
 ALLOWED_TOP = frozenset({"native", "third-party"})
 SKILL_ID = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z", re.ASCII)
