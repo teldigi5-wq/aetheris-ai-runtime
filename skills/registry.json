@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 1,
+  "mode": "READ_ONLY_SKILL_REFERENCES_NO_AGENT_TOOLS",
+  "upstreamReview": {
+    "repository": "https://github.com/emilkowalski/skills",
+    "commit": "2d228630ba1446365f614a108cb8252f1feda202",
+    "license": "MIT",
+    "reviewedAt": "2026-10-20",
+    "licensePath": "third-party/emilkowalski/LICENSE"
+  },
+  "skills": [
+    {
+      "name": "emil-design-eng",
+      "path": "third-party/emilkowalski/emil-design-eng/SKILL.md",
+      "trust": "third-party-pinned-reference",
+      "origin": "https://github.com/emilkowalski/skills",
+      "originCommit": "2d228630ba1446365f614a108cb8252f1feda202",
+      "upstreamBlobSha1": "62ce902af8dd32c590ea7203e9ab2edb1d6ef81a",
+      "license": "MIT",
+      "tags": [
+        "design",
+        "frontend",
+        "ux",
+        "web"
+      ],
+      "capabilities": [],
+      "autoActivate": false
+    },
+    {
+      "name": "animate",
+      "path": "third-party/emilkowalski/animate/SKILL.md",
+      "trust": "third-party-pinned-reference",
+      "origin": "https://github.com/emilkowalski/skills",
+      "originCommit": "2d228630ba1446365f614a108cb8252f1feda202",
+      "upstreamBlobSha1": "7c3b20c6ed681b2d47c9ca9e3ee0e659ed47d032",
+      "license": "MIT",
+      "tags": [
+        "animation",
+        "motion",
+        "web"
+      ],
+      "capabilities": [],
+      "autoActivate": false
+    },
+    {
+      "name": "animation-performance",
+      "path": "third-party/emilkowalski/animation-performance/SKILL.md",
+      "trust": "third-party-pinned-reference",
+      "origin": "https://github.com/emilkowalski/skills",
+      "originCommit": "2d228630ba1446365f614a108cb8252f1feda202",
+      "upstreamBlobSha1": "d688dd7c3ba143c6ae17efd2bc665380d5252c5a",
+      "license": "MIT",
+      "tags": [
+        "animation",
+        "performance",
+        "web"
+      ],
+      "capabilities": [],
+      "autoActivate": false
+    },
+    {
+      "name": "review-animations",
+      "path": "third-party/emilkowalski/review-animations/SKILL.md",
+      "trust": "third-party-pinned-reference",
+      "origin": "https://github.com/emilkowalski/skills",
+      "originCommit": "2d228630ba1446365f614a108cb8252f1feda202",
+      "upstreamBlobSha1": "577a64397267ce20960de2202950594d5bd6f9b6",
+      "license": "MIT",
+      "tags": [
+        "animation",
+        "review",
+        "qa"
+      ],
+      "capabilities": [],
+      "autoActivate": false
+    },
+    {
+      "name": "break-ui",
+      "path": "third-party/emilkowalski/break-ui/SKILL.md",
+      "trust": "third-party-pinned-reference",
+      "origin": "https://github.com/emilkowalski/skills",
+      "originCommit": "2d228630ba1446365f614a108cb8252f1feda202",
+      "upstreamBlobSha1": "091a28d488662d2451131f1aaa60a6dcd2391932",
+      "license": "MIT",
+      "tags": [
+        "stress-test",
+        "ui",
+        "qa"
+      ],
+      "capabilities": [],
+      "autoActivate": false
+    },
+    {
+      "name": "improve-animations",
+      "path": "third-party/emilkowalski/improve-animations/SKILL.md",
+      "trust": "third-party-pinned-reference",
+      "origin": "https://github.com/emilkowalski/skills",
+      "originCommit": "2d228630ba1446365f614a108cb8252f1feda202",
+      "upstreamBlobSha1": "d6e77f37272329af0cc36f9eeedbe5226e86ce63",
+      "license": "MIT",
+      "tags": [
+        "animation",
+        "review",
+        "ux"
+      ],
+      "capabilities": [],
+      "autoActivate": false
+    },
+    {
+      "name": "aetheris-web-experience",
+      "path": "native/aetheris-web-experience/SKILL.md",
+      "trust": "first-party-advisory",
+      "tags": [
+        "design",
+        "web",
+        "frontend",
+        "3d",
+        "gsap",
+        "ux"
+      ],
+      "capabilities": [],
+      "autoActivate": false
+    },
+    {
+      "name": "aetheris-web-accessibility",
+      "path": "native/aetheris-web-accessibility/SKILL.md",
+      "trust": "first-party-advisory",
+      "tags": [
+        "web",
+        "a11y",
+        "qa",
+        "accessibility"
+      ],
+      "capabilities": [],
+      "autoActivate": false
+    },
+    {
+      "name": "aetheris-web-performance",
+      "path": "native/aetheris-web-performance/SKILL.md",
+      "trust": "first-party-advisory",
+      "tags": [
+        "web",
+        "performance",
+        "3d",
+        "animation"
+      ],
+      "capabilities": [],
+      "autoActivate": false
+    },
+    {
+      "name": "aetheris-security-audit",
+      "path": "native/aetheris-security-audit/SKILL.md",
+      "trust": "first-party-advisory",
+      "tags": [
+        "security",
+        "audit",
+        "application",
+        "api",
+        "auth"
+      ],
+      "capabilities": [],
+      "autoActivate": false
+    },
+    {
+      "name": "aetheris-threat-model",
+      "path": "native/aetheris-threat-model/SKILL.md",
+      "trust": "first-party-advisory",
+      "tags": [
+        "security",
+        "architecture",
+        "threat-model"
+      ],
+      "capabilities": [],
+      "autoActivate": false
+    },
+    {
+      "name": "aetheris-supply-chain-audit",
+      "path": "native/aetheris-supply-chain-audit/SKILL.md",
+      "trust": "first-party-advisory",
+      "tags": [
+        "security",
+        "audit",
+        "supply-chain",
+        "dependencies"
+      ],
+      "capabilities": [],
+      "autoActivate": false
+    },
+    {
+      "name": "aetheris-code-review",
+      "path": "native/aetheris-code-review/SKILL.md",
+      "trust": "first-party-advisory",
+      "tags": [
+        "review",
+        "qa",
+        "coding",
+        "security"
+      ],
+      "capabilities": [],
+      "autoActivate": false
+    },
+    {
+      "name": "aetheris-skills-safety",
+      "path": "native/aetheris-skills-safety/SKILL.md",
+      "trust": "first-party-advisory",
+      "tags": [
+        "security",
+        "audit",
+        "skills",
+        "supply-chain"
+      ],
+      "capabilities": [],
+      "autoActivate": false
+    }
+  ]
+}
