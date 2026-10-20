@@ -1,0 +1,139 @@
+name: Enterprise E3.6 Free-only Multi-Model Advisory Routing
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e35-real-model-multifault-ci-20261020
+      - main
+    paths:
+      - 'tools/enterprise/e3_factory/**'
+      - '.github/workflows/runtime-enterprise-e36-free-model-routing.yml'
+      - 'docs/runtime/enterprise-e36-free-model-routing.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  multi-provider-refusal-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Test free pricing, dual external-upload consent, key secrecy and no fallback
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e36_free_model_router.py' -v
+      - name: Preserve real-model opt-in and legacy text-patch security tests
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e35_real_model_trial.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e34_model_adviser.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_multi_fault.py' -v
+
+  deterministic-local-catalog:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Print available candidate IDs and unresolved Artemis without touching network
+        run: |
+          python tools/enterprise/e3_factory/e36_free_model_router.py list > /tmp/e36-candidates.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          doc=json.loads(Path('/tmp/e36-candidates.json').read_text())
+          assert doc['unresolvedCandidates']['artemis']=='UNRESOLVED_ID_NOT_CALLABLE'
+          assert len(doc['ollamaLocalCandidatesNotNecessarilyInstalled'])==3
+          assert len(doc['openrouterZeroPriceCandidatesRequireLiveCheck'])==5
+          assert doc['autoRemoteRequests'] is False
+          assert doc['productionEnabled'] is False
+          print('E36_CATALOG_ADVISORY_ONLY',json.dumps(doc,sort_keys=True))
+          PY
+      - name: Python syntax check
+        run: |
+          python -m py_compile tools/enterprise/e3_factory/e36_free_model_router.py
+          python -m py_compile tools/enterprise/e3_factory/test_e36_free_model_router.py
+
+  real-original-browser-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Generate original site in network-disabled worker
+        run: |
+          docker pull python:3.12-slim-bookworm
+          bash tools/enterprise/e3_factory/run_locked_worker.sh build
+      - name: Source integrity tests
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+      - name: Install real Chromium only on disposable runner
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Actual original browser interaction and accessibility regression
+        run: node tools/enterprise/e3_factory/browser_qa.mjs
+      - name: Retain site and browser evidence (no external provider inference)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e36-free-router-no-key-browser-regression
+          path: target/e3-factory/
+          if-no-files-found: warn
+          retention-days: 14
+
+  full-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  no-secrets-no-owner-pc-no-paid-routing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Verify HTTPS fixed host, default no external source upload, no activation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('tools/enterprise/e3_factory/e36_free_model_router.py').read_text()
+          assert 'HTTPSConnection("openrouter.ai", 443, timeout=20)' in s
+          assert 'HTTPConnection("127.0.0.1", 11434, timeout=20)' in s
+          assert 'E36_EXTERNAL_CODE_UPLOAD_NOT_AUTHORIZED' in s
+          assert 'E36_NONZERO_OR_UNVERIFIED_PRICE_REFUSED' in s
+          assert 'E36_ARTEMIS_ID_UNVERIFIED' in s
+          assert 'OPENROUTER_API_KEY' in s
+          assert 'modelMayApproveOwnerActions": False' in s
+          assert 'productionPublished": False' in s
+          for forbidden in ('subprocess','os.system','Popen(', 'requests.post',
+                            'urllib.request','eval(','exec(','curl '):
+              assert forbidden not in s,forbidden
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists()
+          print('E36_NO_CLOUD_SECRET_IN_CI_NO_PAID_MODEL_NO_OWNER_DEVICE_NO_STAGE45')
+          PY
