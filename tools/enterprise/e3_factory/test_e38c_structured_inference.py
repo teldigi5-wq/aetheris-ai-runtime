@@ -84,11 +84,11 @@ class E38CModelSafetyTest(unittest.TestCase):
 
     def test_semantic_prompt_is_general_and_does_not_give_frozen_golden_patch(self):
         cases = [
-            ("scroll", b"function progress(){return 0.86;}\\nconst p = 0.24;\\n",
+            ("scroll", b"function progress(){return 0.86;}\nconst p = 0.24;\n",
              "E32_SCROLL_PROGRESS_STUCK"),
             ("mobile", b"@media(max-width:760px){html{min-width:940px}}",
              "E32_MOBILE_HORIZONTAL_OVERFLOW"),
-            ("reduced", b"const motion = window.matchMedia('x');\\nconst reduced = Boolean(false);\\n",
+            ("reduced", b"const motion = window.matchMedia('x');\nconst reduced = Boolean(false);\n",
              "E32_REDUCED_MOTION_DISABLED"),
         ]
         for category, raw, failure_code in cases:
