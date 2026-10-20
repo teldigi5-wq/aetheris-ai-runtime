@@ -57,10 +57,10 @@ class MultiModelSafetyTests(unittest.TestCase):
                 "prompt": "0", "completion": "0"}}},
             {"data": {"id": model, "pricing": {
                 "prompt": "free", "completion": "0", "request": "0"}}},
-            {"data": {"id": model, "pricing": {
+            {"data": [{"id": model, "pricing": {
                 "prompt": "0", "completion": "0", "request": "0"}},
                       {"id": model, "pricing": {
-                          "prompt": "0", "completion": "0", "request": "0"}}},
+                          "prompt": "0", "completion": "0", "request": "0"}}]},
         ):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 router.validated_free_entry(bad, model)
