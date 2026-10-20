@@ -66,6 +66,15 @@ case "$phase" in
     entry="e39e_model_policy.py"
     args=("${phase#e39e-}" "$2")
     ;;
+  e39g8-apply|e39g8-cleanup)
+    [[ $# -eq 2 ]] || exit 2
+    case "$2" in
+      granite4-3b--top-120--baseline|granite4-3b--top-120--skill-context|granite4-3b--opacity-zero--baseline|granite4-3b--opacity-zero--skill-context|hermes3-3b--top-120--baseline|hermes3-3b--top-120--skill-context|hermes3-3b--opacity-zero--baseline|hermes3-3b--opacity-zero--skill-context) ;;
+      *) echo "E39G8_UNAPPROVED_MODEL_CASE_ARM" >&2; exit 2;;
+    esac
+    entry="e39g8_policy_worker.py"
+    args=("${phase#e39g8-}" "$2")
+    ;;
   e39f-restore)
     [[ $# -eq 2 ]] || exit 2
     case "$2" in
@@ -78,7 +87,7 @@ case "$phase" in
   *) echo "E31_UNKNOWN_WORKER_PHASE" >&2; exit 2;;
 esac
 evidence_id="$phase"
-if [[ "$phase" == e32-* || "$phase" == e33-* || "$phase" == e34-* || "$phase" == e39d-* || "$phase" == e39e-* || "$phase" == e39f-* ]]; then evidence_id="$phase-$2"; fi
+if [[ "$phase" == e32-* || "$phase" == e33-* || "$phase" == e34-* || "$phase" == e39d-* || "$phase" == e39e-* || "$phase" == e39f-* || "$phase" == e39g8-* ]]; then evidence_id="$phase-$2"; fi
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 cd "$repo"
