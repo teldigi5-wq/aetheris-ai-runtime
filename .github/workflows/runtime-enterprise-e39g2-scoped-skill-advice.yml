@@ -1,0 +1,103 @@
+name: Enterprise E3.9G-2 Bounded Read-Only Skill References
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e39g-governed-skills-catalog-20261020
+    paths:
+      - 'skills/**'
+      - 'tools/enterprise/e39g2_scoped_skill_advice.py'
+      - 'tools/enterprise/test_e39g2_scoped_skill_advice.py'
+      - 'tools/enterprise/skills_registry.py'
+      - 'tools/enterprise/test_skills_registry.py'
+      - 'docs/runtime/enterprise-e39g2-role-bound-advice.md'
+      - '.github/workflows/runtime-enterprise-e39g2-scoped-skill-advice.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-canonical-role-and-skill-trust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Full skill and source provenance preflight
+        run: |
+          python tools/enterprise/skills_registry.py validate
+          python tools/enterprise/e39g2_scoped_skill_advice.py check
+      - name: Adversarial policy tests
+        run: |
+          python -m unittest discover -s tools/enterprise -p 'test_skills_registry.py' -v
+          python -m unittest discover -s tools/enterprise -p 'test_e39g2_scoped_skill_advice.py' -v
+      - name: No implied agent activation or owner release
+        shell: python
+        run: |
+          from pathlib import Path
+          script=Path("tools/enterprise/e39g2_scoped_skill_advice.py").read_text()
+          assert "E39G2_DEFAULT_OFF_EXPLICIT_CONSENT_REQUIRED" in script
+          assert "FIXTURE_BLOB_SHA" in script and "SOURCE_BLOB_SHA" in script
+          assert "skillsCanExecute" in script and '"toolCalls":0' in script
+          for prohibited in ("import subprocess", "os.system(", "import requests", "import socket"):
+              assert prohibited not in script,prohibited
+          print("E39G2_READ_ONLY_REFERENCE_NO_OWNER_OR_AGENT_EXECUTION")
+
+  existing-model-safety-regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39f_runtime_blind.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39f_forensics.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39e_eight_model_policy.py' -v
+
+  full-java-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  independent-original-website-chromium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Generate canonical site inside locked network-none worker
+        run: |
+          docker pull python:3.12-slim-bookworm
+          bash tools/enterprise/e3_factory/run_locked_worker.sh build
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+      - name: Independent real Chromium page QA
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+          node tools/enterprise/e3_factory/browser_qa.mjs
