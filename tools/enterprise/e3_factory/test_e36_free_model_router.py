@@ -18,7 +18,7 @@ class MultiModelSafetyTests(unittest.TestCase):
     def test_lists_three_local_and_three_free_candidates_and_unresolved_artemis(self):
         record = router.catalog_status()
         self.assertEqual(len(record["ollamaLocalCandidatesNotNecessarilyInstalled"]), 3)
-        self.assertEqual(len(record["openrouterZeroPriceCandidatesRequireLiveCheck"]), 3)
+        self.assertEqual(len(record["openrouterZeroPriceCandidatesRequireLiveCheck"]), 5)
         self.assertEqual(record["unresolvedCandidates"]["artemis"],
                          "UNRESOLVED_ID_NOT_CALLABLE")
         self.assertFalse(record["productionEnabled"])
