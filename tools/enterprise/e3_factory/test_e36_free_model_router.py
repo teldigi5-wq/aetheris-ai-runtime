@@ -46,21 +46,21 @@ class MultiModelSafetyTests(unittest.TestCase):
 
     def test_prices_require_three_independent_zero_values(self):
         model = router.CLOUD_CANDIDATES[1]
-        good = {"data": [{"id": model, "pricing": {
-            "prompt": "0", "completion": 0, "request": "0.0000"}}]}
+        good = {"data": {"id": model, "pricing": {
+            "prompt": "0", "completion": 0, "request": "0.0000"}}}
         self.assertTrue(router.validated_free_entry(good, model)["liveCatalogValidated"])
         for bad in (
-            {"data": []},
-            {"data": [{"id": model, "pricing": {
-                "prompt": "0", "completion": "0.1", "request": "0"}}]},
-            {"data": [{"id": model, "pricing": {
-                "prompt": "0", "completion": "0"}}]},
-            {"data": [{"id": model, "pricing": {
-                "prompt": "free", "completion": "0", "request": "0"}}]},
-            {"data": [{"id": model, "pricing": {
+            {"data": {}},
+            {"data": {"id": model, "pricing": {
+                "prompt": "0", "completion": "0.1", "request": "0"}}},
+            {"data": {"id": model, "pricing": {
+                "prompt": "0", "completion": "0"}}},
+            {"data": {"id": model, "pricing": {
+                "prompt": "free", "completion": "0", "request": "0"}}},
+            {"data": {"id": model, "pricing": {
                 "prompt": "0", "completion": "0", "request": "0"}},
                       {"id": model, "pricing": {
-                          "prompt": "0", "completion": "0", "request": "0"}}]},
+                          "prompt": "0", "completion": "0", "request": "0"}}},
         ):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 router.validated_free_entry(bad, model)
@@ -88,8 +88,8 @@ class MultiModelSafetyTests(unittest.TestCase):
         def fake(provider, method, path, **kwargs):
             calls.append((provider, method, path, kwargs))
             if method == "GET":
-                return ({"data": [{"id": model, "pricing": {
-                    "prompt": "0", "completion": "0", "request": "0"}}]}, 3)
+                return ({"data": {"id": model, "pricing": {
+                    "prompt": "0", "completion": "0", "request": "0"}}}, 3)
             return ({"model": model, "choices": [
                 {"message": {"content": '{"operation":"abstain"}'}}],
                 "usage": {"cost": 0}}, 9)
@@ -98,6 +98,7 @@ class MultiModelSafetyTests(unittest.TestCase):
         with mock.patch.dict(os.environ, env), mock.patch.object(router, "create_context", return_value=self.synthetic), mock.patch.object(router, "send", side_effect=fake):
             result = router.request_advice("openrouter", model, "scroll")
         self.assertEqual([x[1] for x in calls], ["GET", "POST"])
+        self.assertEqual(calls[0][2], "/api/v1/model/" + model)
         self.assertEqual(calls[1][2], "/api/v1/chat/completions")
         self.assertEqual(calls[1][3]["payload"]["model"], model)
         self.assertEqual(result["responseClass"], "ABSTAIN")
@@ -111,8 +112,8 @@ class MultiModelSafetyTests(unittest.TestCase):
         model = router.CLOUD_CANDIDATES[0]
         def mocked(provider, method, route, **kwargs):
             if method == "GET":
-                return ({"data": [{"id": model, "pricing": {
-                    "prompt": "0", "completion": "0", "request": "0"}}]}, 2)
+                return ({"data": {"id": model, "pricing": {
+                    "prompt": "0", "completion": "0", "request": "0"}}}, 2)
             return ({"model": "some/free",
                      "choices": [{"message": {"content": '{"operation":"abstain"}'}}],
                      "usage": {"cost": 0.01}}, 3)
