@@ -70,8 +70,9 @@ def checked_json(raw: bytes) -> dict:
 def send(provider: str, method: str, route: str, *,
          payload: dict | None = None, api_key: str | None = None) -> tuple[dict, int]:
     """The caller cannot supply hosts, arbitrary URLs or redirect behavior."""
+    allowed_routes = frozenset("/api/v1/model/" + m for m in CLOUD_CANDIDATES)
     allowed = (provider == "openrouter" and
-               ((method == "GET" and route == "/api/v1/models")
+               ((method == "GET" and route in allowed_routes)
                 or (method == "POST" and route == "/api/v1/chat/completions"))) or (
                provider == "ollama" and
                ((method == "GET" and route == "/api/tags")
@@ -124,9 +125,9 @@ def validated_free_entry(catalog: dict, model_id: str) -> dict:
     if model_id != "openrouter/free" and not model_id.endswith(":free"):
         raise ValueError("E36_CLOUD_MODEL_NOT_FREE_VARIANT")
     models = catalog.get("data")
-    if not isinstance(models, list) or len(models) > 2000:
+    if not isinstance(models, dict):
         raise ValueError("E36_CATALOG_BAD_SHAPE")
-    hits = [m for m in models if isinstance(m, dict) and m.get("id") == model_id]
+    hits = [models] if models.get("id") == model_id else []
     if len(hits) != 1:
         raise ValueError("E36_FREE_MODEL_NOT_PRESENT_IN_LIVE_CATALOG")
     record = hits[0]
@@ -190,7 +191,7 @@ def request_advice(provider: str, model_id: str, category: str) -> dict:
         key = os.environ.get(KEY_ENV)
         if not key:
             raise ValueError("E36_NO_OPENROUTER_API_KEY")
-        live, probe_ms = send("openrouter", "GET", "/api/v1/models", api_key=key)
+        live, probe_ms = send("openrouter", "GET", "/api/v1/model/" + model_id, api_key=key)
         price = validated_free_entry(live, model_id)
         message = [
             {"role": "system", "content": SYSTEM},
