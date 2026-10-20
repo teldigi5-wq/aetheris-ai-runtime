@@ -116,10 +116,11 @@ class MultiModelSafetyTests(unittest.TestCase):
             return ({"model": "some/free",
                      "choices": [{"message": {"content": '{"operation":"abstain"}'}}],
                      "usage": {"cost": 0.01}}, 3)
-        with mock.patch.dict(os.environ, {router.OPT_CLOUD: "yes",
+        with (mock.patch.dict(os.environ, {router.OPT_CLOUD: "yes",
                                           router.OPT_SHARE: "yes",
-                                          router.KEY_ENV: "fake-long-nonsecret"}), (
-                mock.patch.object(router, "create_context", return_value=self.synthetic), mock.patch.object(router, "send", side_effect=mocked):
+                                          router.KEY_ENV: "fake-long-nonsecret"}),
+              mock.patch.object(router, "create_context", return_value=self.synthetic),
+              mock.patch.object(router, "send", side_effect=mocked)):
             with self.assertRaisesRegex(ValueError, "E36_PROVIDER_REPORTED_NONZERO_COST"):
                 router.request_advice("openrouter", model, "scroll")
 
