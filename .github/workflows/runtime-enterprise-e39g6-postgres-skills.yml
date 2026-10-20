@@ -1,0 +1,199 @@
+name: Enterprise E3.9G-6 Real PostgreSQL Skill Proof Nonce Verification
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e39g5-durable-skill-proof-ledger-20261020
+    paths:
+      - 'orchestrator-service/db/enterprise-skills/**'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/skills/**'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/skills/**'
+      - '.github/workflows/runtime-enterprise-e39g6-postgres-skills.yml'
+      - 'docs/runtime/enterprise-e39g6-postgres-skill-nonces.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-postgresql-schema-and-java-concurrent-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: aetheris_skills_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-ci-password-not-for-production
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aetheris_skills_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGPASSWORD: isolated-ci-password-not-for-production
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/aetheris_skills_ci
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: isolated-ci-password-not-for-production
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Ensure PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+      - name: Apply reviewed nonce schema into disposable PostgreSQL only
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d aetheris_skills_ci \
+            -f orchestrator-service/db/enterprise-skills/V1__candidate_skill_nonce_deny_only_postgresql.sql
+      - name: Live PostgreSQL constraints refuse duplicate and positive authority
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d aetheris_skills_ci \
+            -f orchestrator-service/db/enterprise-skills/test_candidate_skill_nonce_postgresql.sql
+      - name: Verify runtime role may only inspect or insert, not modify reserved evidence
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d aetheris_skills_ci <<'SQL'
+          CREATE ROLE skills_nonce_ci_writer NOLOGIN;
+          GRANT USAGE ON SCHEMA public TO skills_nonce_ci_writer;
+          GRANT SELECT, INSERT ON enterprise_skill_candidate_proof_nonces TO skills_nonce_ci_writer;
+          DO $$
+          BEGIN
+              IF NOT has_table_privilege('skills_nonce_ci_writer',
+                       'enterprise_skill_candidate_proof_nonces', 'INSERT')
+                 OR NOT has_table_privilege('skills_nonce_ci_writer',
+                       'enterprise_skill_candidate_proof_nonces', 'SELECT')
+                 OR has_table_privilege('skills_nonce_ci_writer',
+                       'enterprise_skill_candidate_proof_nonces', 'UPDATE')
+                 OR has_table_privilege('skills_nonce_ci_writer',
+                       'enterprise_skill_candidate_proof_nonces', 'DELETE')
+                 OR has_table_privilege('skills_nonce_ci_writer',
+                       'enterprise_skill_candidate_proof_nonces', 'TRUNCATE')
+                 OR has_table_privilege('skills_nonce_ci_writer',
+                       'enterprise_skill_candidate_proof_nonces', 'REFERENCES') THEN
+                   RAISE EXCEPTION 'E39G6_CI_WRITER_PRIVILEGE_BOUNDARY_FAILED';
+              END IF;
+          END $$;
+          SQL
+      - name: Snapshot exact SQL-schema target before JPA regression
+        run: |
+          pg_dump -s --no-owner --no-acl -h localhost -U postgres -d aetheris_skills_ci \
+            -t public.enterprise_skill_candidate_proof_nonces \
+            > "$RUNNER_TEMP/skill-nonce-schema-before.sql"
+      - name: Real PostgreSQL-backed JPA transaction, replay and race tests
+        run: >
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml
+          '-Dtest=DurableSkillProofInspectionLedgerTest,CandidateSkillProofPreflightTest,GovernedSkillAdviceServiceTest'
+          -Dspring.datasource.driver-class-name=org.postgresql.Driver
+          -Dspring.jpa.hibernate.ddl-auto=update
+          test
+      - name: Fail if Hibernate modified reviewed nonce table schema
+        run: |
+          pg_dump -s --no-owner --no-acl -h localhost -U postgres -d aetheris_skills_ci \
+            -t public.enterprise_skill_candidate_proof_nonces \
+            > "$RUNNER_TEMP/skill-nonce-schema-after.sql"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          root=Path(os.environ["RUNNER_TEMP"])
+          before=root/"skill-nonce-schema-before.sql"
+          after=root/"skill-nonce-schema-after.sql"
+          def schema(p):
+              # pg_dump 16.15 generates a fresh client \restrict / \unrestrict
+              # random token per dump. Those two psql directives are NOT DDL.
+              # Compare every other byte including all constraints/indexes.
+              return "".join(line for line in p.read_text().splitlines(keepends=True)
+                             if not line.startswith(("\\restrict ", "\\unrestrict ")))
+          assert schema(before) == schema(after), "E39G6_REVIEWED_NONCE_SCHEMA_DRIFT"
+          print("E39G6_PG_DUMP_SCHEMA_IDENTICAL_EXCEPT_RANDOM_PSQL_RESTRICT_KEYS")
+          PY
+      - name: Confirm no positive owner authorization was recorded
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U postgres -d aetheris_skills_ci <<'SQL'
+          DO $$
+          BEGIN
+              IF EXISTS (
+                  SELECT 1 FROM enterprise_skill_candidate_proof_nonces
+                  WHERE evidence_state <> 'CANDIDATE_SIGNATURE_INSPECTED_NOT_OWNER_AUTHENTICATED'
+              ) THEN
+                  RAISE EXCEPTION 'E39G6_UNAUTHORIZED_SKILL_EVIDENCE_ROW';
+              END IF;
+          END $$;
+          SQL
+          echo "E39G6_DISPOSABLE_REAL_POSTGRES_NONCE_SCHEMA_AND_JPA_VERIFIED"
+
+  retained-h2-windows-and-ubuntu:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Inherited skill JPA and genuine Ed25519 regression
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml '-Dtest=DurableSkillProofInspectionLedgerTest,CandidateSkillProofPreflightTest,GovernedSkillAdviceServiceTest' test
+
+  complete-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  integrity-and-nonactivation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Pin source skills and exact canonical agent policy
+        run: |
+          python tools/enterprise/skills_registry.py validate
+          python tools/enterprise/e39g2_scoped_skill_advice.py check
+          python tools/enterprise/e39g3_validate_java_skill_manifest.py verify
+      - name: Schema static deny-only review
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          sql=Path('orchestrator-service/db/enterprise-skills/V1__candidate_skill_nonce_deny_only_postgresql.sql').read_text()
+          code=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/skills/DurableSkillProofInspectionLedger.java').read_text()
+          assert 'nonce_hex varchar(32) PRIMARY KEY' in sql
+          assert 'e39g6_evidence_deny_only' in sql
+          assert 'REVOKE ALL ON TABLE enterprise_skill_candidate_proof_nonces FROM PUBLIC' in sql
+          assert 'entityManager.persist(nonce)' in code and 'entityManager.flush()' in code
+          assert 'approvalGranted' not in sql and 'productionReleased' not in sql
+          for forbidden in ('GRANT ALL', 'DROP TABLE', 'TRUNCATE TABLE',
+                            'CREATE EXTENSION', 'EXECUTE PROGRAM'):
+              assert forbidden not in sql, forbidden
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists()
+          print('E39G6_NO_OWNER_AUTH_OR_PRODUCTION_RELEASE')
+          PY
