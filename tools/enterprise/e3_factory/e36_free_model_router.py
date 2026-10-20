@@ -28,6 +28,8 @@ CLOUD_CANDIDATES = (
     "google/gemma-4-26b-a4b-it:free",
     "minimax/minimax-m3.1-flash:free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
+    # Multimodal remote candidate: existing adviser sends TEXT ONLY.
+    "nvidia/nemotron-3.5-super-vl:free",
 )
 LOCAL_CANDIDATES = (
     "qwen2.5-coder:1.5b",
@@ -42,7 +44,31 @@ LOCAL_CANDIDATES = (
     "gemma3:4b",
     "deepseek-r1:7b",
     "qwen3-coder:30b",
+    # E3.8: exact published local Ollama tags; no auto pull or auto execution.
+    "qwen3.5:0.8b",
+    "qwen3.5:27b",
+    "qwen3.5:35b",
+    "granite4:3b",
+    "granite4:7b-a1b-h",
+    "gpt-oss:20b",
+    "gpt-oss:120b",
+    "devstral-small-2:24b",
+    "qwen3-coder-next:q4_K_M",
 )
+# Models too large for an assumed 6 GB GPU receive a SECOND manual opt-in.
+# Model file size is not peak runtime memory; even with consent there is no
+# guarantee of compatibility, speed, or successful loading.
+HIGH_RESOURCE_LOCAL_CANDIDATES = frozenset((
+    "qwen3.5:9b",
+    "qwen3-coder:30b",
+    "qwen3.5:27b",
+    "qwen3.5:35b",
+    "gpt-oss:20b",
+    "gpt-oss:120b",
+    "devstral-small-2:24b",
+    "qwen3-coder-next:q4_K_M",
+))
+OPT_HIGH_RESOURCE = "AETHERIS_E38_HIGH_RESOURCE_MODEL_OPT_IN"
 # Distinguish the real Nous family from unverified local Ollama tags.
 # Hermes 4 weights are verified at Hugging Face; an exact local inference
 # package, runtime template and memory fit must be reviewed before adding a callable ID.
@@ -182,6 +208,8 @@ def catalog_status() -> dict:
         "openrouterZeroPriceCandidatesRequireLiveCheck": list(CLOUD_CANDIDATES),
         "historicalNameCorrection": UNKNOWN_CANDIDATES,
         "researchOnlyNotCallable": RESEARCH_ONLY_MODELS,
+        "highResourceLocalCandidatesRequireSecondOptIn": sorted(HIGH_RESOURCE_LOCAL_CANDIDATES),
+        "modelDownloadsAutomatically": False,
         "automaticModelFallback": False,
         "autoRemoteRequests": False, "ownerApprovalGranted": False,
         "productionEnabled": False,
@@ -243,6 +271,9 @@ def request_advice(provider: str, model_id: str, category: str) -> dict:
     else:
         if os.environ.get(OPT_LOCAL) != "yes":
             raise ValueError("E36_LOCAL_MODEL_NOT_OPTED_IN")
+        if (model_id in HIGH_RESOURCE_LOCAL_CANDIDATES
+                and os.environ.get(OPT_HIGH_RESOURCE) != "yes"):
+            raise ValueError("E38_HIGH_RESOURCE_MODEL_REQUIRES_SECOND_OPT_IN")
         tags, probe_ms = send("ollama", "GET", "/api/tags")
         installed = tags.get("models")
         if not isinstance(installed, list) or not any(
