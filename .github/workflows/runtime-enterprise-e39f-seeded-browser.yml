@@ -1,0 +1,122 @@
+name: Enterprise E3.9F Runtime-Seeded Withheld-Parameter Real Chromium Controls
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e39f-forensics-typed-evidence-20261020
+    paths:
+      - 'tools/enterprise/e3_factory/**'
+      - '.github/workflows/runtime-enterprise-e39f-seeded-browser.yml'
+      - 'docs/runtime/enterprise-e39f-runtime-seed.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cross-platform-blind-protocol-and-security:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Strict runtime-seed and original model refusal regressions
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39f_runtime_blind.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39f_forensics.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39e_eight_model_policy.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39d_focus_variants.py' -v
+          node --check tools/enterprise/e3_factory/e39f_runtime_blind_browser.mjs
+
+  real-seeded-chromium-and-network-none:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Build original generated site in preexisting network-none worker
+        run: |
+          docker pull python:3.12-slim-bookworm
+          bash tools/enterprise/e3_factory/run_locked_worker.sh build
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+      - name: Install browser on disposable CI host only
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Generate runtime-hidden parameters then verify real Chromium defects and control restorations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/enterprise/e3_factory/e39f_runtime_sealed_challenge.py init
+          for id in challenge-01 challenge-02 challenge-03 challenge-04 challenge-05 challenge-06 challenge-07 challenge-08; do
+            python tools/enterprise/e3_factory/e39f_runtime_sealed_challenge.py seed "$id"
+            node tools/enterprise/e3_factory/e39f_runtime_blind_browser.mjs "$id" before
+            python tools/enterprise/e3_factory/e39f_runtime_sealed_challenge.py before "$id"
+            bash tools/enterprise/e3_factory/run_locked_worker.sh e39f-restore "$id"
+            node tools/enterprise/e3_factory/e39f_runtime_blind_browser.mjs "$id" after
+            python tools/enterprise/e3_factory/e39f_runtime_sealed_challenge.py after "$id"
+          done
+          python tools/enterprise/e3_factory/e39f_runtime_sealed_challenge.py finalize
+          node tools/enterprise/e3_factory/browser_qa.mjs
+          echo E39F_RUNTIME_SEEDED_CHROMIUM_SUITE_NONMODEL_CONTROLS_COMPLETED
+      - name: Upload withheld seed and original browser evidence only after final evaluation
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e39f-runtime-seeded-eight-browser-controls-zero-model-credit
+          path: |
+            target/e3-factory/e39f-blind/
+            target/e3-factory/sandbox-e39f-*.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  full-java-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  explicit-no-production-or-autonomous-model:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Fail closed on model/run authority or blind-seed oracle promotion
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          gen=Path('tools/enterprise/e3_factory/e39f_runtime_sealed_challenge.py').read_text()
+          browser=Path('tools/enterprise/e3_factory/e39f_runtime_blind_browser.mjs').read_text()
+          worker=Path('tools/enterprise/e3_factory/run_locked_worker.sh').read_text()
+          assert 'secrets.token_bytes(32)' in gen and 'seedCommitmentSha256' in gen
+          assert 'modelGeneratedRepair":False' in gen and 'realModelCalls":0' in gen
+          assert 'externallyCuratedSealedCorpus":False' in gen
+          assert 'E39F_REAL_CHROMIUM_BLINDED_CASE' in browser
+          assert 'e39f-restore)' in worker and '--network none' in worker
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists()
+          for prohibited in ('subprocess', 'requests.post', 'os.system', 'openrouter.ai'):
+              assert prohibited not in gen,prohibited
+          print('E39F_BLINDED_PARAMETERS_ONLY; INDEPENDENT_CHROME; ZERO_MODEL_CREDIT; STAGE45_NO_GO')
+          PY
