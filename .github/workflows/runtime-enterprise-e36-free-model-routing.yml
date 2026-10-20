@@ -56,7 +56,7 @@ jobs:
           doc=json.loads(Path('/tmp/e36-candidates.json').read_text())
           assert doc['unresolvedCandidates']['artemis']=='UNRESOLVED_ID_NOT_CALLABLE'
           assert len(doc['ollamaLocalCandidatesNotNecessarilyInstalled'])==3
-          assert len(doc['openrouterZeroPriceCandidatesRequireLiveCheck'])==3
+          assert len(doc['openrouterZeroPriceCandidatesRequireLiveCheck'])==5
           assert doc['autoRemoteRequests'] is False
           assert doc['productionEnabled'] is False
           print('E36_CATALOG_ADVISORY_ONLY',json.dumps(doc,sort_keys=True))
