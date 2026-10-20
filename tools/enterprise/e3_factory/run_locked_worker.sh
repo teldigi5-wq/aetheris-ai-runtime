@@ -26,6 +26,11 @@ case "$phase" in
     entry="e34_model_adviser.py"
     args=("prepare" "$2")
     ;;
+  e39-apply)
+    [[ $# -eq 1 ]] || exit 2
+    entry="e39_keyboard_patch_gate.py"
+    args=("apply")
+    ;;
   *) echo "E31_UNKNOWN_WORKER_PHASE" >&2; exit 2;;
 esac
 evidence_id="$phase"

@@ -1,0 +1,161 @@
+name: Enterprise E3.9A Real Keyboard Accessibility Defect Gate
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e38c-structured-safe-repairs-20261020
+      - main
+    paths:
+      - 'tools/enterprise/e3_factory/**'
+      - 'docs/runtime/enterprise-e39a-keyboard-accessibility.md'
+      - '.github/workflows/runtime-enterprise-e39a-keyboard-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cross-platform-adversarial-policy:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Reject tampering, forged owner grants, alternative paths and multiple CSS edits
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39_keyboard_patch_gate.py' -v
+      - name: Preserve previous E3.8C model-output and E3.3 patch denial security
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e38c_structured_inference.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_heuristic_repair.py' -v
+      - name: Validate new browser script syntax
+        run: node --check tools/enterprise/e3_factory/e39_keyboard_browser.mjs
+
+  real-keyboard-chromium-before-after:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Build generated original website in network-disabled Docker worker
+        run: |
+          docker pull python:3.12-slim-bookworm
+          bash tools/enterprise/e3_factory/run_locked_worker.sh build
+      - name: Verify original source and manifest
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+      - name: Install Chromium on disposable CI browser harness only
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Seed new synthetic keyboard-focus defect and observe real failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/enterprise/e3_factory/e39_keyboard_evaluator.py seed
+          set +e
+          node tools/enterprise/e3_factory/e39_keyboard_browser.mjs before
+          result=$?
+          set -e
+          if [[ "$result" -eq 0 ]]; then
+            echo "E39_BROWSER_FAILURE_NOT_OBSERVED"
+            exit 1
+          fi
+          python tools/enterprise/e3_factory/e39_keyboard_evaluator.py before
+      - name: Create deterministic TEST-ONLY proposal, never claimed as AI
+        run: python tools/enterprise/e3_factory/e39_keyboard_patch_gate.py fixture-proposal
+      - name: Independently validate exact keyboard CSS patch in restricted Docker worker
+        run: bash tools/enterprise/e3_factory/run_locked_worker.sh e39-apply
+      - name: Verify focused skip link visible after policy-approved synthetic patch
+        run: |
+          node tools/enterprise/e3_factory/e39_keyboard_browser.mjs after
+          python tools/enterprise/e3_factory/e39_keyboard_evaluator.py after
+      - name: Confirm original desktop scroll, 390px mobile and reduced-motion regressions
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_worker.py' -v
+          node tools/enterprise/e3_factory/browser_qa.mjs
+      - name: Independently assert real browser before/after receipts and isolation evidence
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=Path('target/e3-factory/e39')
+          before=json.loads((d/'browser-before.json').read_text())
+          after=json.loads((d/'browser-after.json').read_text())
+          receipt=json.loads((d/'receipt.json').read_text())
+          sandbox=json.loads(Path('target/e3-factory/sandbox-e39-apply.json').read_text())
+          assert before['passed'] is False
+          assert before['failureCode']=='E39_FOCUSED_SKIP_LINK_OFFSCREEN'
+          assert before['focusReached'] is True and before['visibleWhenFocused'] is False
+          assert before['geometry']['top'] < 0
+          assert after['passed'] is True and after['failureCode'] is None
+          assert after['focusReached'] is True and after['visibleWhenFocused'] is True
+          assert after['geometry']['top'] >= 0
+          assert receipt['modelWasCalled'] is False
+          assert receipt['ownerApproved'] is False and receipt['productionPublished'] is False
+          assert sandbox['network']=='none' and sandbox['readOnlyRootfs'] is True
+          assert sandbox['allCapabilitiesDropped'] is True
+          assert sandbox['cpuLimit']==1 and sandbox['memoryBytes']==268435456
+          assert sandbox['ownerPcUsed'] is False
+          qa=json.loads(Path('target/e3-factory/browser-evidence/qa-report.json').read_text())
+          assert qa['passed'] is True and qa['errors']==[]
+          print('E39_GENUINE_CHROMIUM_KEYBOARD_DEFECT_VERIFIED_FIXTURE_ONLY_NOT_AI')
+          PY
+      - name: Retain exact source hashes, keyboard screenshots, browser and Docker receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e39a-keyboard-new-defect-real-chromium-evidence
+          path: target/e3-factory/
+          retention-days: 14
+          if-no-files-found: warn
+
+  full-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  zero-model-zero-authority:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: No model execution, evaluator-oracle leak or release authorization
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          a=Path('tools/enterprise/e3_factory/e39_keyboard_patch_gate.py').read_text()
+          b=Path('tools/enterprise/e3_factory/run_locked_worker.sh').read_text()
+          c=Path('tools/enterprise/e3_factory/e38c_structured_inference.py').read_text()
+          for forbidden in ('subprocess','os.system','Popen(','curl ', 'import requests'):
+              assert forbidden not in a,forbidden
+          assert 'e39-apply)' in b and '--network none' in b
+          assert 'E39_CANONICAL_SOURCE_HASH_REJECTED' in a
+          assert '"modelWasCalled": False' in a
+          assert '"ownerApproved": False' in a
+          assert 'e39_keyboard_evaluator' not in c
+          assert 'keyboard-skip-link' not in c
+          assert not Path('tools/security/stage45_pre_pilot_gate.py').exists()
+          print('E39_NEW_BROWSER_TEST_CATEGORY_NO_LLM_NO_OWNER_NO_STAGE45_PRODUCTION')
+          PY
