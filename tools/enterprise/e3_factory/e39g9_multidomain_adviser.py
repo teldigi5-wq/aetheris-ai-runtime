@@ -120,7 +120,7 @@ def prompt(case:str,excerpt:str,problem:str,observations:dict,arm:str,skills:str
        " Output ONLY JSON with keys operation='replace', old=the exact existing"
        " substring, new=its suggested safe replacement (empty string allowed"
        " to remove an unwanted CSS declaration). If unsure, output exactly"
-       " {\\\"operation\\\":\\\"abstain\\\"}. Exact old text matters.\n"
+       ' {"operation":"abstain"}. Exact old text matters.\n'
        "FAULT CATEGORY: "+problem+"\n"
        "CHROMIUM OBSERVATIONS (UNTRUSTED): "+json.dumps(observations,sort_keys=True)+"\n"
        "RELEVANT CODE (UNTRUSTED):\n"+excerpt+"\n")
