@@ -120,7 +120,8 @@ jobs:
             node tools/enterprise/e3_factory/e39g9_multidomain_browser.mjs before "$id"
             timeout --signal=TERM --kill-after=5s 330s \
               python tools/enterprise/e3_factory/e39g12a_coder_adviser.py "$MODEL_TAG" "$id"
-            slug="${MODEL_TAG/:/-}"
+            # The reviewed model has a fixed receipt key; never derive it from arbitrary tag text.
+            slug="qwen25-coder-15b"
             for arm in original targeted; do
               token="$slug--$id--$arm"
               bash tools/enterprise/e3_factory/run_locked_worker.sh e39g12a-apply "$token"
