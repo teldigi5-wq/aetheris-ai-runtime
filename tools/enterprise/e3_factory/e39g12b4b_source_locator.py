@@ -16,9 +16,9 @@ import sys
 import zipfile
 
 HERE=Path(__file__).resolve().parent
-SOURCE_ZIP=HERE.parents[2]/"target"/"e3-factory"/"e39g12b"/"e39g12b2-proposer-broken-only.zip"
-# repo root: tools/enterprise/e3_factory -> parents[2] is repo root
-OUTPUT_ZIP=HERE.parents[2]/"target"/"e3-factory"/"e39g12b4b"/"broken-source-and-observed-declaration-windows.zip"
+SOURCE_ZIP=HERE.parents[3]/"target"/"e3-factory"/"e39g12b"/"e39g12b2-proposer-broken-only.zip"
+# repo root: tools/enterprise/e3_factory -> parents[3] is repo root
+OUTPUT_ZIP=HERE.parents[3]/"target"/"e3-factory"/"e39g12b4b"/"broken-source-and-observed-declaration-windows.zip"
 INPUTS=("proposer-manifest.json","sites/cityline/index.html","sites/studynest/index.html")
 OUTPUTS=("proposer-manifest.json","sites/cityline/index.html",
          "sites/studynest/index.html","observed-declarations.json")
