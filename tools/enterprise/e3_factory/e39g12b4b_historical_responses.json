@@ -1,0 +1,42 @@
+{
+  "evidenceClass": "E39G12B4B_READ_ONLY_REPLAY_OF_EXACT_HEAD_7B_ARTIFACT",
+  "sourcePullRequest": 174,
+  "sourceCommit": "2dfcf776f9a818c4f3bffb12366a19d5bbab7b4a",
+  "sourceWorkflowRun": 39527354798,
+  "sourceArtifactId": 12314135670,
+  "sourceArtifactProviderSha256": "58006670f03be6e2979762a65b5d61cbae7cb856f7036b7ff8468704f8d21402",
+  "rawProposalsJsonSha256": "7c5d1e3aa72d6c4bf742af90bb2dd6b5715235c4feaffa523bd1757ca1df67ae",
+  "modelTag": "qwen2.5-coder:7b",
+  "modelDigestSelfReported": "dae161e27b0e90dd1856c8bb3209201fd6736d8eb66298e75ed87571486f4364",
+  "replayModelCalls": 0,
+  "realHistoricalCompletions": 4,
+  "blindHeldOut": false,
+  "ownerApproved": false,
+  "productionPublished": false,
+  "trials": {
+    "cityline--reduced-motion": {
+      "rawModelResponse": "{\n  \"site\": \"cityline\",\n  \"fault\": \"reduced-motion\",\n  \"operation\": \"replace_one\",\n  \"old\": \".ticker{animation:floatline 4s linear infinite;}\",\n  \"new\": \".ticker{animation:none;}\",\n  \"sourceSha256\": \"40353c2d23a2bde49fddafbf0fdacb075bd5e16d9bf5d0f9df8a7d62f6064e50\"\n}",
+      "rawResponseSha256": "e2d894dc59d9bde3cfe037f3d2c975dbb04097c417b0f708fc197eb5cb28f82d",
+      "sourceSha256": "40353c2d23a2bde49fddafbf0fdacb075bd5e16d9bf5d0f9df8a7d62f6064e50",
+      "generatedTokens": 121
+    },
+    "cityline--safe-untrusted-text": {
+      "rawModelResponse": "{\n  \"site\": \"cityline\",\n  \"fault\": \"safe-untrusted-text\",\n  \"operation\": \"replace_one\",\n  \"old\": \"LIVE-FEEL DEMO · SYNTHETIC TIMETABLE\",\n  \"new\": \"Live Arrival Information\",\n  \"sourceSha256\": \"40353c2d23a2bde49fddafbf0fdacb075bd5e16d9bf5d0f9df8a7d62f6064e50\"\n}",
+      "rawResponseSha256": "1f80a0663ba7112126584ef772fa403278e346bff91673ce55e9a2909853c111",
+      "sourceSha256": "40353c2d23a2bde49fddafbf0fdacb075bd5e16d9bf5d0f9df8a7d62f6064e50",
+      "generatedTokens": 123
+    },
+    "studynest--keyboard-focus-visibility": {
+      "rawModelResponse": "{\n  \"site\": \"studynest\",\n  \"fault\": \"keyboard-focus-visibility\",\n  \"operation\": \"replace_one\",\n  \"old\": \"<a class=\\\"skip\\\" href=\\\"#main-content\\\">Skip to study plan</a>\",\n  \"new\": \"<a class=\\\"skip\\\" href=\\\"#main-content\\\" tabindex=\\\"0\\\">Skip to study plan</a>\",\n  \"sourceSha256\": \"114705feff3479eabafeeccdc57e3eedfa60a5f03d48f352ea6d9a644f762cf5\"\n}",
+      "rawResponseSha256": "d7a53cb31c5d28b59a6a2c4b6f124eae62920a4f8db558e0bb0020ab34fc9242",
+      "sourceSha256": "114705feff3479eabafeeccdc57e3eedfa60a5f03d48f352ea6d9a644f762cf5",
+      "generatedTokens": 139
+    },
+    "studynest--responsive-mobile-overflow": {
+      "rawModelResponse": "{\n  \"site\": \"studynest\",\n  \"fault\": \"responsive-mobile-overflow\",\n  \"operation\": \"replace_one\",\n  \"old\": \"min-width:960px;\",\n  \"new\": \"min-width:100%;\",\n  \"sourceSha256\": \"114705feff3479eabafeeccdc57e3eedfa60a5f03d48f352ea6d9a644f762cf5\"\n}",
+      "rawResponseSha256": "afee7581931de242c571a22ce1a9ae87a87c2e4b18227bd8a9f605cac2c2e00d",
+      "sourceSha256": "114705feff3479eabafeeccdc57e3eedfa60a5f03d48f352ea6d9a644f762cf5",
+      "generatedTokens": 117
+    }
+  }
+}
