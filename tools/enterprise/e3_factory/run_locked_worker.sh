@@ -66,6 +66,15 @@ case "$phase" in
     entry="e39e_model_policy.py"
     args=("${phase#e39e-}" "$2")
     ;;
+  e39g12b3-apply)
+    [[ $# -eq 2 ]] || exit 2
+    case "$2" in
+      studynest--keyboard-focus-visibility|studynest--responsive-mobile-overflow|cityline--reduced-motion|cityline--safe-untrusted-text) ;;
+      *) echo "E39G12B3_UNREVIEWED_SITE_FAULT" >&2; exit 2;;
+    esac
+    entry="e39g12b3_policy_worker.py"
+    args=("apply" "$2")
+    ;;
   e39g12b-seed)
     [[ $# -eq 1 ]] || exit 2
     entry="e39g12b_two_site_corpus.py"
@@ -134,7 +143,7 @@ case "$phase" in
   *) echo "E31_UNKNOWN_WORKER_PHASE" >&2; exit 2;;
 esac
 evidence_id="$phase"
-if [[ "$phase" == e32-* || "$phase" == e33-* || "$phase" == e34-* || "$phase" == e39d-* || "$phase" == e39e-* || "$phase" == e39f-* || "$phase" == e39g8-* || "$phase" == e39g9-* || "$phase" == e39g10-* || "$phase" == e39g11-* || "$phase" == e39g12a-* ]]; then evidence_id="$phase-$2"; fi
+if [[ "$phase" == e32-* || "$phase" == e33-* || "$phase" == e34-* || "$phase" == e39d-* || "$phase" == e39e-* || "$phase" == e39f-* || "$phase" == e39g8-* || "$phase" == e39g9-* || "$phase" == e39g10-* || "$phase" == e39g11-* || "$phase" == e39g12a-* || "$phase" == e39g12b3-* ]]; then evidence_id="$phase-$2"; fi
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 cd "$repo"
