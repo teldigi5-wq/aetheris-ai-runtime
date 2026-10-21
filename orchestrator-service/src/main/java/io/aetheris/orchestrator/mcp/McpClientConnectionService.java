@@ -27,19 +27,20 @@ public class McpClientConnectionService {
     private final InvocationAuditService audit;
     private final TaskControlService control;
     private final RestClient client;
-    private final Set<String> allowedLocalHosts;
+    private final McpEndpointPolicy endpointPolicy;
 
     public McpClientConnectionService(
             McpRegistryService registry,
             InvocationAuditService audit,
             TaskControlService control,
             RestClient.Builder builder,
-            @Value("${aetheris.mcp.allowed-local-hosts:localhost,127.0.0.1,::1,host.docker.internal}") String allowedLocalHosts) {
+            McpEndpointPolicy endpointPolicy) {
         this.registry = registry;
         this.audit = audit;
         this.control = control;
-        this.client = builder.build();
-        this.allowedLocalHosts = parseCsv(allowedLocalHosts);
+        this.client = builder.requestFactory(new org.springframework.http.client.JdkClientHttpRequestFactory(
+                java.net.http.HttpClient.newBuilder().followRedirects(java.net.http.HttpClient.Redirect.NEVER).build())).build();
+        this.endpointPolicy = endpointPolicy;
     }
 
     public McpDiscoveryResult discover(java.util.UUID serverId) {
@@ -100,46 +101,7 @@ public class McpClientConnectionService {
     }
 
     private URI validateEndpoint(McpServerEntity server) {
-        URI endpoint = URI.create(server.getEndpoint());
-        String scheme = endpoint.getScheme() == null ? "" : endpoint.getScheme().toLowerCase(Locale.ROOT);
-        String host = endpoint.getHost() == null ? "" : endpoint.getHost().toLowerCase(Locale.ROOT);
-        if (server.isLocal()) {
-            if (!(scheme.equals("http") || scheme.equals("https"))) throw new IllegalArgumentException("Local MCP HTTP endpoint must use http or https");
-            if (!allowedLocalHosts.contains(host)) throw new IllegalArgumentException("Local MCP host is not allowlisted: " + host);
-        } else if (!scheme.equals("https")) {
-            throw new IllegalArgumentException("Remote MCP endpoints must use HTTPS");
-        }
-        return endpoint;
-    }
-
-    private Set<String> readCapabilities(Map<?, ?> response) {
-        Object resultObject = response.get("result");
-        if (!(resultObject instanceof Map<?, ?> result)) return Set.of();
-        Object capabilitiesObject = result.get("capabilities");
-        if (!(capabilitiesObject instanceof Map<?, ?> capabilities)) return Set.of();
-        Set<String> names = new HashSet<>();
-        for (Object key : capabilities.keySet()) names.add(String.valueOf(key));
-        return names;
-    }
-
-    private List<String> readToolNames(Map<?, ?> response) {
-        Object resultObject = response.get("result");
-        if (!(resultObject instanceof Map<?, ?> result)) return List.of();
-        Object toolsObject = result.get("tools");
-        if (!(toolsObject instanceof List<?> rawTools)) return List.of();
-        List<String> names = new ArrayList<>();
-        for (Object rawTool : rawTools) {
-            if (rawTool instanceof Map<?, ?> tool && tool.get("name") != null) names.add(String.valueOf(tool.get("name")));
-        }
-        return names;
-    }
-
-    private Set<String> parseCsv(String csv) {
-        Set<String> values = new HashSet<>();
-        for (String value : csv.split(",")) {
-            if (!value.isBlank()) values.add(value.trim().toLowerCase(Locale.ROOT));
-        }
-        return Set.copyOf(values);
+        return endpointPolicy.requireAllowed(server.getEndpoint(), server.isLocal());
     }
 
     private String safeMessage(RuntimeException exception) {
