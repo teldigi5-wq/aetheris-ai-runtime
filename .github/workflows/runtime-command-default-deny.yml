@@ -1,0 +1,32 @@
+name: Runtime Host Command Default-Deny Boundary
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e39g12b4c-gstack-cinematic-readiness-20261021
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/execution/CommandSandboxService.java'
+      - 'orchestrator-service/src/main/resources/application.properties'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/CommandSandboxDefaultDenyTest.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/Stage4IntegrationTest.java'
+      - '.github/workflows/runtime-command-default-deny.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-head-command-execution-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Test full orchestrator with deny-by-default host command execution
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
