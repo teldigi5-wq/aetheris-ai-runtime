@@ -104,6 +104,28 @@ public class McpClientConnectionService {
         return endpointPolicy.requireAllowed(server.getEndpoint(), server.isLocal());
     }
 
+    private Set<String> readCapabilities(Map<?, ?> response) {
+        Object resultObject = response.get("result");
+        if (!(resultObject instanceof Map<?, ?> result)) return Set.of();
+        Object capabilitiesObject = result.get("capabilities");
+        if (!(capabilitiesObject instanceof Map<?, ?> capabilities)) return Set.of();
+        Set<String> names = new HashSet<>();
+        for (Object key : capabilities.keySet()) names.add(String.valueOf(key));
+        return names;
+    }
+
+    private List<String> readToolNames(Map<?, ?> response) {
+        Object resultObject = response.get("result");
+        if (!(resultObject instanceof Map<?, ?> result)) return List.of();
+        Object toolsObject = result.get("tools");
+        if (!(toolsObject instanceof List<?> rawTools)) return List.of();
+        List<String> names = new ArrayList<>();
+        for (Object rawTool : rawTools) {
+            if (rawTool instanceof Map<?, ?> tool && tool.get("name") != null) names.add(String.valueOf(tool.get("name")));
+        }
+        return names;
+    }
+
     private String safeMessage(RuntimeException exception) {
         return exception.getMessage() == null || exception.getMessage().isBlank()
                 ? exception.getClass().getSimpleName()
