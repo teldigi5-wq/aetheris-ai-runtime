@@ -66,6 +66,11 @@ case "$phase" in
     entry="e39e_model_policy.py"
     args=("${phase#e39e-}" "$2")
     ;;
+  e39g12b-seed)
+    [[ $# -eq 1 ]] || exit 2
+    entry="e39g12b_two_site_corpus.py"
+    args=("seed")
+    ;;
   e39g12a-apply|e39g12a-reset|e39g12a-done)
     [[ $# -eq 2 ]] || exit 2
     case "$2" in
