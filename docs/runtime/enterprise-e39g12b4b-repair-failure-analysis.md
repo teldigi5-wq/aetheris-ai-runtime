@@ -12,7 +12,7 @@ Actual observed problem: **4/4 proposals were well-formed six-field JSON, but ea
 |---|---|---|
 | StudyNest keyboard skip focus | Existing skip link HTML with newly proposed `tabindex=0` | **Unrelated source element:** CSS focused-link placement is offscreen |
 | StudyNest mobile grid overflow | `min-width:960px;` → `min-width:100%;` | **Partial declaration:** model did not select the entire existing reviewed CSS declaration |
-| CityLine reduced-motion ticker | `.ticker{animation:floatline 4s linear infinite;}` | **Ambiguous fragment:** this selector matches both global animation and the reduced-motion override; changing the global rule is not an equivalent fix |
+| CityLine reduced-motion ticker | `.ticker{animation:floatline 4s linear infinite;}` | **Partial media override:** missing the surrounding reduced-motion media-query wrapper; treating it as a global change would be unsafe |
 | CityLine unsafe input rendering | A synthetic-timetable heading | **Unrelated source text:** does not touch the dangerous HTML rendering sink |
 
 **Real history:** 4/4 valid JSON; 0/4 exact scoped source target; 0 policy-accepted source patches; 0 model after-Chromium viewports; 0 genuine model browser-verified repairs. No evidence here that 7B fixes these problems. Distinguishing parser and source-target failures does not demonstrate model semantic understanding. Where `new` looked plausible (reduced-motion global disabling and mobile width) it was still not within the reviewed source scope; never promote a partial source edit merely to increase success rate.
