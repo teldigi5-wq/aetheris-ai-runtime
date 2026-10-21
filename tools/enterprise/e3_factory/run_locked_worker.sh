@@ -66,6 +66,15 @@ case "$phase" in
     entry="e39e_model_policy.py"
     args=("${phase#e39e-}" "$2")
     ;;
+  e39g12a-apply|e39g12a-reset|e39g12a-done)
+    [[ $# -eq 2 ]] || exit 2
+    case "$2" in
+      qwen25-coder-15b--mobile-940--original|qwen25-coder-15b--mobile-940--targeted|qwen25-coder-15b--reduced-boolean--original|qwen25-coder-15b--reduced-boolean--targeted|qwen25-coder-15b--scroll-24--original|qwen25-coder-15b--scroll-24--targeted) ;;
+      *) echo "E39G12A_UNREVIEWED_CODING_MODEL_CASE_ARM" >&2; exit 2;;
+    esac
+    entry="e39g12a_coder_gate.py"
+    args=("${phase#e39g12a-}" "$2")
+    ;;
   e39g11-apply|e39g11-reset|e39g11-done)
     [[ $# -eq 2 ]] || exit 2
     case "$2" in
@@ -120,7 +129,7 @@ case "$phase" in
   *) echo "E31_UNKNOWN_WORKER_PHASE" >&2; exit 2;;
 esac
 evidence_id="$phase"
-if [[ "$phase" == e32-* || "$phase" == e33-* || "$phase" == e34-* || "$phase" == e39d-* || "$phase" == e39e-* || "$phase" == e39f-* || "$phase" == e39g8-* || "$phase" == e39g9-* || "$phase" == e39g10-* || "$phase" == e39g11-* ]]; then evidence_id="$phase-$2"; fi
+if [[ "$phase" == e32-* || "$phase" == e33-* || "$phase" == e34-* || "$phase" == e39d-* || "$phase" == e39e-* || "$phase" == e39f-* || "$phase" == e39g8-* || "$phase" == e39g9-* || "$phase" == e39g10-* || "$phase" == e39g11-* || "$phase" == e39g12a-* ]]; then evidence_id="$phase-$2"; fi
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 cd "$repo"
