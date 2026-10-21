@@ -37,7 +37,7 @@ jobs:
           python tools/enterprise/e39g3_validate_java_skill_manifest.py verify
       - name: Reject forged model proof, unsafe CSS and JavaScript, policy bypass
         run: |
-          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b4a_isolated_model.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b4a_sevenb_model.py' -v
           python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b2_isolation_policy.py' -v
           python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b_two_site_corpus.py' -v
 
