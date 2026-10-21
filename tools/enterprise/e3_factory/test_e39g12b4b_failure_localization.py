@@ -101,8 +101,11 @@ class Real7BFailureAuditTests(TestCase):
             for row in added["observations"].values():
                 self.assertIsNone(row["proposedReplacement"])
                 self.assertFalse(row["ownerApprovalGranted"])
+        extras=io.BytesIO()
+        with zipfile.ZipFile(extras,"w") as z:
+            z.writestr("unreviewed-golden-answer.txt","never pass to model")
         with self.assertRaisesRegex(ValueError,"E39G12B4B_UNEXPECTED_INPUT"):
-            locator.produce(b"PK"+b"broken")
+            locator.produce(extras.getvalue())
 
     def test_locator_contains_no_frozen_policy_or_model_network_code(self):
         locator_source=Path(locator.__file__).read_text()
