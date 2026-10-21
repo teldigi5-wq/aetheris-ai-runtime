@@ -156,14 +156,20 @@ if [[ "$phase" == e32-* || "$phase" == e33-* || "$phase" == e34-* || "$phase" ==
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd -P)"
 cd "$repo"
-mkdir -p target/e3-factory
+# Reject symlinked output roots before creating anything, then verify again.
 if [[ -L target || -L target/e3-factory ]]; then
   echo "E31_WORKSPACE_SYMLINK_REJECTED" >&2; exit 2
 fi
-if [[ "$(realpath target/e3-factory)" != "$repo/target/e3-factory" ]]; then
+mkdir -p target/e3-factory
+if [[ -L target || -L target/e3-factory ]] || \
+   [[ "$(realpath target/e3-factory)" != "$repo/target/e3-factory" ]]; then
   echo "E31_OUTPUT_SCOPE_REJECTED" >&2; exit 2
 fi
-image="python:3.12-slim-bookworm"
+# CI root creates root-owned artifacts and violates the expected nonroot boundary.
+if [[ "$(id -u)" -eq 0 || "$(id -g)" -eq 0 ]]; then
+  echo "E31_NONROOT_WORKER_REQUIRED" >&2; exit 2
+fi
+image_tag="python:3.12-slim-bookworm"
 cid=""
 inspection=""
 cleanup() {
@@ -172,11 +178,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Image download is a CI harness setup step, NOT performed inside the worker.
-# Pull with a reviewed workflow, then use this fixed local image.
-docker image inspect "$image" >/dev/null
+# Pull is only an explicit trusted CI setup step, never inside this worker.
+# Resolve the already present tag to an immutable image ID exactly once.
+# This prevents tag retargeting between inspect and container creation.
+image_id="$(docker image inspect --format '{{.Id}}' "$image_tag")"
+if [[ ! "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+  echo "E31_IMMUTABLE_IMAGE_ID_REQUIRED" >&2; exit 2
+fi
 cid="$(docker create \
-  --network none \
+  --network none --ipc none \
   --cpus 1 \
   --memory 256m --memory-swap 256m \
   --pids-limit 64 \
@@ -184,10 +194,10 @@ cid="$(docker create \
   --user "$(id -u):$(id -g)" \
   --tmpfs /tmp:rw,noexec,nosuid,size=16m \
   --mount "type=bind,src=$repo,dst=/workspace,readonly" \
-  --mount "type=bind,src=$repo/target,dst=/workspace/target" \
+  --mount "type=bind,src=$repo/target/e3-factory,dst=/workspace/target/e3-factory" \
   --workdir /workspace \
   -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONUNBUFFERED=1 \
-  "$image" python3 "/workspace/tools/enterprise/e3_factory/$entry" "${args[@]}")"
+  "$image_id" python3 "/workspace/tools/enterprise/e3_factory/$entry" "${args[@]}")"
 inspection="$(mktemp)"
 docker inspect "$cid" > "$inspection"
 python3 - "$inspection" "target/e3-factory/sandbox-$evidence_id.json" "$evidence_id" <<'PY'
@@ -197,20 +207,25 @@ container = json.loads(Path(sys.argv[1]).read_text())[0]
 host = container["HostConfig"]
 mounts = {m["Destination"]: m for m in container["Mounts"]}
 assert host["NetworkMode"] == "none"
+assert host["IpcMode"] == "none"
 assert host["ReadonlyRootfs"] is True
 assert host["Memory"] == 268435456 and host["MemorySwap"] == 268435456
 assert host["NanoCpus"] == 1000000000 and host["PidsLimit"] == 64
 assert "ALL" in host["CapDrop"]
 assert "no-new-privileges" in host["SecurityOpt"]
 assert mounts["/workspace"]["RW"] is False
-assert mounts["/workspace/target"]["RW"] is True
-assert all(m["Destination"] in {"/workspace", "/workspace/target"} for m in container["Mounts"])
+assert mounts["/workspace/target/e3-factory"]["RW"] is True
+assert all(m["Destination"] in {"/workspace", "/workspace/target/e3-factory"} for m in container["Mounts"])
+assert host["Privileged"] is False and host["PublishAllPorts"] is False
+assert container["Config"]["User"] not in ("", "0", "0:0", "root")
+assert container["Image"].startswith("sha256:")
 report = {
     "evidenceClass": "DOCKER_INSPECTED_DISPOSABLE_CI_WORKER",
-    "phase": sys.argv[3], "network": "none", "readOnlyRootfs": True,
+    "phase": sys.argv[3], "network": "none", "ipc": "none", "readOnlyRootfs": True,
     "cpuLimit": 1, "memoryBytes": 268435456, "pidsLimit": 64,
     "noNewPrivileges": True, "allCapabilitiesDropped": True,
-    "repositoryMount": "read-only", "targetMount": "read-write",
+    "repositoryMount": "read-only", "targetMount": "read-write:e3-factory-only",
+    "immutableLocalImageId": True, "nonRootWorker": True,
     "wallClockLimitSeconds": 45, "imageId": container["Image"],
     "ownerPcUsed": False, "productionDeployment": False,
     "ownerApprovalGranted": False
