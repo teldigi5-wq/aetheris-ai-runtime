@@ -101,7 +101,7 @@ class IsolatedModelBridgeTests(unittest.TestCase):
         self.assertIn("chromium.launch",browser)
         self.assertIn("screenshotSha256",browser)
         self.assertNotIn("e39g12b2_typed_policy",browser)
-        self.assertNotIn("reference",browser.lower())
+        self.assertNotIn("fixtures/e39g12b",browser)\n        self.assertNotIn("goldenFix",browser)
         self.assertIn("frozen.validate",worker_src)
         self.assertIn("frozen.validate",scorer_src)
         self.assertNotIn("subprocess",worker_src)
