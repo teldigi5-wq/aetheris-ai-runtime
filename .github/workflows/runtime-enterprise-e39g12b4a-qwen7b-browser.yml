@@ -133,7 +133,7 @@ jobs:
           assert cfg["PortBindings"]["11434/tcp"][0]["HostIp"]=="127.0.0.1"
           print("E39G12B4A_LOCAL_MODEL_4CPU_10G_LOOPBACK_NO_CAPABILITIES")
           PY
-      - name: Pull officially reviewed Apache 2.0 1.5B coding model
+      - name: Pull officially reviewed Apache 2.0 7B coding model
         run: |
           set -euo pipefail
           timeout --signal=TERM --kill-after=5s 900s docker exec e39g12b4a-ollama ollama pull "$REVIEWED_MODEL"
@@ -246,7 +246,7 @@ jobs:
           retention-days: 14
 
   independent-evaluator-AND-real-Chromium:
-    needs: [make-broken-only-input, genuine-local-coding-model-NO-CHECKOUT]
+    needs: [make-broken-only-input, genuine-7b-coding-model-NO-CHECKOUT]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -330,8 +330,8 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p=Path(".github/workflows/runtime-enterprise-e39g12b4a-isolated-model-repairs.yml").read_text()
-          model=p.split("  genuine-local-coding-model-NO-CHECKOUT:",1)[1].split("  independent-evaluator-AND-real-Chromium:",1)[0]
+          p=Path(".github/workflows/runtime-enterprise-e39g12b4a-qwen7b-browser.yml").read_text()
+          model=p.split("  genuine-7b-coding-model-NO-CHECKOUT:",1)[1].split("  independent-evaluator-AND-real-Chromium:",1)[0]
           assert "actions/checkout@" not in model.replace("# SECURITY BOUNDARY: absolutely NO actions/checkout here.","")
           assert "actions/download-artifact@" in model
           assert "referenceVariantsIncluded" in model
