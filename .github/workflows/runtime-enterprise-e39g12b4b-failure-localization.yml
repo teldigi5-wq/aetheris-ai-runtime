@@ -1,0 +1,210 @@
+name: Enterprise E3.9G-12B4B Real 7B Failure Replay and Source Localization
+
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e39g12b4a-qwen7b-browser-repair-20261021
+    paths:
+      - 'tools/enterprise/e3_factory/e39g12b4b_*'
+      - 'tools/enterprise/e3_factory/test_e39g12b4b_*'
+      - '.github/workflows/runtime-enterprise-e39g12b4b-failure-localization.yml'
+      - 'docs/runtime/enterprise-e39g12b4b-repair-failure-analysis.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cross-platform-evidence-and-negative-tests:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 22
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Pinned existing 14 governed skills and role allowlists
+        run: |
+          python tools/enterprise/skills_registry.py validate
+          python tools/enterprise/e39g2_scoped_skill_advice.py check
+          python tools/enterprise/e39g3_validate_java_skill_manifest.py verify
+      - name: Historical source hashes and adversarial source-locator tests
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b4b_failure_localization.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b2_isolation_policy.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b_two_site_corpus.py' -v
+      - name: Re-run exact Qwen7B raw reply taxonomy without live model or new source write
+        run: |
+          python tools/enterprise/e3_factory/e39g12b4b_failure_audit.py audit
+
+  produce-existing-only-context:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 23
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Seed the two original defective sites in pre-existing network-none worker
+        run: |
+          set -euo pipefail
+          docker pull python:3.12-slim-bookworm
+          bash tools/enterprise/e3_factory/run_locked_worker.sh e39g12b-seed
+      - name: Export reviewed B2 broken-only archive then add SOURCE observations, not answers
+        run: |
+          set -euo pipefail
+          python tools/enterprise/e3_factory/e39g12b2_proposer_bundle.py pack
+          python tools/enterprise/e3_factory/e39g12b4b_source_locator.py pack
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,zipfile,hashlib
+          root=Path("target/e3-factory/e39g12b4b")
+          name=root/"broken-source-and-observed-declaration-windows.zip"
+          with zipfile.ZipFile(name) as z:
+              assert sorted(z.namelist())==[
+                  "observed-declarations.json","proposer-manifest.json",
+                  "sites/cityline/index.html","sites/studynest/index.html"]
+              d=json.loads(z.read("observed-declarations.json"))
+              assert d["modelCalls"]==0 and d["replacementAnswersProvided"] is False
+              assert d["referenceInputsAvailable"] is False
+              assert len(d["observations"])==4
+              for row in d["observations"].values():
+                  original=z.read("sites/"+row["site"]+"/index.html")
+                  raw=row["existingSourceSpan"].encode()
+                  assert original.count(raw)==1
+                  assert hashlib.sha256(raw).hexdigest()==row["existingSpanSha256"]
+                  assert row["proposedReplacement"] is None
+          print("E39G12B4B_REVIEWED_FOUR_EXISTING_SOURCE_SPANS_NO_GOLD_NO_MODEL_CALLS")
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e39g12b4b-broken-only-observed-source-windows
+          path: target/e3-factory/e39g12b4b/broken-source-and-observed-declaration-windows.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  no-checkout-inspect-only-consumer:
+    needs: produce-existing-only-context
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # No checkout and no Ollama. Read ONLY the newly allowlisted four-member ZIP.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: e39g12b4b-broken-only-observed-source-windows
+          path: input/
+      - name: Verify model-visible artifact contains only source, spans and zero proposed answers
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import hashlib,json
+          assert not any(Path(p).exists() for p in (".git","tools","docs","skills"))
+          files=list(Path(".").rglob("*.zip"))
+          assert len(files)==1
+          with ZipFile(files[0]) as z:
+              assert sorted(z.namelist())==[
+                  "observed-declarations.json","proposer-manifest.json",
+                  "sites/cityline/index.html","sites/studynest/index.html"]
+              m=json.loads(z.read("proposer-manifest.json"))
+              windows=json.loads(z.read("observed-declarations.json"))
+              assert m["referenceVariantsIncluded"] is False
+              assert m["goldenReplacementIncluded"] is False
+              assert windows["replacementAnswersProvided"] is False
+              assert windows["referenceInputsAvailable"] is False
+              assert windows["modelCalls"]==0
+              assert len(windows["observations"])==4
+              for token,row in windows["observations"].items():
+                  source=z.read(f"sites/{row['site']}/index.html")
+                  span=row["existingSourceSpan"].encode()
+                  assert source.count(span)==1
+                  assert hashlib.sha256(span).hexdigest()==row["existingSpanSha256"]
+                  assert row["proposedReplacement"] is None
+                  assert row["ownerApprovalGranted"] is False
+          assert not list(Path(".").rglob("*reference*"))
+          print("E39G12B4B_NO_CHECKOUT_MODEL_VISIBLE_SOURCE_ONLY_NO_GOLD_NO_POLICY")
+          PY
+
+  unchanged-real-two-site-chromium-controls:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Materialize original certified browser controls
+        run: |
+          docker pull python:3.12-slim-bookworm
+          bash tools/enterprise/e3_factory/run_locked_worker.sh e39g12b-seed
+      - name: Real Playwright mobile and desktop broken/reference expected behavior
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+          node tools/enterprise/e3_factory/e39g12b_two_site_browser.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path("target/e3-factory/e39g12b/two-site-browser-summary.json")
+          d=json.loads(p.read_text())
+          assert (d["sites"],d["distinctFaultCategories"],d["realChromiumObservations"])==(2,4,8)
+          assert d["brokenVariantsThatFailedExpectedChecks"]==4
+          assert d["referenceVariantsThatPassedExpectedChecks"]==4
+          assert d["modelCalls"]==d["modelRepairsCredited"]==0
+          print("E39G12B4B_REAL_TWO_SITE_BASELINE_BEFORE_MODEL_CONTEXT_UNCHANGED")
+          PY
+
+  full-java-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+
+  reject-gold-model-execution-and-privilege:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Model can view source only, never gold, evaluator policy, or owner keys
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          folder=Path("tools/enterprise/e3_factory")
+          locator=(folder/"e39g12b4b_source_locator.py").read_text()
+          audit=(folder/"e39g12b4b_failure_audit.py").read_text()
+          policy=(folder/"e39g12b2_typed_policy.py").read_text()
+          workflow=Path(".github/workflows/runtime-enterprise-e39g12b4b-failure-localization.yml").read_text()
+          assert "import e39g12b2_typed_policy" not in locator
+          assert "import e39g12b_two_site_corpus" not in locator
+          assert "frozen.validate(parsed,source)" in audit
+          assert "def validate(proposal:Mapping,broken:bytes)->bytes:" in policy
+          for banned in ("local_json(","subprocess","requests","urllib","os.system("):
+              assert banned not in locator and banned not in audit
+          consumer=workflow.split("  no-checkout-inspect-only-consumer:",1)[1].split("  unchanged-real-two-site-chromium-controls:",1)[0]
+          assert "actions/checkout@" not in consumer
+          assert "actions/download-artifact@" in consumer
+          assert "proposedReplacement" in consumer
+          assert "referenceInputsAvailable" in consumer
+          assert "modelCalls" in consumer
+          print("E39G12B4B_NO_LIVE_INFERENCE_NO_OWNER_AUTH_NO_POLICY_BYPASS")
+          PY
