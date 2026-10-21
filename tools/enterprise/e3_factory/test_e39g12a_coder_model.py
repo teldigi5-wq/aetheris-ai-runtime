@@ -18,7 +18,7 @@ class ApacheCodingModelPilotTests(unittest.TestCase):
           return_value=({"models":[{"name":"qwen2.5-coder:1.5b",
                         "size":986_000_000,"digest":digest}]},2)):
             received=coder.candidate_metadata("qwen2.5-coder:1.5b")
-        self.assertEqual(received["selfReportedDigest"],digest)
+        self.assertEqual(received["ollamaSelfReportedDigest"],digest)
         self.assertEqual(received["declaredUpstreamLicense"],"Apache-2.0")
         self.assertIs(received["licenseAndModelIdentityCryptographicallyAttested"],False)
 
