@@ -7,6 +7,9 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.io.File;
+import java.util.Map;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -43,10 +46,7 @@ public class CommandSandboxService {
 
         Process process;
         try {
-            process = new ProcessBuilder(safeCommand)
-                    .directory(directory.toFile())
-                    .redirectErrorStream(true)
-                    .start();
+            process = createIsolatedProcess(safeCommand, directory).start();
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to start allowlisted command", exception);
         }
@@ -71,6 +71,58 @@ public class CommandSandboxService {
                 exitCode,
                 !finished,
                 output.toString());
+    }
+
+
+    // The orchestrator may hold API keys, model credentials, database passwords
+    // and worker control secrets. None may be inherited by a command subprocess.
+    // Restrict both inherited environment and PATH lookup, even for opted-in tools.
+    ProcessBuilder createIsolatedProcess(List<String> command, Path directory) {
+        ProcessBuilder builder = new ProcessBuilder(command)
+                .directory(directory.toFile())
+                .redirectErrorStream(true);
+        isolateChildEnvironment(builder.environment(), workspace.root());
+        return builder;
+    }
+
+    static void isolateChildEnvironment(Map<String, String> environment, Path workspaceRoot) {
+        String path = lookupEnvironment(environment, "PATH");
+        String pathExt = lookupEnvironment(environment, "PATHEXT");
+        String systemRoot = lookupEnvironment(environment, "SystemRoot");
+        String windir = lookupEnvironment(environment, "WINDIR");
+        environment.clear();
+
+        if (path != null && !path.isBlank()) {
+            StringBuilder safePath = new StringBuilder();
+            for (String component : path.split(java.util.regex.Pattern.quote(File.pathSeparator), -1)) {
+                if (component.isBlank()) continue; // Empty/relative entries can select the current working directory.
+                try {
+                    Path directory = Path.of(component);
+                    if (!directory.isAbsolute() || !Files.isDirectory(directory)) continue;
+                    // Strip workspace-controlled executable directories, including symlinks.
+                    if (directory.toRealPath().startsWith(workspaceRoot)) continue;
+                    if (!safePath.isEmpty()) safePath.append(File.pathSeparator);
+                    safePath.append(directory.toRealPath());
+                } catch (RuntimeException | IOException ignored) {
+                    // Invalid/unknown/unreadable lookup directories are not trusted.
+                }
+            }
+            if (!safePath.isEmpty()) environment.put("PATH", safePath.toString());
+        }
+        // Windows requires SystemRoot for reliable process creation; PATHEXT can
+        // be required for explicit operator-approved native commands.
+        if (File.separatorChar == '\\') {
+            if (systemRoot != null && !systemRoot.isBlank()) environment.put("SystemRoot", systemRoot);
+            if (windir != null && !windir.isBlank()) environment.put("WINDIR", windir);
+            if (pathExt != null && !pathExt.isBlank()) environment.put("PATHEXT", pathExt);
+        }
+    }
+
+    private static String lookupEnvironment(Map<String, String> environment, String name) {
+        for (Map.Entry<String, String> entry : environment.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(name)) return entry.getValue();
+        }
+        return null;
     }
 
     private List<String> normalizeCommand(List<String> command) {
