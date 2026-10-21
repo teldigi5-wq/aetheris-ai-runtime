@@ -7,6 +7,7 @@ on:
     paths:
       - 'tools/enterprise/e3_factory/e39g12b4b_*'
       - 'tools/enterprise/e3_factory/test_e39g12b4b_*'
+      - '.gitattributes'
       - '.github/workflows/runtime-enterprise-e39g12b4b-failure-localization.yml'
       - 'docs/runtime/enterprise-e39g12b4b-repair-failure-analysis.md'
   workflow_dispatch:
