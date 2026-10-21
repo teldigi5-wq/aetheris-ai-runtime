@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CityLine | Arrival Information</title>
+<style>
+:root{font-family:system-ui,sans-serif;background:#101e29;color:#f0f9fb;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0}header{padding:25px max(20px,5vw);background:#173547}
+nav{display:flex;gap:24px;align-items:center}nav a{color:#bdeefa}nav strong{margin-right:auto;color:white}
+main{max-width:1080px;padding:38px 20px 80px;margin:auto}
+h1{font-size:clamp(2rem,5vw,3.7rem);line-height:1.09;letter-spacing:-.04em}
+p{line-height:1.6;color:#c5d8e1}.panel{background:#1a3847;border:1px solid #3b6b7b;border-radius:22px;padding:24px;margin:24px 0}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}
+.arrival{padding:18px;border-radius:16px;background:#274756}.arrival strong{display:block;font-size:1.4rem}
+.ticker-clip{overflow:hidden;border-radius:12px;background:#214756;padding:14px;margin-bottom:14px}
+.ticker{width:max-content;animation:floatline 4s linear infinite;white-space:nowrap;letter-spacing:.035em}
+@keyframes floatline{from{transform:translateX(0)}to{transform:translateX(-45%)}}
+@media(prefers-reduced-motion:reduce){.ticker{animation:floatline 4s linear infinite;}}
+input{width:min(100%,400px);font:inherit;border-radius:12px;padding:14px;border:1px solid #749daa;background:#132d3a;color:white}
+#query-output{margin-top:12px;min-height:32px;overflow-wrap:anywhere}
+@media(max-width:650px){.grid{grid-template-columns:1fr}}
+</style></head><body>
+<header><nav aria-label="Main navigation"><strong>CityLine</strong><a href="#arrivals">Arrivals</a><a href="#search">Search</a></nav></header>
+<main><p>LIVE-FEEL DEMO · SYNTHETIC TIMETABLE</p><h1>Know your next connection.</h1>
+<p>All displayed arrivals are fictitious test data, not a live transport feed.</p>
+<section class="panel" id="arrivals" aria-label="Arrival boards"><div class="ticker-clip">
+<div class="ticker" id="service-ticker">CITYLINE · TEST ARRIVALS · CITYLINE · TEST ARRIVALS · CITYLINE · TEST ARRIVALS</div>
+</div><div class="grid">
+<div class="arrival"><strong>05</strong> North Loop · 8 min</div>
+<div class="arrival"><strong>18</strong> Harbour Link · 12 min</div>
+<div class="arrival"><strong>72</strong> South Shuttle · 17 min</div></div></section>
+<section class="panel" id="search"><h2>Search a station</h2>
+<label for="station">Station name</label><div><input id="station" autocomplete="off" value="Central Square"></div>
+<p id="query-output" aria-live="polite"></p></section></main>
+<script>
+const input=document.querySelector('#station');
+const output=document.querySelector('#query-output');
+const params=new URLSearchParams(location.search);
+const initial=params.get('q')||'Central Square';
+input.value=initial;
+function render(name){output.innerHTML = 'Station: '+name;}
+input.addEventListener('input',()=>render(input.value));
+render(initial);
+</script></body></html>
