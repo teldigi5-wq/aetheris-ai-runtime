@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StudyNest | Course Planner</title>
+<style>
+:root{color-scheme:light; font-family:system-ui,sans-serif; background:#f6f5fc;color:#25233c}
+*{box-sizing:border-box}body{margin:0}a{color:inherit}
+.skip{position:fixed;top:-200px;left:12px;z-index:30;background:white;color:#222;padding:12px 18px;border:3px solid #372b96}
+.skip:focus{top:-120px;}
+header{padding:22px max(20px,6vw);background:#26223f;color:#fff;display:flex;justify-content:space-between;gap:12px;align-items:center}
+header strong{font-size:1.1rem}header nav a{margin-left:14px;text-decoration:none}
+main{max-width:1100px;margin:auto;padding:32px 20px 80px}
+.eyebrow{font-weight:700;color:#6458a8;text-transform:uppercase;letter-spacing:.11em;font-size:.78rem}
+h1{font-size:clamp(2rem,5vw,3.3rem);letter-spacing:-.045em}
+.lede{max-width:62ch;line-height:1.55;color:#5c5771}
+.schedule-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:28px}
+article{background:#fff;border-radius:18px;padding:24px;box-shadow:0 4px 18px #30235a12;min-height:205px}
+article h2{font-size:1.15rem}article p{line-height:1.5;color:#575269}
+article small{font-weight:750;color:#5741a2}
+footer{padding:18px 20px;text-align:center;color:#726a83}
+@media(max-width:680px){header{display:block}header nav{margin-top:10px}.schedule-grid{grid-template-columns:1fr;min-width:960px;}}
+</style></head><body>
+<a class="skip" href="#main-content">Skip to study plan</a>
+<header><strong>StudyNest</strong><nav aria-label="Main navigation"><a href="#main-content">Planner</a><a href="#upcoming">Exams</a></nav></header>
+<main id="main-content" tabindex="-1"><div class="eyebrow">Student workspace</div>
+<h1>A clearer plan for every class.</h1><p class="lede">Review today's lectures, prepare for upcoming exams, and keep your study goals visible without distractions.</p>
+<section id="upcoming" aria-label="Weekly study schedule" class="schedule-grid">
+<article><small>MONDAY · 09:00</small><h2>Programming Foundations</h2><p>Arrays, methods, and lab preparation. Bring your Java notes.</p></article>
+<article><small>WEDNESDAY · 13:00</small><h2>Networking Essentials</h2><p>IP addressing workshop, with a short quiz at the end.</p></article>
+<article><small>FRIDAY · 11:00</small><h2>Design Principles</h2><p>Wireframe critique and accessible component review.</p></article>
+</section></main><footer>StudyNest · Disposable research website</footer></body></html>
