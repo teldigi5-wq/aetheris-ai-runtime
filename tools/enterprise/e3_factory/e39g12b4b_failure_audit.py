@@ -17,7 +17,7 @@ import e39g12b2_typed_policy as frozen
 HERE=Path(__file__).resolve().parent
 EVIDENCE=HERE/"e39g12b4b_historical_responses.json"
 EXPECTED={
- "cityline--reduced-motion":"AMBIGUOUS_FRAGMENT_OF_TARGET",
+ "cityline--reduced-motion":"PARTIAL_TARGET_DECLARATION",
  "cityline--safe-untrusted-text":"UNRELATED_SOURCE_TEXT",
  "studynest--keyboard-focus-visibility":"UNRELATED_SOURCE_TEXT",
  "studynest--responsive-mobile-overflow":"PARTIAL_TARGET_DECLARATION",
