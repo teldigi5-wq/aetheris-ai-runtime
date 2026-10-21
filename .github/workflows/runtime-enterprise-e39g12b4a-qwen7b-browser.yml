@@ -8,8 +8,8 @@ on:
       - 'tools/enterprise/e3_factory/e39g12b4a_*'
       - 'tools/enterprise/e3_factory/test_e39g12b4a_*'
       - 'tools/enterprise/e3_factory/run_locked_worker.sh'
-      - '.github/workflows/runtime-enterprise-e39g12b4a-isolated-model-repairs.yml'
-      - 'docs/runtime/enterprise-e39g12b4a-real-model-two-site.md'
+      - '.github/workflows/runtime-enterprise-e39g12b4a-qwen7b-browser.yml'
+      - 'docs/runtime/enterprise-e39g12b4a-qwen7b-pilot.md'
   workflow_dispatch:
 
 permissions:
