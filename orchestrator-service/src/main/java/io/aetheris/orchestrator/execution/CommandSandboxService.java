@@ -25,7 +25,7 @@ public class CommandSandboxService {
 
     public CommandSandboxService(
             WorkspaceSandboxService workspace,
-            @Value("${aetheris.execution.allowed-commands:git,mvn,npm,node,java,javac}") String allowedCommands,
+            @Value("${aetheris.execution.allowed-commands:}") String allowedCommands,
             @Value("${aetheris.execution.command-timeout-seconds:30}") long timeoutSeconds,
             @Value("${aetheris.execution.max-command-output-chars:12000}") int maxOutputChars) {
         this.workspace = workspace;
@@ -80,7 +80,13 @@ public class CommandSandboxService {
             if (part == null) throw new IllegalArgumentException("Command arguments cannot be null");
             normalized.add(part);
         }
-        String executable = Path.of(normalized.getFirst()).getFileName().toString().toLowerCase(Locale.ROOT);
+        String requested = normalized.getFirst();
+        // Reject path-based executable impersonation, including Windows separators on Linux.
+        // This is a host process launcher, not an OS sandbox: default is no executable.
+        if (requested.isBlank() || !requested.matches("[A-Za-z0-9][A-Za-z0-9._-]*")) {
+            throw new IllegalArgumentException("Command executable must be an unqualified allowlisted name");
+        }
+        String executable = requested.toLowerCase(Locale.ROOT);
         if (executable.endsWith(".exe")) executable = executable.substring(0, executable.length() - 4);
         if (!allowedCommands.contains(executable)) {
             throw new IllegalArgumentException("Command is not allowlisted: " + executable);
