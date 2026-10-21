@@ -1,0 +1,4 @@
+# Exact-byte reproducibility for the two public benchmark fixtures on Windows and Linux.
+# Do not silently CRLF-convert HTML that is bound into historical model receipts.
+tools/enterprise/e3_factory/fixtures/e39g12b/studynest/index.html text eol=lf
+tools/enterprise/e3_factory/fixtures/e39g12b/cityline/index.html text eol=lf
