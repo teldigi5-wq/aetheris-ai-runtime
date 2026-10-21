@@ -51,16 +51,20 @@ public class CommandSandboxService {
             throw new IllegalStateException("Unable to start allowlisted command", exception);
         }
 
-        StringBuilder output = new StringBuilder();
+        StringBuffer output = new StringBuffer();
         Thread reader = Thread.ofVirtual().name("aetheris-command-output").start(() -> drain(process, output));
         boolean finished;
         try {
             finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
-            if (!finished) process.destroyForcibly();
+            if (!finished) {
+                terminateProcessTree(process);
+                // Give the OS a bounded opportunity to reap the killed parent.
+                process.waitFor(1500, TimeUnit.MILLISECONDS);
+            }
             reader.join(2000);
         } catch (InterruptedException exception) {
+            terminateProcessTree(process);
             Thread.currentThread().interrupt();
-            process.destroyForcibly();
             throw new IllegalStateException("Command execution interrupted", exception);
         }
 
@@ -146,7 +150,30 @@ public class CommandSandboxService {
         return List.copyOf(normalized);
     }
 
-    private void drain(Process process, StringBuilder output) {
+    /**
+     * Best-effort termination for the observed process tree. A privileged OS-isolated
+     * worker is still necessary: detached children and concurrently spawned new
+     * descendants may escape a userspace ProcessHandle snapshot.
+     */
+    static void terminateProcessTree(Process process) {
+        List<ProcessHandle> children;
+        try (java.util.stream.Stream<ProcessHandle> discovered = process.toHandle().descendants()) {
+            children = discovered.toList();
+        } catch (RuntimeException exception) {
+            children = List.of(); // Still terminate the direct process on enumeration failure.
+        }
+        process.destroyForcibly(); // Prevent the original process from launching more children.
+        for (ProcessHandle child : children) {
+            try {
+                if (child.isAlive()) child.destroyForcibly();
+            } catch (RuntimeException ignored) {
+                // OS controls and process exit races can prevent terminating a descendant.
+                // A container/VM-level PID namespace and cgroup remain the release gate.
+            }
+        }
+    }
+
+    private void drain(Process process, StringBuffer output) {
         try (BufferedReader reader = process.inputReader(StandardCharsets.UTF_8)) {
             String line;
             while ((line = reader.readLine()) != null) {

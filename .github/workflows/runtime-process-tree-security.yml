@@ -1,0 +1,27 @@
+name: Runtime Process Tree Cancellation Security
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e39g12b4c-gstack-cinematic-readiness-20261021
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/execution/CommandSandboxService.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/execution/CommandProcessTreeTerminationTest.java'
+      - '.github/workflows/runtime-process-tree-security.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-orchestrator-and-process-tree-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Verify timed-out descendants and full orchestrator regression
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
