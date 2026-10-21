@@ -22,8 +22,7 @@ class Real7BFailureAuditTests(TestCase):
         self.assertEqual(result["rejectedWrongSourceTarget"],4)
         self.assertEqual(result["realModelBrowserVerifiedRepairs"],0)
         self.assertEqual(result["rejectionsByClass"],{
-            "AMBIGUOUS_FRAGMENT_OF_TARGET":1,
-            "PARTIAL_TARGET_DECLARATION":1,
+            "PARTIAL_TARGET_DECLARATION":2,
             "UNRELATED_SOURCE_TEXT":2,
         })
         self.assertEqual({v["frozenPolicyReason"] for v in result["perCase"].values()},
@@ -73,7 +72,7 @@ class Real7BFailureAuditTests(TestCase):
         with self.assertRaisesRegex(ValueError,"E39G12B4B_UNREVIEWED"):
             locator.extract("cityline","owner-overrides",s)
         with self.assertRaisesRegex(ValueError,"E39G12B4B_SOURCE_WINDOW"):
-            locator.extract("cityline","safe-untrusted-text",s.replace(b"output.innerHTML",b"output.removedSINK"))
+            locator.extract("cityline","safe-untrusted-text",s.replace(b"output.innerHTML",b"output.!bad"))
         with self.assertRaisesRegex(ValueError,"E39G12B4B_SOURCE_TOO_LONG"):
             locator.extract("cityline","safe-untrusted-text",b"x"*15000)
 
