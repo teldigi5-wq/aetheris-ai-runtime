@@ -1,0 +1,77 @@
+name: Enterprise CI Worker Scope and Immutable Image Proof
+on:
+  pull_request:
+    branches:
+      - feature/enterprise-e39g12b4c-gstack-cinematic-readiness-20261021
+    paths:
+      - 'tools/enterprise/e3_factory/run_locked_worker.sh'
+      - 'tools/security/test_ci_worker_mount_policy.py'
+      - '.github/workflows/runtime-ci-worker-scope-security.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-policy-cross-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Reject broad output mounts and mutable image references
+        run: python -m unittest discover -s tools/security -p 'test_ci_worker_mount_policy.py' -v
+
+  real-docker-worker-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Pull reviewed CI-only interpreter image outside unnetworked worker
+        run: docker pull python:3.12-slim-bookworm
+      - name: Execute deterministic website factory in isolated nonroot container
+        run: bash tools/enterprise/e3_factory/run_locked_worker.sh build
+      - name: Verify actual Docker-inspected worker policy and generated artifacts
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root=Path("target/e3-factory")
+          report=json.loads((root/"sandbox-build.json").read_text())
+          assert report["evidenceClass"]=="DOCKER_INSPECTED_DISPOSABLE_CI_WORKER"
+          assert report["network"]=="none" and report["ipc"]=="none"
+          assert report["readOnlyRootfs"] is True
+          assert report["memoryBytes"]==268435456 and report["pidsLimit"]==64
+          assert report["allCapabilitiesDropped"] and report["noNewPrivileges"]
+          assert report["nonRootWorker"] and report["immutableLocalImageId"]
+          assert report["repositoryMount"]=="read-only"
+          assert report["targetMount"]=="read-write:e3-factory-only"
+          assert report["ownerPcUsed"] is False and report["productionDeployment"] is False
+          site=root/"site"
+          manifest=json.loads((site/"manifest.json").read_text())
+          assert manifest["productionPublished"] is False
+          assert manifest["realOwnerApprovalGranted"] is False
+          for line in (site/"SHA256SUMS").read_text().splitlines():
+              digest, name=line.split("  ")
+              assert hashlib.sha256((site/name).read_bytes()).hexdigest()==digest
+          print("E3_ISOLATED_CI_WORKER_INSPECTED_IMMUTABLE_IMAGE_AND_OUTPUT_SCOPE")
+          PY
+      - name: Upload metadata and deterministic smoke evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e3-isolated-worker-scope-security-evidence
+          path: target/e3-factory/
+          if-no-files-found: warn
+          retention-days: 14

@@ -10,8 +10,8 @@ on open draft PRs only supports limited source-and-test assertions.
 
 | Gate | Acceptance criterion for closure | Current status |
 | --- | --- | --- |
-| 1. Security PR integration | Review stacked source, reconcile conflicts, carry forward passing tests and preserve protected-main governance | OPEN: Platform PRs #234–#236; Runtime #178–#183 |
-| 2. Isolation and egress | Real unprivileged dedicated worker, network-none by default, read-only production mounts, cgroup/PID limits, SSRF/DNS and proxy policy verified | OPEN: host command and MCP restrictions are preliminary only |
+| 1. Security PR integration | Review stacked source, reconcile conflicts, carry forward passing tests and preserve protected-main governance | OPEN: Platform PRs #234–#236; Runtime #178–#184 |
+| 2. Isolation and egress | Real unprivileged dedicated worker, network-none by default, read-only production mounts, cgroup/PID limits, SSRF/DNS and proxy policy verified | OPEN: CI-only Docker worker scope hardened in draft #184; production worker, SSRF and egress still unverified |
 | 3. Principal and action authorization | Per-user identity, JWT/session lifecycle, agent tool approval, owner task binding and negative tests | OPEN: multiple draft security PRs and end-to-end tests needed |
 | 4. Secrets and state migrations | Real operator-generated secrets, non-destructive DB migration/rotation, backup and restore verified | OPEN: local production secrets and real data validation pending |
 | 5. Agent runtime reliability | Durable task recovery, emergency stop, audit, idempotency, bounded worker restarts and rollback in real integration | OPEN |
