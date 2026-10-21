@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "mode": "read-only-external-pattern-index",
+  "upstream": "https://github.com/garrytan/gstack",
+  "upstreamCommit": "b616d6c53dd8fc0d8db210444b44a131b553b83e",
+  "license": "MIT",
+  "credit": "Copyright (c) 2026 Garry Tan; Aetheris implementation is original, upstream files NOT vendored",
+  "reviewDate": "2026-10-21",
+  "reviewedMainTreeItems": 4249,
+  "branchListingCount": 536,
+  "branchSamplingScope": "main source plus branch names across 6 paginated API pages; no full diff review of each branch; unstable development branches are not trust anchors",
+  "branchesSampled": [
+    "garrytan/browserharness",
+    "garrytan/design",
+    "garrytan/design-shotgun-security-audit",
+    "garrytan/security-wave-5",
+    "capy/qa-only-readonly-optin",
+    "garrytan/gstack-fix-wave"
+  ],
+  "allSkillsReadOnly": true,
+  "autoActivate": false,
+  "toolExecutionGranted": false,
+  "modelPermissionsGranted": false,
+  "ownerApprovalGranted": false,
+  "productionDeploymentGranted": false,
+  "stage45Go": false,
+  "unsafeIntegrationRejected": [
+    "run gstack setup or install scripts automatically",
+    "execute upstream Claude Code hooks/Bash/PowerShell",
+    "copy browser daemon or reuse its tokens/cookies",
+    "allow unrestricted playwright/eval on actual user sessions",
+    "telemetry, login, deployment or GitHub merge by imported skill",
+    "auto-read secrets or scan unauthorized third party targets",
+    "treat a development branch as independently released"
+  ],
+  "patterns": [
+    {
+      "path": "design-consultation/SKILL.md",
+      "upstreamBlobSha1": "b6ae934f120916e787548fa5657c691219bc180d",
+      "pattern": "design-system",
+      "phase": "visual-brief",
+      "mode": "read-only-pattern-reference",
+      "autoActivate": false,
+      "executionAllowed": false
+    },
+    {
+      "path": "plan-design-review/SKILL.md",
+      "upstreamBlobSha1": "8ab0c3fd8d7d7acf42ec836510f5ff7f04dbd595",
+      "pattern": "design-plan",
+      "phase": "visual-brief",
+      "mode": "read-only-pattern-reference",
+      "autoActivate": false,
+      "executionAllowed": false
+    },
+    {
+      "path": "design-shotgun/SKILL.md",
+      "upstreamBlobSha1": "3287bb48defc0a81ff313599b2adcb9b86ef7367",
+      "pattern": "variant-comparison",
+      "phase": "visual-brief",
+      "mode": "read-only-pattern-reference",
+      "autoActivate": false,
+      "executionAllowed": false
+    },
+    {
+      "path": "plan-eng-review/SKILL.md",
+      "upstreamBlobSha1": "1dd4d34c4cd13f26a85fba363e4ae9a3ee77f6cc",
+      "pattern": "technical-review",
+      "phase": "architecture",
+      "mode": "read-only-pattern-reference",
+      "autoActivate": false,
+      "executionAllowed": false
+    },
+    {
+      "path": "design-review/SKILL.md",
+      "upstreamBlobSha1": "42e10d81dde7cdcbbab719553fabb7dc0f905a6d",
+      "pattern": "visual-audit",
+      "phase": "browser-qa",
+      "mode": "read-only-pattern-reference",
+      "autoActivate": false,
+      "executionAllowed": false
+    },
+    {
+      "path": "qa/SKILL.md",
+      "upstreamBlobSha1": "5d4bd506b6a837e49790929cccb13ee31b1742f6",
+      "pattern": "browser-functional-qa",
+      "phase": "browser-qa",
+      "mode": "read-only-pattern-reference",
+      "autoActivate": false,
+      "executionAllowed": false
+    },
+    {
+      "path": "review/SKILL.md",
+      "upstreamBlobSha1": "f319f1669c558f963d9c993ae9c77e209eee9e2e",
+      "pattern": "pre-merge-review",
+      "phase": "code-review",
+      "mode": "read-only-pattern-reference",
+      "autoActivate": false,
+      "executionAllowed": false
+    },
+    {
+      "path": "guard/SKILL.md",
+      "upstreamBlobSha1": "ef4b7bd7990e736aeb6e9d178f80427a18666766",
+      "pattern": "destructive-command-guard",
+      "phase": "safety",
+      "mode": "read-only-pattern-reference",
+      "autoActivate": false,
+      "executionAllowed": false
+    },
+    {
+      "path": "freeze/SKILL.md",
+      "upstreamBlobSha1": "02f85237be01521745afc822672dd6041d19d8c4",
+      "pattern": "write-scope-freeze",
+      "phase": "safety",
+      "mode": "read-only-pattern-reference",
+      "autoActivate": false,
+      "executionAllowed": false
+    },
+    {
+      "path": "careful/SKILL.md",
+      "upstreamBlobSha1": "bf5aaca88c8fd4d49bf30739a8639afbf6e71995",
+      "pattern": "destructive-command-review",
+      "phase": "safety",
+      "mode": "read-only-pattern-reference",
+      "autoActivate": false,
+      "executionAllowed": false
+    },
+    {
+      "path": "browse/src/browser-skills.ts",
+      "upstreamBlobSha1": "009d3ea98aa7d16611134eac71464c48d7f37968",
+      "pattern": "deterministic-browser-fixture",
+      "phase": "browser-qa",
+      "mode": "read-only-pattern-reference",
+      "autoActivate": false,
+      "executionAllowed": false
+    },
+    {
+      "path": "docs/designs/BROWSER_SKILLS_V1.md",
+      "upstreamBlobSha1": "aca82c00b93dd676c5bb9160033c67a2cad53bc4",
+      "pattern": "browser-skill-capability-boundary",
+      "phase": "safety",
+      "mode": "read-only-pattern-reference",
+      "autoActivate": false,
+      "executionAllowed": false
+    }
+  ]
+}
