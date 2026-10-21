@@ -33,7 +33,7 @@ public class McpToolInvocationService {
     private final TaskControlService control;
     private final InvocationAuditService audit;
     private final RestClient client;
-    private final Set<String> allowedLocalHosts;
+    private final McpEndpointPolicy endpointPolicy;
 
     public McpToolInvocationService(
             McpRegistryService registry,
@@ -44,7 +44,7 @@ public class McpToolInvocationService {
             TaskControlService control,
             InvocationAuditService audit,
             RestClient.Builder builder,
-            @Value("${aetheris.mcp.allowed-local-hosts:localhost,127.0.0.1,::1,host.docker.internal}") String allowedLocalHosts) {
+            McpEndpointPolicy endpointPolicy) {
         this.registry = registry;
         this.grants = grants;
         this.agents = agents;
@@ -52,8 +52,9 @@ public class McpToolInvocationService {
         this.authority = authority;
         this.control = control;
         this.audit = audit;
-        this.client = builder.build();
-        this.allowedLocalHosts = parseCsv(allowedLocalHosts);
+        this.client = builder.requestFactory(new org.springframework.http.client.JdkClientHttpRequestFactory(
+                java.net.http.HttpClient.newBuilder().followRedirects(java.net.http.HttpClient.Redirect.NEVER).build())).build();
+        this.endpointPolicy = endpointPolicy;
     }
 
     public McpToolInvocationResult invoke(McpToolInvocationRequest request) {
@@ -179,23 +180,7 @@ public class McpToolInvocationService {
     }
 
     private URI validateEndpoint(McpServerEntity server) {
-        URI endpoint = URI.create(server.getEndpoint());
-        String scheme = endpoint.getScheme() == null ? "" : endpoint.getScheme().toLowerCase(Locale.ROOT);
-        String host = endpoint.getHost() == null ? "" : endpoint.getHost().toLowerCase(Locale.ROOT);
-        if (server.isLocal()) {
-            if (!(scheme.equals("http") || scheme.equals("https"))) throw new IllegalArgumentException("Local MCP endpoint must use http or https");
-            if (!allowedLocalHosts.contains(host)) throw new IllegalArgumentException("Local MCP host is not allowlisted: " + host);
-        } else if (!scheme.equals("https")) {
-            throw new IllegalArgumentException("Remote MCP endpoints must use HTTPS");
-        }
-        return endpoint;
-    }
-
-    private Set<String> parseCsv(String csv) {
-        Set<String> values = new HashSet<>();
-        if (csv == null) return Set.of();
-        for (String value : csv.split(",")) if (!value.isBlank()) values.add(value.trim().toLowerCase(Locale.ROOT));
-        return Set.copyOf(values);
+        return endpointPolicy.requireAllowed(server.getEndpoint(), server.isLocal());
     }
 
     private String safeMessage(RuntimeException exception) {
