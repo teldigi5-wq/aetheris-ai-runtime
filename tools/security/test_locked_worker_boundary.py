@@ -73,6 +73,18 @@ class DockerWorkerBoundaryTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "E3_WORKER_INSPECTION_"):
                     validate_inspection(mock)
 
+    def test_accepts_expected_nonsecret_python_base_image_environment(self):
+        mock = specimen()
+        mock["Config"]["Env"].extend([
+            "PATH=/usr/local/bin:/usr/bin", "LANG=C.UTF-8",
+            "GPG_KEY=public-fingerprint", "PYTHON_VERSION=3.12.12",
+            "PYTHON_SHA256=public-source-digest",
+        ])
+        validate_inspection(mock)
+        mock["Config"]["Env"].append("PATH=/tmp/other")
+        with self.assertRaisesRegex(ValueError, "UNREVIEWED_WORKER_ENVIRONMENT"):
+            validate_inspection(mock)
+
     def test_denies_root_or_env_inheritance(self):
         for user in ("", "0:0", "0:127", "1001:0", "root"):
             mock = specimen()

@@ -48,8 +48,24 @@ def validate_inspection(container: Mapping) -> None:
     require(bool(re.fullmatch(r"[1-9][0-9]*:[1-9][0-9]*", cfg.get("User", ""))),
             "ROOT_OR_UNSPECIFIED_USER")
     env = cfg.get("Env")
-    require(isinstance(env, list)
-            and set(env) == {"PYTHONDONTWRITEBYTECODE=1", "PYTHONUNBUFFERED=1"},
+    require(isinstance(env, list), "UNREVIEWED_WORKER_ENVIRONMENT")
+    # Docker images supply their own baseline values; Docker --env passes only
+    # our two explicit flags. Permit known public Python base-image metadata,
+    # but never inherit app secrets, startup hooks, proxies or script injection.
+    approved_keys = {
+        "PATH", "LANG", "GPG_KEY", "PYTHON_VERSION", "PYTHON_SHA256",
+        "PYTHON_PIP_VERSION", "PYTHON_SETUPTOOLS_VERSION",
+        "PYTHONDONTWRITEBYTECODE", "PYTHONUNBUFFERED",
+    }
+    parsed = {}
+    for item in env:
+        require(isinstance(item, str) and "=" in item, "UNREVIEWED_WORKER_ENVIRONMENT")
+        key, value = item.split("=", 1)
+        require(key in approved_keys and key not in parsed,
+                "UNREVIEWED_WORKER_ENVIRONMENT")
+        parsed[key] = value
+    require(parsed.get("PYTHONDONTWRITEBYTECODE") == "1"
+            and parsed.get("PYTHONUNBUFFERED") == "1",
             "UNREVIEWED_WORKER_ENVIRONMENT")
     tmpfs = (host.get("Tmpfs") or {}).get("/tmp", "")
     require(all(flag in tmpfs.split(",") for flag in ("rw", "noexec", "nosuid", "size=16m")),
