@@ -184,7 +184,7 @@ cid="$(docker create \
   --user "$(id -u):$(id -g)" \
   --tmpfs /tmp:rw,noexec,nosuid,size=16m \
   --mount "type=bind,src=$repo,dst=/workspace,readonly" \
-  --mount "type=bind,src=$repo/target,dst=/workspace/target" \
+  --mount "type=bind,src=$repo/target/e3-factory,dst=/workspace/target/e3-factory" \
   --workdir /workspace \
   -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONUNBUFFERED=1 \
   "$image" python3 "/workspace/tools/enterprise/e3_factory/$entry" "${args[@]}")"
@@ -194,23 +194,14 @@ python3 - "$inspection" "target/e3-factory/sandbox-$evidence_id.json" "$evidence
 import json, sys
 from pathlib import Path
 container = json.loads(Path(sys.argv[1]).read_text())[0]
-host = container["HostConfig"]
-mounts = {m["Destination"]: m for m in container["Mounts"]}
-assert host["NetworkMode"] == "none"
-assert host["ReadonlyRootfs"] is True
-assert host["Memory"] == 268435456 and host["MemorySwap"] == 268435456
-assert host["NanoCpus"] == 1000000000 and host["PidsLimit"] == 64
-assert "ALL" in host["CapDrop"]
-assert "no-new-privileges" in host["SecurityOpt"]
-assert mounts["/workspace"]["RW"] is False
-assert mounts["/workspace/target"]["RW"] is True
-assert all(m["Destination"] in {"/workspace", "/workspace/target"} for m in container["Mounts"])
+from tools.security.locked_worker_inspection import validate_inspection
+validate_inspection(container)
 report = {
     "evidenceClass": "DOCKER_INSPECTED_DISPOSABLE_CI_WORKER",
     "phase": sys.argv[3], "network": "none", "readOnlyRootfs": True,
     "cpuLimit": 1, "memoryBytes": 268435456, "pidsLimit": 64,
     "noNewPrivileges": True, "allCapabilitiesDropped": True,
-    "repositoryMount": "read-only", "targetMount": "read-write",
+    "repositoryMount": "read-only", "targetMount": "e3-factory-only-read-write",
     "wallClockLimitSeconds": 45, "imageId": container["Image"],
     "ownerPcUsed": False, "productionDeployment": False,
     "ownerApprovalGranted": False
