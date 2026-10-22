@@ -1,0 +1,27 @@
+name: MCP Outbound Host Boundary
+on:
+  pull_request:
+    branches: [feature/enterprise-e39g12b4c-gstack-cinematic-readiness-20261021]
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/mcp/**'
+      - 'orchestrator-service/src/main/resources/application.properties'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/McpEndpointPolicyTest.java'
+      - '.github/workflows/mcp-outbound-security.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mcp-policy-and-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Exact revision test of MCP URL policy and full orchestrator
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
