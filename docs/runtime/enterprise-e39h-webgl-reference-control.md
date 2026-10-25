@@ -1,6 +1,6 @@
 # E3.9H — isolated WebGL2 procedural reference control (not an AI capability pass)
 
-**Development checkpoint: 2026-10-25.** Proposed, not yet independently CI certified until exact-commit checks finish. Stage45 **NO_GO**, physical owner PC **BLOCKED_PENDING_HARDWARE**.
+**Development checkpoint: 2026-10-25.** Initial exact-head controlled-browser reference CI **PASSED 3/3 jobs** at commit `936141eaef34b6c917a4ff2939eecc77f6eb30d7` ([Actions run #40156195539](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/40156195539)). This validates the reference behavior only; Stage45 **NO_GO**, physical owner PC **BLOCKED_PENDING_HARDWARE**.
 
 ## Objective and scope
 
@@ -16,9 +16,9 @@ These files were authored for this controlled research comparison; **not** estab
 - `tools/enterprise/e3_factory/e39h_browser_proof.mjs` — actual Chromium 390×844 mobile and 1280×800 desktop checks, three scroll checkpoints each, independent canvas pixel data URL SHA256 changes, reverse-scroll checks, captured screenshots/source evidence, reduced-motion and forced no-WebGL fallbacks. Browser requirement fails closed if actual WebGL2 context or changing rendered pixels is absent.
 - `tools/enterprise/e3_factory/e39h/test_policy.py` — static content, local-only asset, inert API and truth-boundary contract.
 
-## Allowed CI observation
+## Confirmed scoped CI observation
 
-A future successful workflow establishes only that a **particular pinned Chromium runner** demonstrated functioning GPU-emulated WebGL2 scene rotation, actual changing canvas pixels, reduced-motion/static fallback, mobile no-horizontal-overflow and no JS page errors. It does NOT establish real phone GPU performance, high artistic quality, true photorealism, zero power usage, production Core Web Vitals, commercial assets, cross-browser compatibility or any AI model's coding ability.
+The passing workflow establishes only that a **particular pinned Chromium runner** demonstrated functioning GPU-emulated WebGL2 scene rotation, actual changing canvas pixels, reduced-motion/static fallback, mobile no-horizontal-overflow and no JS page errors. It does NOT establish real phone GPU performance, high artistic quality, true photorealism, zero power usage, production Core Web Vitals, commercial assets, cross-browser compatibility or any AI model's coding ability.
 
 The CLI/web test uses an isolated localhost server with fixed files only. The browser uses software GPU support on ephemeral GitHub Actions Linux; no actual owner device, personal login, cookies, site accounts, uncontrolled shell or public deployment are used. Evidence is stored only as disposable CI artifacts with source hashes.
 
