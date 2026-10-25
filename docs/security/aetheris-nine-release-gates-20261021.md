@@ -32,3 +32,17 @@ on open draft PRs only supports limited source-and-test assertions.
 
 **NO_GO** for unattended production, live-money capability, automatic
 app deployment or OS-wide command authority until all required gates pass.
+
+## Checkpoint update — 25 October 2026 (no gate closed)
+
+Previous gate statuses above remain **OPEN / NOT CERTIFIED**. The historical tracker is preserved rather than rewritten to suggest release success.
+
+- **Gate 1 (security integration):** platform [PR #262](https://github.com/teldigi5-wq/aetheris-platform/pull/262) passed 29/29 workflow runs on its exact head. Newer reconciled [#264](https://github.com/teldigi5-wq/aetheris-platform/pull/264) initially passed 29/30 due to Maven Central HTTP 502 fetching `objenesis` during a recovery stack build; an unchanged failed-job rerun succeeded and the same candidate SHA now reports 30/30 successful workflow conclusions. Both remain DRAFT, unmerged, with independent production blockers #242/#251/#255/#259 and operational backup/secret tests still pending. Runtime [#185](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/185) passed seven workflows and is DRAFT; [#186](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/186) added read-only cinematic standards and passed 3/3; [#187](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/187) is stacked on #186 for a controlled WebGL2 reference and roadmap. No reconciled main promotion.
+- **Gate 2 (isolation):** #185 narrows Docker test output writable scope and adds inspections; a general hostile-model OS-isolated worker and artifact-only mount provenance have NOT been certified. Network, commands and MCP remain default-denied.
+- **Gate 6 (genuine AI benchmarks):** E3.9G-12B4D matched real-model source-span A/B trial is still absent; earlier Qwen2.5-Coder 7B controlled two-site repair baseline 0/4. Do not credit a reviewer-authored positive control as model success.
+- **Gate 7 (Cinematic Studio):** first [E3.9H reference-control CI](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/40156195539) passed 3/3 workflow jobs on its initially verified exact commit and proved scroll-dependent real WebGL2 canvas pixels at 390px/1280px, reverse motion, reduced-motion and simulated no-WebGL fallback in hosted Chromium. This does NOT prove independently approved human art direction, GSAP/Three.js production scene quality, model-authored fixes, measured actual phone GPU or autonomous release. [Issue #177](https://github.com/teldigi5-wq/aetheris-ai-runtime/issues/177) remains OPEN.
+- **Gates 3–5, 8–9:** owner principal/session authorization, durable real execution/STOP, persistent secrets and DB migrations, physical Windows/voice/GPU tests and final operator authorization remain NOT CERTIFIED.
+
+Canonical enterprise sequence: finish E3.9G-12B4D → advance E3.9H held-out model/3D proof → E4 model routing → E5 supervised website factory → E6 immersive rendering → E7 coordinators → E8 cockpit → E9 independent certification, with Stage45 13 blockers and Execution Phase A maintained as distinct release requirements. See [current runtime roadmap](../runtime/roadmap-current-e3-through-e9-20261025.md).
+
+**No production, live-money or host privileges were granted by this progress.**

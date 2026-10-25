@@ -48,6 +48,22 @@ The platform records that checkpoint in `architecture/ai-runtime-certification-r
 
 That SHA is a **certification checkpoint**, not a claim that runtime development must remain permanently fixed there. A later runtime SHA should be promoted only after its applicable runtime suite and the platform integration suite are green and the platform certification reference is deliberately advanced.
 
+## Current enterprise and Syntra development (25 October 2026)
+
+**This repo is in active DRAFT research/hardening, not autonomous production.** The platform's historical 34 / 34 repository specification does not mean the runtime, agents, voice or owner-PC functions are release-certified. There is **no Stage 35**; physical machine validation is separately named Execution Phase A and remains `BLOCKED_PENDING_HARDWARE`.
+
+| Track | Verified checkpoint | Remaining acceptance |
+| --- | --- | --- |
+| Aetheris/Syntra company metadata | 13 proposed companies/100 divisions; canonical main 26 configured specialists; separate Stage46 draft 30 specialists | Independent identity/delegation/approval certification; not 100 running companies |
+| Security | [Worker hardening PR #185](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/185), 7/7 previous head CI passed | Integrate isolation, principal, secrets and real stoppability before agent execution |
+| Governed visual-design skills | [PR #186](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/186), 3/3 CI passed | Skill references default-off, no privileged tools; zero autonomous cinematic output certified |
+| Current E3.9G coding model experiments | Qwen/Hermes/Granite models tested on disposable Chromium faults; Qwen 7B two-site repairs 0/4 | E3.9G-12B4D genuine paired A/B and held-out independently verified repairs |
+| E3.9H cinematic capability | [Controlled WebGL2 reference PR #187](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/187) passed its 3-job Chromium + Windows/Ubuntu workflow; this is **not** AI-generated | Genuine model-produced scenes, independent creative review, real-device GPU and owner QA remain pending |
+| E4–E9 | Candidate routing, code factory and agent/security foundations | Full model selection, website/immersive creation, coordinators, enterprise cockpit and final certification |
+| Stage45/46 and physical Windows | Multiple frozen NO_GO/CI artifacts; Stage46 workstreams differ | 13 Stage45 blockers, actual PC GPU/voice/STOP/permissions and release operator authority |
+
+See [reconciled E3–E9 roadmap](docs/runtime/roadmap-current-e3-through-e9-20261025.md), [nine security release gates](docs/security/aetheris-nine-release-gates-20261021.md), and [cinematic standards](docs/runtime/syntra-aetheris-cinematic-website-standards-20261025.md). These documents are source-of-truth engineering checklists, not permissions to run external sites or deploy.
+
 ## Certification and truth boundaries
 
 The certified checkpoint `68af39a1115a7330020c18b6e2cb601e66b8f22f` completed the applicable canonical runtime certification suite. The platform certification reference records that checkpoint as `6_OF_6_SUCCESS`.
