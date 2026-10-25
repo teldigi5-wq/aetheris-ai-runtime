@@ -64,7 +64,10 @@ def score():
     approved=sum(x["policyAccepted"] for x in entries)
     verified=sum(x["browserVerified"] for x in entries)
     result={
-        "evidenceClass":"E39G12B4K_QWEN7B_PUBLIC_TWO_SITE_REPAIR_SCORE",
+        "evidenceClass":"E39G12B4L_QWEN7B_TARGETED_SOURCE_HINT_PUBLIC_TWO_SITE_SCORE",
+        "promptTreatment":"B4L_EXACT_EXISTING_CSS_RULE_SOURCE_HINT_NO_REPLACEMENT",
+        "previousB4KOriginalPromptPolicyAccepted":0,
+        "previousB4KOriginalPromptBrowserVerified":0,
         "modelTag":trial.MODEL,
         "modelDigestSelfReported":receipt["modelDigestSelfReported"],
         "receiptSha256":trial.sha(trial.safe_read(trial.RECEIPT,12000)),
@@ -83,7 +86,7 @@ def score():
         raise ValueError("B4K_SCORE_REPLAY")
     with destination.open("x",encoding="utf-8") as f:
         json.dump(result,f,sort_keys=True,indent=2);f.write("\n")
-    print("B4K_REAL_MODEL_PUBLIC_FIXTURE_SCORE",json.dumps({
+    print("B4L_REAL_MODEL_SOURCE_HINT_PUBLIC_FIXTURE_SCORE",json.dumps({
         "attempts":2,"accepted":approved,"browserVerified":verified,
         "heldOut":False,"stage45Go":False
     },sort_keys=True))
