@@ -1,0 +1,70 @@
+name: Syntra Cinematic Website Agent Reference Safety
+
+on:
+  pull_request:
+    branches:
+      - security/e3-worker-write-scope-inspection-20261022
+    paths:
+      - 'skills/native/aetheris-web-experience/SKILL.md'
+      - 'skills/native/aetheris-web-accessibility/SKILL.md'
+      - 'skills/native/aetheris-web-performance/SKILL.md'
+      - 'skills/native/aetheris-security-audit/SKILL.md'
+      - 'orchestrator-service/src/main/resources/enterprise/skill-advice-bindings-v1.json'
+      - 'docs/runtime/syntra-aetheris-cinematic-website-standards-20261025.md'
+      - 'tools/enterprise/test_cinematic_web_standards.py'
+      - '.github/workflows/runtime-syntra-cinematic-web-standards.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  existing-skill-permission-baseline:
+    name: Skill and agent scope / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Verify governed skill provenance and unchanged role authority
+        run: |
+          python tools/enterprise/skills_registry.py validate
+          python tools/enterprise/e39g2_scoped_skill_advice.py check
+          python tools/enterprise/e39g3_validate_java_skill_manifest.py verify
+      - name: Cinematic web guidelines and reference selector regression
+        run: python -m unittest discover -s tools/enterprise -p 'test_cinematic_web_standards.py' -v
+      - name: Existing governed skill adversarial regressions
+        run: |
+          python -m unittest discover -s tools/enterprise -p 'test_skills_registry.py' -v
+          python -m unittest discover -s tools/enterprise -p 'test_e39g2_scoped_skill_advice.py' -v
+          python -m unittest discover -s tools/enterprise -p 'test_e39g3_java_skill_manifest.py' -v
+
+  release-truth-no-go:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Do not confuse advisory policy with a functioning AI website factory
+        shell: python
+        run: |
+          from pathlib import Path
+          import json
+          registry=json.loads(Path('skills/registry.json').read_text())
+          assert len(registry['skills'])==14
+          assert all(s['autoActivate'] is False and s['capabilities']==[] for s in registry['skills'])
+          bindings=json.loads(Path('orchestrator-service/src/main/resources/enterprise/skill-advice-bindings-v1.json').read_text())
+          assert bindings['enabledByDefault'] is False
+          assert len(bindings['roles'])==7
+          docs=Path('docs/runtime/syntra-aetheris-cinematic-website-standards-20261025.md').read_text()
+          assert 'NOT an automatic website builder' in docs
+          assert 'Stage45' in docs and 'NO_GO' in docs
+          print('REFERENCE_ONLY; NO_EXECUTION; NO_DEPLOY; NO_MODEL_CALLS; NO_STAGE45_CERTIFICATION')
