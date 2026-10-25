@@ -71,7 +71,7 @@ def safe_bytes(path: Path, max_size: int) -> bytes:
 
 
 def make_prompt(site: str, fault: str, source: bytes, observation: str | None) -> str:
-    if site not in ("studynest", "cityline") or fault not in dict((s, f) for _, s, f in CASES).values():
+    if (site, fault) not in {(s, f) for _, s, f in CASES}:
         raise ValueError("B4D_UNKNOWN_CASE")
     base = (
         "You are a read-only web repair adviser. Output ONLY ONE JSON object "
@@ -138,7 +138,6 @@ def prompt_bundle() -> dict:
                 "sourceSha256": sha(src),
                 "prompt": prompt, "promptSha256": sha(prompt.encode()),
             }
-    assert tuple(trials.keys()) != ORDER  # ordering is independently pre-registered below
     return {
         "evidenceClass": "E39G12B4D_EIGHT_MATCHED_PUBLIC_BROKEN_SOURCE_PROMPTS",
         "modelTag": MODEL, "reviewedModelDigestPrefix": PREFIX,
