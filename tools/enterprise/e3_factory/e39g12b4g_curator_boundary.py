@@ -237,6 +237,9 @@ def verify(root: Path, public_path: Path) -> None:
     with ZipFile(io.BytesIO(raw)) as z:
         if z.namelist() != [PUBLIC_NAME]:
             raise ValueError("B4G_MODEL_ZIP_SCOPE")
+        member = z.infolist()[0]
+        if member.file_size > MAX_TOTAL or member.compress_size > MAX_TOTAL:
+            raise ValueError("B4G_MODEL_ZIP_DECOMPRESSION_LIMIT")
         payload = parse(z.read(PUBLIC_NAME))
     if payload != packet_of(public, commitment):
         raise ValueError("B4G_PUBLIC_PACKET_DRIFT")
