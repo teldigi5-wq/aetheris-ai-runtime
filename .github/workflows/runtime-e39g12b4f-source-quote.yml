@@ -1,0 +1,38 @@
+name: E3.9G-12B4F Offline Source-Quote Forensics
+on:
+  pull_request:
+    branches: [test/e39g12b4e-repair-failure-taxonomy-20261025]
+    paths:
+      - 'tools/enterprise/e3_factory/e39g12b4f_quote_diagnostics.py'
+      - 'tools/enterprise/e3_factory/test_e39g12b4f_quote_diagnostics.py'
+      - 'docs/runtime/e39g12b4f-source-quote-forensics-20261025.md'
+      - 'docs/runtime/roadmap-current-e3-through-e9-20261025.md'
+      - 'README.md'
+      - '.github/workflows/runtime-e39g12b4f-source-quote.yml'
+permissions:
+  contents: read
+jobs:
+  quote-and-policy-invariants:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with: {python-version: '3.12'}
+      - name: Verify exact source quotation, mutation rejection and read-only classification
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b4f_quote_diagnostics.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b4e_failure_taxonomy.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b4a_sevenb_model.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b2_isolation_policy.py' -v
+      - name: Existing role, first-party and pinned-third-party references stay default-off
+        run: |
+          python tools/enterprise/skills_registry.py validate
+          python tools/enterprise/e39g2_scoped_skill_advice.py check
+          python tools/enterprise/e39g3_validate_java_skill_manifest.py verify
+      - run: python -m py_compile tools/enterprise/e3_factory/e39g12b4f_quote_diagnostics.py
