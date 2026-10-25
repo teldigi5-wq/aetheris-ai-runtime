@@ -25,7 +25,7 @@ All output is under ephemeral `target/e3-factory/e39g12b4n`, with short-lived CI
 | `top:32px` | yes | pass | safe alternative position on controlled fixture |
 | Injected CSS URL / extra declaration | **no** | not rendered | grammar/provenance deny |
 
-**Expected results are hypotheses until exact-head CI proves them.** The later GitHub Actions job must show the actual observed values before they are called successful. The browser does not treat a correct source quote as adequate; the intact focus outline matters. An alternative passing in this public fixture does not create general-purpose authority to change client styles.
+**Verified in real CI:** [run #40166135950](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/40166135950) completed **3/3 successful jobs** (Windows and Ubuntu adversarial policy regressions, restricted Docker plus actual Chromium). Docker tested all six fixed proposals; **five passed structural eligibility and the malicious CSS candidate was rejected without HTML output**. Chromium then made **25 observations** over five viewport sizes: **three alternatives passed** full-outline visibility (`top:8px`, `16px`, `32px`), while **two alternatives failed** (`top:0px`, `6px`) despite passing structural grammar. No model calls were made and no AI repair was newly credited. The browser does not treat a correct source quote as adequate; the intact focus outline matters. A passing alternative on this public fixture does not grant general authority to change client styles.
 
 ## Remaining work before real autonomy
 1. Obtain independent human-curated, licensed, *not previously exposed* website fault examples; keep reference solutions and evaluator policy private and separate from model inference (issue #169).
