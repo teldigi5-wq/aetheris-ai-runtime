@@ -27,7 +27,7 @@
 | --- | --- | --- | --- |
 | E0–E2.2D | 13×100 inactive catalog, proposed advisories, storyboard, deny-only proof/nonce/key research | Real authenticated owner approval and secure agent integration separately | Research draft, not production authority |
 | E3.0–E3.3 | Deterministic CI-generated functional CSS-3D microsite, Chromium QA, restricted patch worker | Measured real model authorship and bounded reliable fixes | Test fixture capability only |
-| E3.4–E3.9G-12B4D | Genuine-model Qwen7B 8-call paired A/B on original vs source-span prompts finished: **0/4 vs 0/4 repairs; 0/8 policy accepted** ([exact-run evidence](e39g12b4d-scored-evidence-20261025.md)) | Independently curated larger held-out tasks, safe source literal selection and repeated models; no autonomous coding certification | **CURRENT** research, CI passed but model repairs unsuccessful |
+| E3.4–E3.9G-12B4E | Qwen7B genuine 8-call paired A/B **0/4 vs 0/4 repairs; 0/8 policy accepted** ([B4D run](e39g12b4d-scored-evidence-20261025.md)); [B4E denial taxonomy](e39g12b4e-denial-taxonomy-20261025.md) gives reasoned categories without another model run | Independent held-out fixes, exact-literal/schema fidelity, cross-fault and semantic correctness; model autonomy NOT certified | **CURRENT** research, no successful model repair |
 | E3.9H | Cinematic luxury capability issue #177 and standards #186; **real WebGL2 procedural controlled scroll reference CI passed 3/3** in [PR #187](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/187) | Independently approved human art, proper scene perf/GPU measurements, genuine model-generated 3D and held-out trials | NOT CERTIFIED |
 | E4 | Inert model candidates, advisory routing and privacy research | True local/cloud route selection, budget/quotas, privacy/zero-cost enforcement, measured reliability | NOT CERTIFIED |
 | E5 | E3 prototype generator and website QA harness | Bounded genuinely AI-produced production-style website, repeatable user acceptance, security, multi-device QA | NOT CERTIFIED |
@@ -36,15 +36,15 @@
 | E8 | Desktop/mission-control UI and bounded read-only draft interfaces | Real authenticated cockpit, owner controls, trace/progress/cost, recovery and incident handling | NOT CERTIFIED |
 | E9 | Security isolation stacks and candidate CI | Independent integrated endurance, supply chain, release evidence, real owner-device acceptance and owner authorization | NOT CERTIFIED |
 
-**Important detail:** The next E3.9G-12B4D trial needs real model inference. Model performance cannot be inferred from a human/reviewer/program-generated 3D control; the earlier controlled Qwen 7B two-site attempt yielded 0/4 verified repairs. Do not claim a future A/B has completed without exact model hashes, calls, prompts, independent accepted code patches and browser after-state.
+**Verified experiment and remaining competency gap:** E3.9G-12B4D ran eight genuine Qwen2.5-Coder 7B completions on two known synthetic sites. Both the original and source-span arms yielded **0/4 policy-approved or browser-verified repairs**. B4E analyzes rejection categories offline, not as another model benchmark. Source location hints did not establish real repair competency, and no production/owner authorization is implied.
 
-## Exact E3.9G-12B4D remaining acceptance
+## E3.9G-12B4D experiment completed; capability acceptance NOT met
 
-1. Freeze identical fault corpus, model digest/license, timeout/resource budget, prompts/arms, policy and independent evaluator *before* inference; no held-out answer snippets in prompt.
-2. Run original vs source-span diagnostic A/B (a known, permitted coding model such as the previously evaluated Qwen2.5-Coder 7B, or a separately verified licensed equivalent). Count EVERY real call/failed attempt, CPU/RAM/time and source exposure.
-3. Apply proposals only if they pass unchanged E3.9G-12B2 typed one-literal/allowlist rules in an isolated network-none disposable worker. No untrusted package scripts, shell, host browser accounts or external customer code.
-4. Test actual before/after in Chromium mobile 390px and desktop 1280px, including reverse scroll/keyboard/reduced-motion where applicable; record screenshots, SHA256, false patches, abstentions and regressions.
-5. Compare against no-hint control with uncertainty and sample-size disclosure. Never edit evaluator/golden tests to obtain apparent gains. Continue to E3.9H only with honest model competency statement.
+1. **Verified:** frozen two-arm source corpus/model prompt constraints, with original source and source-span hints, no golden repair answer sent to the model.
+2. **Verified:** eight genuine Qwen2.5-Coder 7B model calls, strict role/provenance receipts, no-checkout model runner and independently recorded token counts.
+3. **Verified but zero successes:** original E3.9G-12B2 typed one-literal/allowlist worker evaluated all eight proposals network-none, and rejected all eight; no model code ran.
+4. **No after-state earned:** after-repair Chromium at mobile/desktop was correctly not credited because zero proposals passed the unchanged patch gate.
+5. **Evidence:** 0/4 original and 0/4 source-hint, no measured improvement and only known synthetic tasks; [B4E](e39g12b4e-denial-taxonomy-20261025.md) preserves exact rejection categories. Next develop a separate stronger held-out corpus and audited literal/semantic feedback, without modifying the frozen gate.
 
 ## E3.9H cinematic scene evidence contract
 
@@ -67,8 +67,8 @@ These are release **acceptance gates**, not 9 new sequential product stages; Sta
 ## Immediate recommended branch-safe work order
 
 1. Preserve `main`, certified runtime reference, Stage46 draft stacks, and the platform security candidate ancestry. Do NOT blindly merge ancestor/descendant PRs or rewrite certification SHAs.
-2. Re-verify #264's 502 Maven Central fetch issue on the failed data-recovery job without disabling proof; finish #242/#251/#255/#259 plus secrets/rollback security.
-3. Advance E3.9G-12B4D measured local coding A/B; in parallel implement a **non-agent** isolated browser-rendered 3D reference control toward E3.9H.
+2. Platform #264's Maven Central HTTP 502 on the initial data-recovery build **passed an unchanged failed-job rerun** on the original release candidate SHA; finish #242/#251/#255/#259 plus real secrets/restore/rollback checks. Security #251 has an unmerged tested partial authorization draft #267, not issue closure.
+3. Keep E3.9G-12B4D real A/B results and E3.9H independent WebGL2 control as completed **research experiments** only. Advance E3.9G-12B4E failure taxonomy and a genuinely independently held-out model repair quality benchmark, then model-authored E3.9H.
 4. Build E4 through E9 only behind identity, sandbox, capability and release policy gates; validate on owner PC during Execution Phase A.
 
 **Strict safety:** live trading, payouts, unrestricted shell, browser credentials, production deployments and customer website mutation remain disabled. This report changes only documentation/test fixtures, not runtime agent permissions.
