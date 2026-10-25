@@ -148,6 +148,16 @@ class ExactSourceQuoteForensicTest(unittest.TestCase):
                 rewrite_json(entries, key, lambda obj: obj.update(
                     policyOutcome="POLICY_APPLIED", patchApplied=True
                 ))
+                # Keep B4E's scorer self-consistent to reach B4F's own
+                # separate negative baseline boundary, rather than merely
+                # proving the inherited B4E anti-score-tampering check.
+                def score(obj):
+                    obj["arms"]["original"]["policyAccepted"] = 1
+                    row = obj["arms"]["original"]["perFault"]
+                    for item in row:
+                        if item["token"] == "cityline--reduced-motion":
+                            item["accepted"] = True
+                rewrite_json(entries, "comparison.json", score)
             with self.assertRaisesRegex(ValueError, "B4F_REQUIRES_UNMODIFIED_REJECTED_SOURCE"):
                 diagnostic.check_replies(synthetic_archive(Path(d), tamper))
 
