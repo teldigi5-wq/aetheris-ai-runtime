@@ -40,7 +40,7 @@ Our **existing 26-role canonical main-based catalog** has read-only, default-dis
 - `qa-engineer` — `aetheris-web-accessibility` plus existing animation review: independently evaluate journeys, responsive issues and motion.
 - `appsec-officer` — `aetheris-security-audit`: browser, delivery, data and agent security gate.
 - `security-architect`, `devops-engineer`, `mcp-integration-engineer` retain existing scoped security/supply-chain boundaries; no arbitrary website permissions added.
-- **Proposed only:** Aetheris Creative / Immersive design, cinematic art, 3D and rendering teams and CEO/design advisory roles; no agent registration, tool delegation or build capability implied by proposed division names.
+- **Proposed only:** Aetheris Creative / Aetheris Immersive Technologies design, cinematic art, 3D and rendering teams and CEO/design advisory roles; no agent registration, tool delegation or build capability implied by proposed division names.
 
 These first-party instructions are trusted as reviewed **reference content**, not authorization: `skills/registry.json` stays at 14 skills (6 pinned third-party, 8 local), every `capabilities=[]` and `autoActivate=false`. Existing allowlists and `application.yml` must not change; owner authentication, Stage45 release, model access, filesystem writes and host commands remain blocked unless separately certified. No unreviewed upstream skill scripts are installed or executed.
 
