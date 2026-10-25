@@ -1,0 +1,89 @@
+name: E3.9G-12B4J Network-None Reviewed Patch And Browser Control
+on:
+  pull_request:
+    branches:
+      - test/e39g12b4i-offline-browser-controls-20261025
+    paths:
+      - 'tools/enterprise/e3_factory/e39g12b4j_*'
+      - 'tools/enterprise/e3_factory/test_e39g12b4j_*'
+      - 'tools/enterprise/e3_factory/run_locked_worker.sh'
+      - 'docs/runtime/e39g12b4j-reviewed-control-evidence-20261025.md'
+      - 'docs/runtime/roadmap-current-e3-through-e9-20261025.md'
+      - 'README.md'
+      - '.github/workflows/runtime-e39g12b4j-network-none-patch.yml'
+permissions:
+  contents: read
+jobs:
+  exact-literal-policy:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with: {python-version: '3.12'}
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with: {node-version: '22'}
+      - name: Trust and source policy adversarial regressions
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b4j_typed_control_worker.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b4i_browser_controls.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b4h_proposal_admission.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b2_isolation_policy.py' -v
+      - name: Default-deny skills and source syntax
+        run: |
+          python tools/enterprise/skills_registry.py validate
+          python tools/enterprise/e39g2_scoped_skill_advice.py check
+          python tools/enterprise/e39g3_validate_java_skill_manifest.py verify
+          python -m py_compile tools/enterprise/e3_factory/e39g12b4j_typed_control_worker.py
+          node --check tools/enterprise/e3_factory/e39g12b4j_independent_browser.mjs
+  docker-bounded-worker-and-real-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with: {python-version: '3.12'}
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with: {node-version: '22'}
+      - name: Build original synthetic proposals from reviewed source only
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          sys.path.insert(0,'tools/enterprise/e3_factory')
+          import e39g12b4j_typed_control_worker as control
+          root=Path('target/e3-factory/e39g12b4j')
+          (root/'incoming').mkdir(parents=True,exist_ok=False)
+          (root/'repairs').mkdir(exist_ok=False)
+          for case,(old,new) in control.RULES.items():
+              original=(control.FIX/(case+'-negative.html')).read_bytes()
+              proposal=dict(case=case,operation='replace_one',sourceSha256=control.sha(original),old=old,new=new)
+              with (root/'incoming'/(case+'.json')).open('x') as f:
+                  json.dump(proposal,f,sort_keys=True)
+          print('B4J_TWO_REVIEWED_NONMODEL_CONTROLS_PREPARED')
+          PY
+      - name: Apply both exact trusted CSS changes in constrained network-none worker
+        run: |
+          set -euo pipefail
+          docker pull python:3.12-slim-bookworm
+          bash tools/enterprise/e3_factory/run_locked_worker.sh e39g12b4j-apply focus
+          bash tools/enterprise/e3_factory/run_locked_worker.sh e39g12b4j-apply motion
+      - name: Install fixed browser for trusted output only
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Verify exact trusted repaired bytes and real mobile/desktop Chromium outcome
+        run: node tools/enterprise/e3_factory/e39g12b4j_independent_browser.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: b4j-no-model-network-none-worker-browser-evidence
+          path: target/e3-factory/e39g12b4j/
+          if-no-files-found: warn
+          retention-days: 10
