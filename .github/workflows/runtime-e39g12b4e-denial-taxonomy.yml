@@ -8,6 +8,8 @@ on:
       - 'tools/enterprise/e3_factory/e39g12b4e_failure_taxonomy.py'
       - 'tools/enterprise/e3_factory/test_e39g12b4e_failure_taxonomy.py'
       - 'docs/runtime/e39g12b4e-denial-taxonomy-20261025.md'
+      - 'docs/runtime/roadmap-current-e3-through-e9-20261025.md'
+      - 'README.md'
       - '.github/workflows/runtime-e39g12b4e-denial-taxonomy.yml'
 
 permissions:
