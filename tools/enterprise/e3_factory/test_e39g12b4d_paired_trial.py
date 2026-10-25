@@ -75,12 +75,34 @@ class PairedTrialTest(unittest.TestCase):
 
     def test_reject_source_ambiguity_and_solution_leak(self):
         files,orig,obs=fixture()
-        obs["observations"]["studynest--keyboard-focus-visibility"]["proposedReplacement"]="SOLUTION"
-        with patch.object(trial,"safe_bytes") as read_mock:
-            # Contract is verified in inspected_source, never read golden evaluator.
-            self.assertTrue(trial.ZIP_MEMBERS[0]=="observed-declarations.json")
-            self.assertIn("gold", "gold")
-        self.assertEqual(obs["observations"]["studynest--keyboard-focus-visibility"]["proposedReplacement"],"SOLUTION")
+        orig["evidenceClass"]="E39G12B2_MODEL_FACING_ONLY_BROKEN_PUBLIC_SYNTHETIC"
+        orig["referenceVariantsIncluded"]=False
+        orig["goldenReplacementIncluded"]=False
+        obs["evidenceClass"]="E39G12B4B_SOURCE_SPANS_FROM_BROKEN_ONLY"
+        obs["replacementAnswersProvided"]=False
+        obs["referenceInputsAvailable"]=False
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/"seed.zip"
+            def write():
+                with ZipFile(path,"w") as z:
+                    for item in trial.ZIP_MEMBERS:
+                        if item=="proposer-manifest.json": blob=json.dumps(orig).encode()
+                        elif item=="observed-declarations.json": blob=json.dumps(obs).encode()
+                        else:blob=files[item]
+                        z.writestr(item,blob)
+            write()
+            with patch.object(trial,"SEED",path):
+                source,_,_=trial.inspected_source()
+                self.assertEqual(set(source),set(trial.ZIP_MEMBERS))
+                obs["observations"]["studynest--keyboard-focus-visibility"]["proposedReplacement"]="FAKE_GOLD"
+                write()
+                with self.assertRaisesRegex(ValueError,"B4D_SOURCE_SPAN_DRIFT_OR_GOLD_EXPOSURE"):
+                    trial.inspected_source()
+                obs["observations"]["studynest--keyboard-focus-visibility"]["proposedReplacement"]=None
+                obs["observations"]["studynest--keyboard-focus-visibility"]["existingSourceSpan"]=".skip:focus{top:-200px;}"*2
+                write()
+                with self.assertRaisesRegex(ValueError,"B4D_SOURCE_SPAN_DRIFT_OR_GOLD_EXPOSURE"):
+                    trial.inspected_source()
 
     def test_untrusted_receipt_is_never_owner_approval(self):
         with tempfile.TemporaryDirectory() as tmp:
