@@ -68,7 +68,19 @@ def prompt(case: str, source: bytes) -> str:
         "When the user sets prefers-reduced-motion: reduce, the ticker still "
         "animates. Fix the targeted CSS rule so animation is disabled."
     )
+    # B4L intervention: identify the EXISTING defective source rule, not its
+    # correction. No positive fixture, expected new literal or golden is sent.
+    old_rule = {
+        "focus": ".skip:focus{top:-120px;}",
+        "motion": "@media(prefers-reduced-motion:reduce){.ticker{animation:tickerPulse 2s linear infinite;}}",
+    }[case]
+    if source.count(old_rule.encode("utf-8")) != 1:
+        raise ValueError("B4L_TARGET_SOURCE_RULE_CHANGED")
     return (
+        "SOURCE-ONLY LOCATOR: The exact existing defective CSS rule is "
+        + old_rule + ". Quote this rule VERBATIM as old; change ONLY this rule. "
+        "This locator is not a solution; independently decide the safe new CSS. "
+        "Keep all unrelated normal-state styling unchanged.\n"
         "You are a read-only source-repair proposer. Return ONE JSON object with "
         "EXACTLY five string fields: case, operation, sourceSha256, old, new. "
         'operation must be "replace_one". old must quote ONE entire existing CSS '
@@ -94,6 +106,7 @@ def expected() -> dict:
                     "promptSha256":sha(task.encode()),"prompt":task}
     return {
         "evidenceClass":"E39G12B4K_PUBLIC_KNOWN_NEGATIVE_SOURCE_ONLY",
+        "promptTreatment":"B4L_EXACT_EXISTING_CSS_RULE_SOURCE_HINT_NO_REPLACEMENT",
         "modelTag":MODEL,"modelCallsPerformed":0,
         "referencesIncluded":False,"goldenSolutionsIncluded":False,
         "genuinelyHeldOut":False,"ownerApprovalGranted":False,
