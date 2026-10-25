@@ -1,0 +1,39 @@
+name: E3.9G-12B4E Offline Failure Taxonomy Integrity
+
+on:
+  pull_request:
+    branches:
+      - feature/e39g12b4d-real-model-paired-ab-20261025
+    paths:
+      - 'tools/enterprise/e3_factory/e39g12b4e_failure_taxonomy.py'
+      - 'tools/enterprise/e3_factory/test_e39g12b4e_failure_taxonomy.py'
+      - 'docs/runtime/e39g12b4e-denial-taxonomy-20261025.md'
+      - '.github/workflows/runtime-e39g12b4e-denial-taxonomy.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-provenance-and-nonexecution:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Verify measured B4D denial categories and reject tampered evidence
+        run: python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b4e_failure_taxonomy.py' -v
+      - name: Preserve default-deny agent and skill registry
+        run: |
+          python tools/enterprise/skills_registry.py validate
+          python tools/enterprise/e39g2_scoped_skill_advice.py check
+          python tools/enterprise/e39g3_validate_java_skill_manifest.py verify
+      - name: Validate that the diagnostic source is syntactically inert
+        run: python -m py_compile tools/enterprise/e3_factory/e39g12b4e_failure_taxonomy.py
