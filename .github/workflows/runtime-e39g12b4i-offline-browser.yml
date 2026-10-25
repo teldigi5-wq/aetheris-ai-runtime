@@ -1,0 +1,63 @@
+name: E3.9G-12B4I Trusted Offline Browser Controls
+on:
+  pull_request:
+    branches: [test/e39g12b4h-model-proposal-admission-20261025]
+    paths:
+      - 'tools/enterprise/e3_factory/e39g12b4i/**'
+      - 'tools/enterprise/e3_factory/e39g12b4i_browser_controls.mjs'
+      - 'tools/enterprise/e3_factory/test_e39g12b4i_browser_controls.py'
+      - 'docs/runtime/e39g12b4i-offline-browser-controls-20261025.md'
+      - 'docs/runtime/roadmap-current-e3-through-e9-20261025.md'
+      - 'README.md'
+      - '.github/workflows/runtime-e39g12b4i-offline-browser.yml'
+permissions:
+  contents: read
+jobs:
+  source-and-policy:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with: {python-version: '3.12'}
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with: {node-version: '22'}
+      - name: Static allowlisted fixtures and cross-platform regression
+        run: |
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b4i_browser_controls.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b4h_proposal_admission.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b4g_curator_boundary.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g12b2_isolation_policy.py' -v
+      - name: Preserve original default-deny agent skill bindings
+        run: |
+          python tools/enterprise/skills_registry.py validate
+          python tools/enterprise/e39g2_scoped_skill_advice.py check
+          python tools/enterprise/e39g3_validate_java_skill_manifest.py verify
+      - name: Check actual browser-runner syntax
+        run: node --check tools/enterprise/e3_factory/e39g12b4i_browser_controls.mjs
+  real-trusted-chromium-negative-and-positive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with: {node-version: '22'}
+      - name: Pin Playwright and install disposable Chromium
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Prove actual negative failures and positive passes in Chrome without network
+        run: node tools/enterprise/e3_factory/e39g12b4i_browser_controls.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: b4i-static-trusted-no-model-browser-controls
+          path: target/e3-factory/e39g12b4i-browser/
+          if-no-files-found: warn
+          retention-days: 10
