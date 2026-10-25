@@ -7,6 +7,9 @@ on:
       - 'tools/enterprise/e3_factory/e39h/**'
       - 'tools/enterprise/e3_factory/e39h_browser_proof.mjs'
       - 'docs/runtime/enterprise-e39h-webgl-reference-control.md'
+      - 'docs/runtime/roadmap-current-e3-through-e9-20261025.md'
+      - 'docs/security/aetheris-nine-release-gates-20261021.md'
+      - 'README.md'
       - '.github/workflows/runtime-e39h-webgl-reference.yml'
   workflow_dispatch:
 permissions:
