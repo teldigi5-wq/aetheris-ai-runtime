@@ -88,25 +88,25 @@
     {
       "name": "aetheris-web-experience",
       "trust": "first-party-advisory",
-      "summary": "Plan premium responsive web visuals with brand and accessibility evidence.",
+      "summary": "Review brand-grounded, realistic premium cinematic web art direction, GSAP/scroll and responsible 3D with mobile fallback.",
       "sourcePath": "native/aetheris-web-experience/SKILL.md"
     },
     {
       "name": "aetheris-web-accessibility",
       "trust": "first-party-advisory",
-      "summary": "Audit keyboard use, focus, contrast, zoom, semantics and reduced motion.",
+      "summary": "Review WCAG 2.2 AA, responsive 320-1920px, keyboard, reduced motion, native scrolling and real browser evidence.",
       "sourcePath": "native/aetheris-web-accessibility/SKILL.md"
     },
     {
       "name": "aetheris-web-performance",
       "trust": "first-party-advisory",
-      "summary": "Audit browser payload, images, render cost, motion and 3D fallbacks.",
+      "summary": "Review measured Core Web Vitals, GSAP/Three.js cost, 60fps targets, asset budgets, adaptive quality and fallback.",
       "sourcePath": "native/aetheris-web-performance/SKILL.md"
     },
     {
       "name": "aetheris-security-audit",
       "trust": "first-party-advisory",
-      "summary": "Defensive scoped app security code review with evidenced findings.",
+      "summary": "Review scoped OWASP/browser security, external assets, CSP, privacy, supply chain and truthful website claims.",
       "sourcePath": "native/aetheris-security-audit/SKILL.md"
     },
     {
