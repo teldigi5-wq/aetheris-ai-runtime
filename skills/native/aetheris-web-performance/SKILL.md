@@ -19,4 +19,4 @@ Target an *observed* stable 60 fps on specified supported hardware, not a blanke
 
 ## Release checks
 Measure actual desktop AND mobile browsing, cold/warm loads, 320-1920px responsive layout, touch/keyboard, scroll reversal, resize, reduced motion, high latency, failure to initialize graphics and route cleanup. Check accessible content before scripts load and no layout shifts from animated reveals.
-Performance claims must link raw evidence; don't report '60 FPS' or Core Web Vitals as achieved from estimates. Preview and independent QA/security review remain required; optimizing must not regress semantics, search indexing, content visibility or existing features.
+Performance claims must link raw evidence; don't report '60 FPS' or Core Web Vitals as achieved from estimates. Preview, explicit owner approval and independent QA/security review remain required; optimizing must not regress semantics, search indexing, content visibility or existing features.
