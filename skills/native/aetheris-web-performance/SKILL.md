@@ -14,7 +14,7 @@ Target an *observed* stable 60 fps on specified supported hardware, not a blanke
 - GSAP timelines and ScrollTrigger only when complex choreography justifies the code. Bound scroll/resize listeners, refresh after layout changes, clean up on route unmount, prevent duplicate trigger creation, avoid forced reflow and coordinate backward scrolling.
 - Optional Lenis smooth-scrolling only after preserving native touch scrolling, anchors, keyboard navigation and back/forward with a tested opt-out.
 - Use WebGL/WebGPU/Three.js/R3F and GLSL selectively for actual product/spatial interactions, never gratuitous neon/wireframe backgrounds. Prefer pre-rendered Blender/Cinema4D frame sequences or optimized video over live 3D when fidelity/cost demands it.
-- Clamp device pixel ratio, reduce geometry, shadow passes, particles and post-processing on weaker devices, stop hidden/offscreen loops, lazy-load 3D, dispose geometries/materials/textures/canvases, provide a functional static/2D/no-WebGL fallback.
+- Clamp device pixel ratio (DPR), reduce geometry, shadow passes, particles and post-processing on weaker devices, stop hidden/offscreen loops, lazy-load 3D, dispose geometries/materials/textures/canvases, provide a functional static/2D/no-WebGL fallback.
 - Responsive srcset/AVIF/WebP, video posters/adaptive delivery, format/license checks, font subsetting, critical CSS, route code splitting, no unnecessary third-party trackers or mandatory paid rendering APIs.
 
 ## Release checks
