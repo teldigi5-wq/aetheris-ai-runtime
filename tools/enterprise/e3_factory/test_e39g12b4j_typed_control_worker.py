@@ -51,8 +51,12 @@ class TrustedControlPatchTest(unittest.TestCase):
 
     def test_refuses_nonunique_old_literal(self):
         proposal, broken, ref = controls("focus")
+        duplicated = broken + proposal["old"].encode()
+        # Keep the supplied SHA consistent with the intentionally duplicated
+        # adversarial source so that the uniqueness check itself is exercised.
+        proposal["sourceSha256"] = worker.sha(duplicated)
         with self.assertRaisesRegex(ValueError, "B4J_NOT_UNIQUE_SOURCE_LITERAL"):
-            worker.review("focus", proposal, broken + proposal["old"].encode(), ref)
+            worker.review("focus", proposal, duplicated, ref)
 
     def test_injected_code_or_different_css_is_denied(self):
         proposal, broken, ref = controls("focus")
