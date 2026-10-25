@@ -4,7 +4,7 @@ description: Audit responsive media, realistic cinematic motion, GSAP and WebGL 
 ---
 
 # Aetheris Cinematic Web Motion & Performance
-First-party reference/advice only; no external requests, dependency installation, file mutation, model calls, activation or automatic release.
+First-party read-only reference/advice only; no external requests, dependency installation, file mutation, model calls, activation or automatic release.
 
 ## Performance budget, not visual gimmicks
 Target an *observed* stable 60 fps on specified supported hardware, not a blanket guarantee. Measure p50/p95 frame times, dropped frames, main-thread long tasks, input response, GPU/CPU/memory consumption and thermal/battery behavior where possible. Target (not claim) field Core Web Vitals p75: LCP <= 2.5s, INP <= 200ms and CLS <= 0.1 on representative traffic. Record exact device/browser, viewport, connection, run count, source SHA, trace and reproducibility; synthetic CI is not production field data.
