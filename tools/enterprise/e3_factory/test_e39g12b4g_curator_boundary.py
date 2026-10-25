@@ -61,7 +61,7 @@ class CuratorBoundaryTest(unittest.TestCase):
             self.assertFalse(packet["ownerApprovalGranted"])
             self.assertFalse(packet["productionAuthorized"])
             self.assertEqual(packet["modelCallsPerformed"], 0)
-            self.assertNotIn("corrected-0", public.read_bytes().decode("latin-1"))
+            self.assertNotIn("corrected-0", json.dumps(packet))
             self.assertEqual(
                 {x["site"] for x in packet["cases"]},
                 {"sample-one", "sample-two"}
@@ -95,6 +95,29 @@ class CuratorBoundaryTest(unittest.TestCase):
             with ZipFile(output, "a") as z:
                 z.writestr("reference.html", "SHOULD NEVER BE SENT")
             with self.assertRaisesRegex(ValueError, "B4G_COMMITMENT_MISMATCH"):
+                b4g.verify(root, output)
+
+    def test_public_zip_decompression_limit_even_with_rewritten_digest(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "curator"
+            root.mkdir()
+            fixture(root)
+            output = Path(d) / "model.zip"
+            b4g.stage(root, output)
+            compressed = io.BytesIO()
+            with ZipFile(compressed, "w") as archive:
+                archive.writestr("prompts.json", "a" * (b4g.MAX_TOTAL + 20000),
+                                 compress_type=8)
+            poisoned = compressed.getvalue()
+            self.assertLess(len(poisoned), b4g.MAX_TOTAL)
+            output.write_bytes(poisoned)
+            seal_path = root / b4g.PRIVATE_NAME
+            seal = json.loads(seal_path.read_text(encoding="utf-8"))
+            # Even a hypothetically corrupt local digest cannot bypass the
+            # independent public ZIP member uncompressed-size budget.
+            seal["publicBundleSha256"] = b4g.digest(poisoned)
+            seal_path.write_text(json.dumps(seal), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "B4G_MODEL_ZIP_DECOMPRESSION_LIMIT"):
                 b4g.verify(root, output)
 
     def test_symlinked_case_source_denied(self):
