@@ -24,4 +24,4 @@ Create scene-by-scene scroll and interaction storyboards, not isolated decoratio
 
 ## Required handoff / review
 Supply brief + mood direction + source/asset provenance + scene and responsive storyboard + selected stack rationale + accessibility/performance/security risks + meaningful acceptance checklist + truthful test status.
-At minimum review narrow phone 320/360/375/390/430, tablet 768/1024, desktop 1280/1440/1920; short viewports and landscape. Avoid universal heavy animations; respect reduced motion and pause/stop. Preview, owner review and explicit independent release approval precede deployment. A planning skill does not claim live website capability, install software, write source, run models, or grant privileges.
+At minimum review narrow phone 320/360/375/390/430, tablet 768/1024, desktop 1280/1440/1920; short viewports and landscape. Avoid universal heavy animations; respect `prefers-reduced-motion` and pause/stop. Preview, owner review and explicit independent release approval precede deployment. A planning skill does not claim live website capability, install software, write source, run models, or grant privileges.
