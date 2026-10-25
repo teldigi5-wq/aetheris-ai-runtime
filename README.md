@@ -58,7 +58,7 @@ That SHA is a **certification checkpoint**, not a claim that runtime development
 | Security | [Worker hardening PR #185](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/185), 7/7 previous head CI passed | Integrate isolation, principal, secrets and real stoppability before agent execution |
 | Governed visual-design skills | [PR #186](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/186), 3/3 CI passed | Skill references default-off, no privileged tools; zero autonomous cinematic output certified |
 | Current E3.9G coding model experiments | Qwen/Hermes/Granite models tested on disposable Chromium faults; Qwen 7B two-site repairs 0/4 | E3.9G-12B4D genuine paired A/B and held-out independently verified repairs |
-| E3.9H cinematic capability | Research/standards and negative control only | Independently reviewed procedural 3D positive control, real Chromium, genuine model-generated scene, mobile GPU and owner QA |
+| E3.9H cinematic capability | [Controlled WebGL2 reference PR #187](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/187) passed its 3-job Chromium + Windows/Ubuntu workflow; this is **not** AI-generated | Genuine model-produced scenes, independent creative review, real-device GPU and owner QA remain pending |
 | E4–E9 | Candidate routing, code factory and agent/security foundations | Full model selection, website/immersive creation, coordinators, enterprise cockpit and final certification |
 | Stage45/46 and physical Windows | Multiple frozen NO_GO/CI artifacts; Stage46 workstreams differ | 13 Stage45 blockers, actual PC GPU/voice/STOP/permissions and release operator authority |
 
