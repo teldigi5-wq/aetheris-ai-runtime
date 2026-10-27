@@ -1,0 +1,45 @@
+name: E3.9H Real Chromium WebGL Loss and Reload Safety
+on:
+  pull_request:
+    branches: [test/e39g12b4n-safe-focus-alternatives-20261025]
+    paths:
+      - '.github/workflows/runtime-e39h-webgl-context-recovery.yml'
+      - 'tools/enterprise/e3_factory/e39h_context_loss_browser.mjs'
+      - 'tools/enterprise/e3_factory/test_e39h_context_loss.py'
+      - 'docs/runtime/e39h-webgl-context-loss-recovery-20261027.md'
+permissions:
+  contents: read
+jobs:
+  actual-webgl-context-loss:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Exact commit and reject unverifiable capability claims
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          python -m unittest discover -s tools/enterprise/e3_factory -p test_e39h_context_loss.py -v
+          node --check tools/enterprise/e3_factory/e39h_context_loss_browser.mjs
+      - name: Install fixed real Chromium in short-lived CI
+        run: |
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Test real desktop/mobile WebGL loss, safe static fallback and reload
+        run: node tools/enterprise/e3_factory/e39h_context_loss_browser.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: e39h-real-chromium-context-loss-reference-only
+          path: target/e3-factory/e39h-context-loss/
+          if-no-files-found: warn
+          retention-days: 7
