@@ -1,0 +1,11 @@
+# E5 — reproducible static website preview factory (first executable slice)
+
+**27 October 2026 · development DRAFT · no deployment · no model-authored website · NO_GO.**
+
+E5 begins with a repeatable *output contract*, not a claim that Syntra can autonomously design or deploy an immersive brand website. The input is the existing E3.9H **human-authored WebGL2 reference**. It has only three locally reviewed files: `index.html`, `styles.css` and `scene.js`. The E5 builder accepts **no user-supplied path or model output** and makes **zero model calls**; it never requests a domain, sends source to a third party or updates any production website.
+
+`python tools/enterprise/e3_factory/e5_reference_preview.py` validates precisely those local files, rejects symlinks, extra or binary/oversized assets, external active references and remote JavaScript/CSS fetch mechanisms, and checks the expected accessible document/fallback structure. It builds `target/e5/reference-preview.zip` with stable file order, timestamps and ZIP attributes. An embedded `preview-manifest.json` contains every approved asset's SHA-256 and explicitly records `modelAuthored:false`, `ownerApproved:false`, `deploymentAuthorized:false`, `productionReady:false` and `runtimeReleaseStatus:NO_GO`. Repeating the same build must yield an identical ZIP hash. The preview is an offline static artifact, **not a production deploy**.
+
+CI on the exact commit uses negative Python policy tests and then tests the *unpacked ZIP* in genuine Playwright Chromium on desktop and mobile, with reduced-motion static fallback. The ZIP is retained as a temporary GitHub Actions artifact for owner/reviewer inspection. No source folders or CI secrets are part of the archive.
+
+The test uses a trusted code-authored reference, not a model-created customer website, polished production art direction, licensed customer photographs, valid brand claims or a guaranteed WCAG 2.2 AA audit. E5 still needs original product/brand design input, an approved model-authored implementation, clean Build/Test/Review stage, signed owner approval and preview-to-production release controls before any commercial use. E3.9H, E4, E5–E9 and the nine Stage45 certification gates remain unfinished; protected main and deployments are untouched.
