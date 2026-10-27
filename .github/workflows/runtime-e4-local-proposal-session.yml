@@ -1,5 +1,7 @@
 name: E4 Explicit Local Ollama Proposal Session - No Cloud Fallback
 on:
+  push:
+    branches: [feat/e4-explicit-local-model-proposal-session-20261027]
   pull_request:
     branches: [test/e4-free-model-route-admission-20261027]
     paths:
