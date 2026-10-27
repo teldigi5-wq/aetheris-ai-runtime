@@ -1,0 +1,69 @@
+name: E5 Static Preview Factory - Reproducible Offline Artifact
+on:
+  push:
+    branches: [feat/e5-reproducible-local-website-preview-20261027]
+  pull_request:
+    branches: [feat/e4-local-model-proposal-cli-20261027]
+    paths:
+      - '.github/workflows/runtime-e5-reference-preview.yml'
+      - 'tools/enterprise/e3_factory/e5_*'
+      - 'docs/runtime/E5_REFERENCE_PREVIEW_FACTORY_20261027.md'
+permissions:
+  contents: read
+jobs:
+  reproducible-local-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Exact SHA and negative source-policy tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python -m unittest discover -s tools/enterprise/e3_factory -p test_e5_reference_preview.py -v
+          python -m py_compile tools/enterprise/e3_factory/e5_reference_preview.py
+          node --check tools/enterprise/e3_factory/e5_packaged_preview_browser.mjs
+      - name: Build deterministic local ZIP and verify repeated SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/enterprise/e3_factory/e5_reference_preview.py > target-e5-report.json
+          sha1="$(sha256sum target/e5/reference-preview.zip | cut -d ' ' -f 1)"
+          python tools/enterprise/e3_factory/e5_reference_preview.py > target-e5-report-2.json
+          sha2="$(sha256sum target/e5/reference-preview.zip | cut -d ' ' -f 1)"
+          test "$sha1" = "$sha2"
+          cmp target-e5-report.json target-e5-report-2.json
+          python -m zipfile -t target/e5/reference-preview.zip
+          python -m zipfile -e target/e5/reference-preview.zip target/e5/site
+          echo E5_ZIP_REPRODUCIBLE_OFFLINE_PREVIEW_PASS
+      - name: Install pinned Playwright and real Chromium for preview QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Exercise actual unpacked preview desktop, mobile and reduced motion
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/enterprise/e3_factory/e5_packaged_preview_browser.mjs
+          echo E5_EXTRACTED_REFERENCE_CHROMIUM_SMOKE_PASS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: e5-human-coded-reference-static-preview-not-production
+          path: |
+            target/e5/reference-preview.zip
+            target-e5-report.json
+          if-no-files-found: warn
+          retention-days: 7
