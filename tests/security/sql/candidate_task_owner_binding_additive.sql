@@ -16,7 +16,8 @@ ALTER TABLE aetheris_tasks
     (owner_identity_uid IS NULL AND owner_tenant_key IS NULL
       AND owner_project_key IS NULL AND owner_verified_at IS NULL)
     OR
-    (owner_identity_uid > 0 AND owner_tenant_key IS NOT NULL
+    (owner_identity_uid IS NOT NULL AND owner_identity_uid > 0
+      AND owner_tenant_key IS NOT NULL
       AND owner_tenant_key ~ '^[a-z0-9][a-z0-9_-]{0,95}$'
       AND owner_verified_at IS NOT NULL
       AND (owner_project_key IS NULL OR
