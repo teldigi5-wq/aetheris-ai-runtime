@@ -1,0 +1,67 @@
+name: Runtime Pinned Identity Principal - RS256 Adversarial Proof
+on:
+  push:
+    branches: [security/runtime-pinned-rs256-principal-20261028]
+  pull_request:
+    branches: [security/runtime-task-mission-api-ownerless-lockdown-20261028]
+    paths:
+      - '.github/workflows/runtime-pinned-rs256-principal.yml'
+      - 'orchestrator-service/pom.xml'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimePinnedPrincipalVerifier.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimePinnedPrincipalVerifierTest.java'
+      - 'docs/security/RUNTIME_PINNED_RS256_PRINCIPAL_20261028.md'
+permissions:
+  contents: read
+jobs:
+  sealed-signed-principal-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Verify immutable head, no authorization integration or owner bypass
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator')
+          code=(root/'security/RuntimePinnedPrincipalVerifier.java').read_text()
+          for required in ('RS256', 'getAudience().size() != 1', 'getIssuer()',
+                           'getKeyId()', 'ROLE_SCOPE_CEILINGS', 'Set.copyOf(scopes)',
+                           'parseSignedClaims(token)', 'getExpiration()',
+                           'getIssuedAt()', 'identityUid'):
+              assert required in code, required
+          for forbidden in ('@Component', '@Bean', '@Value', 'getHeader(',
+                            'https://keys', 'Jwks', 'httpClient',
+                            'System.getenv(', 'allowTaskRead('):
+              assert forbidden not in code, forbidden
+          http=(root/'api/OwnerlessTaskMissionHttpFilter.java').read_text()
+          assert '@Component' in http and 'HttpServletResponse.SC_NOT_FOUND' in http
+          streams=(root/'task/TaskEventStreamService.java').read_text()
+          assert 'subscribeAll(' not in streams and 'globalEmitters' not in streams
+          pom=Path('orchestrator-service/pom.xml').read_text()
+          for part in ('jjwt-api', 'jjwt-impl', 'jjwt-jackson', '<jjwt.version>0.12.6</jjwt.version>'):
+              assert part in pom
+          print('RUNTIME_PINNED_PRINCIPAL_LOCKDOWN_NO_ROUTE_ACTIVATION_PASS')
+          PY
+      - name: Actual signed JWT adversarial proof and inherited HTTP denial regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml -Dtest=RuntimePinnedPrincipalVerifierTest,OwnerlessTaskMissionHttpFilterTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
+          echo RUNTIME_PINNED_IDENTITY_RS256_AND_OWNERLESS_HTTP_DENIAL_PASS
+      - name: Release remains NO_GO
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'Stage45 NO_GO' docs/security/RUNTIME_PINNED_RS256_PRINCIPAL_20261028.md
+          echo RUNTIME_RS256_PRINCIPAL_NOT_OBJECT_AUTHORIZATION_NO_GO_PASS
