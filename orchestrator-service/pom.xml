@@ -11,9 +11,29 @@
   <version>0.2.0-SNAPSHOT</version>
   <properties>
     <java.version>21</java.version>
+    <jjwt.version>0.12.6</jjwt.version>
     <project.build.outputTimestamp>2020-01-01T00:00:00Z</project.build.outputTimestamp>
   </properties>
   <dependencies>
+    <!-- Identical signed Identity JWT parsing contract to Platform backend resources.
+         This isolated verifier does NOT enable ownerless task/mission HTTP APIs. -->
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-api</artifactId>
+      <version>${jjwt.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-impl</artifactId>
+      <version>${jjwt.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.jsonwebtoken</groupId>
+      <artifactId>jjwt-jackson</artifactId>
+      <version>${jjwt.version}</version>
+      <scope>runtime</scope>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
