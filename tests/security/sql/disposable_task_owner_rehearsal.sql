@@ -111,6 +111,26 @@ BEGIN
   BEGIN
     INSERT INTO aetheris_tasks
       (id,title,command_text,state,mode,created_at,updated_at,
+       owner_tenant_key,owner_verified_at)
+      VALUES ('99999999-9999-4999-8999-999999999999',
+      'bad','bad','QUEUED','BALANCED',now(),now(),'tenant-alpha',now());
+    RAISE EXCEPTION 'NULL UID with tenant binding was accepted due to UNKNOWN constraint';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+
+  BEGIN
+    INSERT INTO aetheris_tasks
+      (id,title,command_text,state,mode,created_at,updated_at,
+       owner_identity_uid,owner_tenant_key)
+      VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'bad','bad','QUEUED','BALANCED',now(),now(),42,'tenant-alpha');
+    RAISE EXCEPTION 'Missing verified binding timestamp was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+
+  BEGIN
+    INSERT INTO aetheris_tasks
+      (id,title,command_text,state,mode,created_at,updated_at,
        owner_identity_uid,owner_tenant_key,owner_verified_at)
       VALUES ('66666666-6666-4666-8666-666666666666',
       'bad','bad','QUEUED','BALANCED',now(),now(),0,'tenant-alpha',now());
