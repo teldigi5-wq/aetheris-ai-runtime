@@ -1,0 +1,91 @@
+name: E5 Untrusted Copy Proposal - Quarantined Offline Preview
+on:
+  push:
+    branches: [feat/e5-untrusted-copy-proposal-preview-20261028]
+  pull_request:
+    branches: [feat/e5-reproducible-local-website-preview-20261027]
+    paths:
+      - '.github/workflows/runtime-e5-untrusted-copy-preview.yml'
+      - 'tools/enterprise/e3_factory/e5_untrusted_copy_*'
+      - 'tools/enterprise/e3_factory/test_e5_untrusted_copy_preview.py'
+      - 'docs/runtime/E5_UNTRUSTED_COPY_REVIEW_20261028.md'
+permissions:
+  contents: read
+jobs:
+  quarantined-copy-chromium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Exact immutable head and reference/candidate negative tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python -m unittest discover -s tools/enterprise/e3_factory -p test_e5_reference_preview.py -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p test_e5_untrusted_copy_preview.py -v
+          python -m py_compile tools/enterprise/e3_factory/e5_reference_preview.py tools/enterprise/e3_factory/e5_untrusted_copy_preview.py
+          node --check tools/enterprise/e3_factory/e5_untrusted_copy_browser.mjs
+      - name: Build deterministic quarantined candidate without model or network
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/e5
+          cat > target/e5/copy-proposal.json <<'EOF'
+          {"version":1,"brandLabel":"Prototype Atelier","headlineLines":["Quiet materials.","Purposeful motion."]}
+          EOF
+          python tools/enterprise/e3_factory/e5_untrusted_copy_preview.py > target-e5-untrusted-copy-report.json
+          first="$(sha256sum target/e5/untrusted-copy-preview.zip | cut -d ' ' -f 1)"
+          python tools/enterprise/e3_factory/e5_untrusted_copy_preview.py > target-e5-untrusted-copy-report-2.json
+          second="$(sha256sum target/e5/untrusted-copy-preview.zip | cut -d ' ' -f 1)"
+          test "$first" = "$second"
+          cmp target-e5-untrusted-copy-report.json target-e5-untrusted-copy-report-2.json
+          python -m zipfile -t target/e5/untrusted-copy-preview.zip
+          python -m zipfile -e target/e5/untrusted-copy-preview.zip target/e5/untrusted-copy-site
+          echo E5_UNTRUSTED_COPY_REPRODUCIBLE_NO_MODEL_NO_DEPLOYMENT_PASS
+      - name: Install pinned Chromium for offline review QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Real Chromium desktop mobile reduced-motion and active-code hash proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/enterprise/e3_factory/e5_untrusted_copy_browser.mjs
+          echo E5_UNTRUSTED_COPY_ACTUAL_EXTRACTED_CHROMIUM_REVIEW_PASS
+      - name: Release and authority remain denied
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('target/e5/untrusted-copy-site')
+          manifest=json.loads((root/'preview-manifest.json').read_text())
+          assert manifest['productionReady'] is False
+          assert manifest['deploymentAuthorized'] is False
+          assert manifest['ownerApproved'] is False
+          assert manifest['modelAuthored'] is None
+          assert manifest['runtimeReleaseStatus']=='NO_GO'
+          print('E5_UNTRUSTED_COPY_RELEASE_NO_GO_GUARD_PASS')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: e5-untrusted-copy-review-only-not-approved
+          path: |
+            target/e5/untrusted-copy-preview.zip
+            target-e5-untrusted-copy-report.json
+          if-no-files-found: warn
+          retention-days: 7
