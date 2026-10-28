@@ -41,20 +41,16 @@ CREATE TEMP TABLE project_memberships (
 
 -- Authorized synthetic memberships are persisted separately from each
 -- task's creator/owner; a signed UID alone cannot confer tenant membership.
-INSERT INTO tenant_memberships(tenant_key, identity_uid, status, valid_until) VALUES
- ('tenant-alpha',42,'ACTIVE',now()+interval '1 day'),
- ('tenant-alpha',77,'ACTIVE',now()+interval '1 day'),
- ('tenant-beta',42,'ACTIVE',now()+interval '1 day'),
- ('tenant-alpha',99,'REVOKED',NULL);
-UPDATE tenant_memberships SET revoked_at=now()
- WHERE tenant_key='tenant-alpha' AND identity_uid=99;
-INSERT INTO project_memberships(tenant_key,project_key,identity_uid,status,valid_until) VALUES
- ('tenant-alpha','project-red',42,'ACTIVE',now()+interval '1 day'),
- ('tenant-alpha','project-blue',77,'ACTIVE',now()+interval '1 day'),
- ('tenant-beta','project-red',42,'ACTIVE',now()+interval '1 day'),
- ('tenant-alpha','project-red',99,'REVOKED',NULL);
-UPDATE project_memberships SET revoked_at=now()
- WHERE tenant_key='tenant-alpha' AND identity_uid=99;
+INSERT INTO tenant_memberships(tenant_key, identity_uid, status, revoked_at, valid_until) VALUES
+ ('tenant-alpha',42,'ACTIVE',NULL,now()+interval '1 day'),
+ ('tenant-alpha',77,'ACTIVE',NULL,now()+interval '1 day'),
+ ('tenant-beta',42,'ACTIVE',NULL,now()+interval '1 day'),
+ ('tenant-alpha',99,'REVOKED',now(),NULL);
+INSERT INTO project_memberships(tenant_key,project_key,identity_uid,status,revoked_at,valid_until) VALUES
+ ('tenant-alpha','project-red',42,'ACTIVE',NULL,now()+interval '1 day'),
+ ('tenant-alpha','project-blue',77,'ACTIVE',NULL,now()+interval '1 day'),
+ ('tenant-beta','project-red',42,'ACTIVE',NULL,now()+interval '1 day'),
+ ('tenant-alpha','project-red',99,'REVOKED',now(),NULL);
 
 INSERT INTO aetheris_tasks(id,title,command_text,state,mode,created_at,updated_at,
  owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at) VALUES
