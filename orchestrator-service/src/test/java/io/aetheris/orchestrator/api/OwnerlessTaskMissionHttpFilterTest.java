@@ -123,7 +123,8 @@ class OwnerlessTaskMissionHttpFilterTest {
             org.springframework.stereotype.Component.class));
         assertNotNull(OwnerlessTaskMissionHttpFilter.class.getAnnotation(
             org.springframework.core.annotation.Order.class));
-        assertEquals(0, OwnerlessTaskMissionHttpFilter.class.getDeclaredFields().length
-            - OwnerlessTaskMissionHttpFilter.class.getDeclaredFields().length);
+        assertFalse(OwnerlessTaskMissionHttpFilter.isProtected(null));
+        assertFalse(OwnerlessTaskMissionHttpFilter.isProtected(""));
+        assertTrue(OwnerlessTaskMissionHttpFilter.isProtected("/api/orchestrator/tasks"));
     }
 }
