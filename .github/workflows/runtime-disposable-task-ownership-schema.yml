@@ -1,0 +1,97 @@
+name: Runtime Task Ownership - Disposable PostgreSQL 16 Contract
+on:
+  push:
+    branches: [security/disposable-task-ownership-schema-20261028]
+  pull_request:
+    branches: [security/runtime-pinned-rs256-principal-20261028]
+    paths:
+      - '.github/workflows/runtime-disposable-task-ownership-schema.yml'
+      - 'tests/security/sql/*task_owner*.sql'
+      - 'docs/security/RUNTIME_DISPOSABLE_TASK_OWNER_SCHEMA_20261028.md'
+permissions:
+  contents: read
+jobs:
+  disposable-owner-schema:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ownerlab_ci
+          POSTGRES_PASSWORD: disposable_ci_only_not_a_real_secret
+          POSTGRES_DB: ownerlab_disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ownerlab_ci -d ownerlab_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      AETHERIS_OWNER_SCHEMA_DISPOSABLE_CI_ONLY: "yes"
+      PGHOST: "127.0.0.1"
+      PGPORT: "5432"
+      PGUSER: "ownerlab_ci"
+      PGDATABASE: "ownerlab_disposable"
+      PGPASSWORD: "disposable_ci_only_not_a_real_secret"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Immutable head and review-only schema source checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          sql=Path('tests/security/sql/candidate_task_owner_binding_additive.sql').read_text()
+          lab=Path('tests/security/sql/disposable_task_owner_rehearsal.sql').read_text()
+          for required in ('ADD COLUMN owner_identity_uid bigint',
+                           'ADD COLUMN owner_tenant_key varchar(96)',
+                           'ADD COLUMN owner_project_key varchar(96)',
+                           'ADD COLUMN owner_verified_at timestamp with time zone',
+                           'owner_identity_uid IS NULL',
+                           'owner_identity_uid IS NOT NULL',
+                           'VALIDATE CONSTRAINT aetheris_task_owner_binding_all_or_none',
+                           'WHERE owner_identity_uid IS NOT NULL'):
+              assert required in sql, required
+          for forbidden in ('DROP TABLE', 'TRUNCATE', 'DELETE FROM', 'OWNER_IDENTITY_UID DEFAULT',
+                            'ADD COLUMN OWNER_IDENTITY_UID BIGINT NOT NULL'):
+              assert forbidden not in sql.upper(), forbidden
+          assert 'BEGIN;' in lab and 'ROLLBACK;' in lab
+          assert 'CREATE TEMP TABLE aetheris_tasks' in lab
+          assert 'Legacy ownerless record unexpectedly visible' in lab
+          assert 'NULL UID with tenant binding was accepted' in lab
+          assert 'Same signed Identity UID in different tenant' in lab
+          # Existing task and mission routes stay unconditionally closed.
+          filter_file=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java').read_text()
+          assert '@Component' in filter_file
+          assert 'HttpServletResponse.SC_NOT_FOUND' in filter_file
+          print('RUNTIME_REVIEW_ONLY_TASK_OWNER_SCHEMA_SOURCE_CONTRACT_PASS')
+          PY
+      - name: Exercise real disposable PostgreSQL 16 owner and tenant constraints
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_ACTIONS:-}" = "true"
+          test "${AETHERIS_OWNER_SCHEMA_DISPOSABLE_CI_ONLY:-}" = "yes"
+          test "${PGHOST:-}" = "127.0.0.1"
+          test "${PGDATABASE:-}" = "ownerlab_disposable"
+          test "${PGUSER:-}" = "ownerlab_ci"
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+          psql -X -v ON_ERROR_STOP=1 -f tests/security/sql/disposable_task_owner_rehearsal.sql
+          test "$(psql -X -A -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='aetheris_tasks' AND table_schema NOT LIKE 'pg_temp_%'")" = "0"
+          echo AETHERIS_REAL_PG16_OWNER_SCHEMA_REHEARSAL_ROLLED_BACK_NO_PERSISTED_TABLE_PASS
+      - name: Preserve task Mission and SSE lockdown plus production NO_GO
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'Stage45 NO_GO' docs/security/RUNTIME_DISPOSABLE_TASK_OWNER_SCHEMA_20261028.md
+          grep -q 'Stage45 NO_GO' docs/security/RUNTIME_PINNED_RS256_PRINCIPAL_20261028.md
+          echo AETHERIS_TASK_OWNER_SCHEMA_NOT_DEPLOYED_NOT_AUTHENTICATED_NO_GO_PASS
