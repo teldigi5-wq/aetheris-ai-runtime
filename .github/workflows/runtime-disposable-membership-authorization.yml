@@ -1,0 +1,106 @@
+name: Runtime Membership Query - Disposable PostgreSQL16 Authorization Rehearsal
+on:
+  push:
+    branches: [security/disposable-authoritative-tenant-membership-20261028]
+  pull_request:
+    branches: [security/disposable-task-ownership-schema-20261028]
+    paths:
+      - '.github/workflows/runtime-disposable-membership-authorization.yml'
+      - 'tests/security/sql/disposable_authoritative_membership_rehearsal.sql'
+      - 'docs/security/RUNTIME_MEMBERSHIP_REVOKE_PG16_REHEARSAL_20261028.md'
+permissions:
+  contents: read
+jobs:
+  real-postgres-membership-revocation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ownerlab_ci
+          POSTGRES_PASSWORD: disposable_ci_only_not_a_real_secret
+          POSTGRES_DB: ownerlab_disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ownerlab_ci -d ownerlab_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      AETHERIS_OWNER_SCHEMA_DISPOSABLE_CI_ONLY: "yes"
+      PGHOST: "127.0.0.1"
+      PGPORT: "5432"
+      PGUSER: "ownerlab_ci"
+      PGDATABASE: "ownerlab_disposable"
+      PGPASSWORD: "disposable_ci_only_not_a_real_secret"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Exact head and no live API authentication bypass
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          lab=Path('tests/security/sql/disposable_authoritative_membership_rehearsal.sql').read_text()
+          for marker in (
+              'CREATE TEMP TABLE tenant_memberships',
+              'CREATE TEMP TABLE project_memberships',
+              'FOREIGN KEY (tenant_key, identity_uid)',
+              'CREATE FUNCTION pg_temp.can_read_task',
+              'SECURITY INVOKER',
+              'tm.status=\'ACTIVE\'',
+              'pm.status=\'ACTIVE\'',
+              "WHERE t.id=p_task",
+              't.owner_identity_uid=p_identity_uid',
+              't.owner_tenant_key=p_tenant',
+              't.owner_project_key=p_project',
+              'Tenant membership revocation failed',
+              'Project membership revocation failed',
+              'Expired project membership unexpectedly authorized',
+              'Historic ownerless task leaked',
+              'ROLLBACK;',
+          ):
+              assert marker in lab, marker
+          assert 'CREATE TEMP TABLE aetheris_tasks' in lab
+          assert 'BEGIN;' in lab and 'ROLLBACK;' in lab
+          for forbidden in ('CREATE ROLE', 'CREATE USER', 'SECURITY DEFINER',
+                            'DROP DATABASE', 'TRUNCATE', 'DELETE FROM',
+                            'ALTER SYSTEM', 'GRANT ALL'):
+              assert forbidden not in lab.upper(), forbidden
+          lockdown=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java').read_text()
+          assert '@Component' in lockdown and 'HttpServletResponse.SC_NOT_FOUND' in lockdown
+          streams=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/task/TaskEventStreamService.java').read_text()
+          assert 'subscribeAll(' not in streams and 'globalEmitters' not in streams
+          verifier=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimePinnedPrincipalVerifier.java').read_text()
+          assert 'verifyBearer(' in verifier and 'RS256' in verifier
+          print('AETHERIS_MEMBERSHIP_AUTHORIZATION_DISPOSABLE_SOURCE_GUARD_PASS')
+          PY
+      - name: Real PostgreSQL16 tenant/project membership and revocation denial
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_ACTIONS:-}" = "true"
+          test "${AETHERIS_OWNER_SCHEMA_DISPOSABLE_CI_ONLY:-}" = "yes"
+          test "${PGHOST:-}" = "127.0.0.1"
+          test "${PGDATABASE:-}" = "ownerlab_disposable"
+          test "${PGUSER:-}" = "ownerlab_ci"
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+          psql -X -v ON_ERROR_STOP=1 -f tests/security/sql/disposable_authoritative_membership_rehearsal.sql
+          test "$(psql -X -A -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ('aetheris_tasks','tenant_memberships','project_memberships') AND table_schema NOT LIKE 'pg_temp_%'")" = "0"
+          echo AETHERIS_PG16_MEMBERSHIP_REVOKE_ISOLATION_REAL_SQL_ROLLBACK_PASS
+      - name: Ownerless HTTP and production release stay denied
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'Stage45 NO_GO' docs/security/RUNTIME_MEMBERSHIP_REVOKE_PG16_REHEARSAL_20261028.md
+          grep -q 'Stage45 NO_GO' docs/security/RUNTIME_DISPOSABLE_TASK_OWNER_SCHEMA_20261028.md
+          echo AETHERIS_MEMBERSHIP_POLICY_NOT_DEPLOYED_STAGE45_NO_GO_PASS
