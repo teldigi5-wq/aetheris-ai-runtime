@@ -16,7 +16,6 @@ public class TaskEventStreamService {
 
     private static final long TIMEOUT_MS = Duration.ofMinutes(30).toMillis();
     private final Map<UUID, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
-    private final CopyOnWriteArrayList<SseEmitter> globalEmitters = new CopyOnWriteArrayList<>();
     private final TaskEventJournalService journal;
 
     public TaskEventStreamService(TaskEventJournalService journal) { this.journal = journal; }
@@ -28,22 +27,17 @@ public class TaskEventStreamService {
         return emitter;
     }
 
-    public SseEmitter subscribeAll() {
-        SseEmitter emitter = new SseEmitter(TIMEOUT_MS);
-        globalEmitters.add(emitter);
-        emitter.onCompletion(() -> globalEmitters.remove(emitter)); emitter.onTimeout(() -> globalEmitters.remove(emitter)); emitter.onError(error -> globalEmitters.remove(emitter));
-        return emitter;
-    }
-
     public List<TaskEvent> history(UUID taskId) { return journal.history(taskId); }
 
     public void publish(TaskEvent event) {
         journal.append(event);
-        send(event, emitters.getOrDefault(event.taskId(), new CopyOnWriteArrayList<>()), () -> {});
-        send(event, globalEmitters, () -> {});
+        // Deliberately no global multicast: task events may contain private
+        // metadata. Per-task subscriptions are separately disabled at the
+        // HTTP controller until authoritative caller-to-owner binding exists.
+        send(event, emitters.getOrDefault(event.taskId(), new CopyOnWriteArrayList<>()));
     }
 
-    private void send(TaskEvent event, List<SseEmitter> subscribers, Runnable ignored) {
+    private void send(TaskEvent event, List<SseEmitter> subscribers) {
         for (SseEmitter emitter : subscribers) {
             try {
                 emitter.send(SseEmitter.event().name("task-event").id(event.taskId()+":"+event.timestamp()).data(event));

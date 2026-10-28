@@ -13,5 +13,8 @@ public class OperationsStreamController {
     private final TaskEventStreamService streams;
     public OperationsStreamController(TaskEventStreamService streams){this.streams=streams;}
     @GetMapping(value="/events",produces=MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter events(){return streams.subscribeAll();}
+    public SseEmitter events(){
+        TaskEventExposureGate.requireVerifiedOwnerBinding();
+        throw new IllegalStateException("Unreachable ownerless event stream");
+    }
 }

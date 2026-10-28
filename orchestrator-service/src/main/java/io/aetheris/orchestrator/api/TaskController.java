@@ -54,12 +54,14 @@ public class TaskController {
 
     @GetMapping("/{id}/events/history")
     public List<TaskEvent> history(@PathVariable UUID id) {
+        TaskEventExposureGate.requireVerifiedOwnerBinding();
         tasks.getRequired(id);
         return streams.history(id);
     }
 
     @GetMapping(value = "/{id}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter events(@PathVariable UUID id) {
+        TaskEventExposureGate.requireVerifiedOwnerBinding();
         tasks.getRequired(id);
         SseEmitter emitter = streams.subscribe(id);
         try {
