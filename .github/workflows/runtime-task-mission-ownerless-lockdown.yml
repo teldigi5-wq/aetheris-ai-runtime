@@ -1,0 +1,70 @@
+name: Runtime Ownerless Task and Mission HTTP Containment
+on:
+  push:
+    branches: [security/runtime-task-mission-api-ownerless-lockdown-20261028]
+  pull_request:
+    branches: [security/runtime-ownerless-task-event-lockdown-20261028]
+    paths:
+      - '.github/workflows/runtime-task-mission-ownerless-lockdown.yml'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilterTest.java'
+      - 'docs/security/RUNTIME_TASK_MISSION_HTTP_CONTAINMENT_20261028.md'
+permissions:
+  contents: read
+jobs:
+  ownerless-task-mission-containment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Exact SHA, filter registration and no header or env escape
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path("orchestrator-service/src/main/java/io/aetheris/orchestrator/api")
+          f=(root/"OwnerlessTaskMissionHttpFilter.java").read_text()
+          for guard in (
+              "@Component",
+              "@Order(Ordered.HIGHEST_PRECEDENCE)",
+              "extends OncePerRequestFilter",
+              '"/api/orchestrator/tasks"',
+              '"/api/orchestrator/missions"',
+              'delimiter == \'/\' || delimiter == \';\'',
+              "response.sendError(HttpServletResponse.SC_NOT_FOUND)",
+              "return;",
+          ):
+              assert guard in f, guard
+          for prohibited in ("System.getenv(", "@Value(", "getHeader(", "getParameter(", "AETHERIS_TASK_OWNER_BYPASS"):
+              assert prohibited not in f, prohibited
+          assert f.index("response.sendError(HttpServletResponse.SC_NOT_FOUND)") < f.index("chain.doFilter(request, response)")
+          task=(root/"TaskController.java").read_text()
+          missions=(root/"MissionController.java").read_text()
+          assert '@RequestMapping("/api/orchestrator/tasks")' in task
+          assert '@RequestMapping("/api/orchestrator/missions")' in missions
+          streams=(root.parent/"task/TaskEventStreamService.java").read_text()
+          assert "subscribeAll(" not in streams and "globalEmitters" not in streams
+          print("RUNTIME_TASK_MISSION_EARLY_HTTP_DENIAL_NO_HEADER_BYPASS_PASS")
+          PY
+      - name: Real Spring MVC HTTP task mission plus SSE denial and internal journaling
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml -Dtest=OwnerlessTaskMissionHttpFilterTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
+          echo RUNTIME_TASK_MISSION_HTTP_AND_SSE_REAL_MVC_DENIAL_PASS
+      - name: No customer release or ownership certification
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'Stage45 NO_GO' docs/security/RUNTIME_TASK_MISSION_HTTP_CONTAINMENT_20261028.md
+          echo RUNTIME_OWNERLESS_TASK_MISSION_RELEASE_NO_GO_PASS
