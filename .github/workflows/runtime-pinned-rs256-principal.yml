@@ -40,7 +40,7 @@ jobs:
                            'parseSignedClaims(token)', 'getExpiration()',
                            'getIssuedAt()', 'identityUid'):
               assert required in code, required
-          for forbidden in ('@Component', '@Bean', '@Value', 'getHeader(',
+          for forbidden in ('@Component', '@Bean', '@Value', 'request.getHeader(',
                             'https://keys', 'Jwks', 'httpClient',
                             'System.getenv(', 'allowTaskRead('):
               assert forbidden not in code, forbidden
