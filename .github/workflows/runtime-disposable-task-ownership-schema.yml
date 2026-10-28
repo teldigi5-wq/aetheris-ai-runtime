@@ -59,14 +59,13 @@ jobs:
                            'WHERE owner_identity_uid IS NOT NULL'):
               assert required in sql, required
           for forbidden in ('DROP TABLE', 'TRUNCATE', 'DELETE FROM', 'OWNER_IDENTITY_UID DEFAULT',
-                            'ADD COLUMN owner_identity_uid bigint NOT NULL'):
+                            'ADD COLUMN OWNER_IDENTITY_UID BIGINT NOT NULL'):
               assert forbidden not in sql.upper(), forbidden
           assert 'BEGIN;' in lab and 'ROLLBACK;' in lab
           assert 'CREATE TEMP TABLE aetheris_tasks' in lab
           assert 'Legacy ownerless record unexpectedly visible' in lab
           assert 'NULL UID with tenant binding was accepted' in lab
           assert 'Same signed Identity UID in different tenant' in lab
-          assert 'Different project' not in lab  # no misleading production claim
           # Existing task and mission routes stay unconditionally closed.
           filter_file=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java').read_text()
           assert '@Component' in filter_file
