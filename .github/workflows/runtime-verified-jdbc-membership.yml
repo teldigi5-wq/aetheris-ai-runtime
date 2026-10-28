@@ -1,0 +1,105 @@
+name: Runtime Verified Principal to Real PostgreSQL Membership Read Proof
+on:
+  push:
+    branches: [security/runtime-verified-principal-jdbc-membership-20261028]
+  pull_request:
+    branches: [security/disposable-authoritative-tenant-membership-20261028]
+    paths:
+      - '.github/workflows/runtime-verified-jdbc-membership.yml'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimePinnedPrincipalVerifier.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbe.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbeTest.java'
+      - 'docs/security/RUNTIME_VERIFIED_JDBC_MEMBERSHIP_PROOF_20261028.md'
+permissions:
+  contents: read
+jobs:
+  verify-real-signed-principal-jdbc:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ownerlab_ci
+          POSTGRES_PASSWORD: disposable_ci_only_not_a_real_secret
+          POSTGRES_DB: ownerlab_disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ownerlab_ci -d ownerlab_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      AETHERIS_OWNER_SCHEMA_DISPOSABLE_CI_ONLY: "yes"
+      AETHERIS_MEMBERSHIP_JDBC_MUST_RUN: "yes"
+      PGHOST: "127.0.0.1"
+      PGPORT: "5432"
+      PGUSER: "ownerlab_ci"
+      PGDATABASE: "ownerlab_disposable"
+      PGPASSWORD: "disposable_ci_only_not_a_real_secret"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Immutable source and NO API activation checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator')
+          auth=(root/'security/RuntimePinnedPrincipalVerifier.java').read_text()
+          probe=(root/'security/RuntimeVerifiedTaskReadProbe.java').read_text()
+          test=(Path('orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbeTest.java')).read_text()
+          assert 'private VerifiedPrincipal(' in auth
+          assert 'public record VerifiedPrincipal(' not in auth
+          assert 'parseSignedClaims(token)' in auth
+          for marker in ('PreparedStatement', 'principal.identityUid()', 'principal.hasScope("orchestrator:read")',
+                         't.owner_identity_uid = ?', 't.owner_tenant_key = ?', 't.owner_project_key = ?',
+                         "tm.status = 'ACTIVE'", "pm.status = 'ACTIVE'", 'tm.revoked_at IS NULL',
+                         'pm.revoked_at IS NULL', 'CURRENT_TIMESTAMP'):
+              assert marker in probe, marker
+          for forbidden in ('@Component', '@Bean', '@Value', 'System.getenv(',
+                            'request.getHeader(', 'Statement.execute(', 'SECURITY DEFINER'):
+              assert forbidden not in probe, forbidden
+          assert 'AETHERIS_MEMBERSHIP_JDBC_MUST_RUN' in test
+          assert 'connection.rollback()' in test
+          assert 'getConstructors().length' in test
+          assert 'signWith(attackerKey.getPrivate()' in test
+          lock=(root/'api/OwnerlessTaskMissionHttpFilter.java').read_text()
+          assert '@Component' in lock and 'HttpServletResponse.SC_NOT_FOUND' in lock
+          events=(root/'task/TaskEventStreamService.java').read_text()
+          assert 'globalEmitters' not in events and 'subscribeAll(' not in events
+          print('AETHERIS_SIGNED_PRINCIPAL_SEALED_TYPE_AND_JDBC_SQL_BOUNDARY_PASS')
+          PY
+      - name: Real signed RS256 principal and disposable JDBC tenant membership
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_ACTIONS:-}" = "true"
+          test "${AETHERIS_OWNER_SCHEMA_DISPOSABLE_CI_ONLY:-}" = "yes"
+          test "${AETHERIS_MEMBERSHIP_JDBC_MUST_RUN:-}" = "yes"
+          test "${PGHOST:-}" = "127.0.0.1"
+          test "${PGDATABASE:-}" = "ownerlab_disposable"
+          test "${PGUSER:-}" = "ownerlab_ci"
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml -Dtest=RuntimeVerifiedTaskReadProbeTest,RuntimePinnedPrincipalVerifierTest,OwnerlessTaskMissionHttpFilterTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
+          echo AETHERIS_ACTUAL_RSA_JDBC_VERIFIED_PRINCIPAL_TENANT_REVOCATION_PASS
+      - name: No permanent task/membership schema and Stage45 remains NO_GO
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+          test "$(psql -X -A -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ('aetheris_tasks','tenant_memberships','project_memberships') AND table_schema NOT LIKE 'pg_temp_%'")" = "0"
+          grep -q 'Stage45 NO_GO' docs/security/RUNTIME_VERIFIED_JDBC_MEMBERSHIP_PROOF_20261028.md
+          echo AETHERIS_JDBC_NO_PRODUCTION_SCHEMA_AND_HTTP_ROUTES_STILL_LOCKED_NO_GO_PASS
