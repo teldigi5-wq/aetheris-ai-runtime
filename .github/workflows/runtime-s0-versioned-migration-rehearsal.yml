@@ -1,0 +1,156 @@
+name: Runtime S0-C Versioned Migration Rehearsal (Disposable PG16)
+on:
+  pull_request:
+    branches:
+      - security/s0-authoritative-registry-integrity-20261029
+    paths:
+      - 'tests/security/migration-candidates/**'
+      - 'docs/security/RUNTIME_S0_VERSIONED_MIGRATION_REHEARSAL_20261029.md'
+      - '.github/workflows/runtime-s0-versioned-migration-rehearsal.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-s0-versioned-migration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  pg16-fresh-legacy-restore:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ownerlab_disposable
+          POSTGRES_USER: ownerlab_ci
+          POSTGRES_PASSWORD: disposable_ci_only_not_a_real_secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ownerlab_ci -d ownerlab_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGDATABASE: ownerlab_disposable
+      PGUSER: ownerlab_ci
+      PGPASSWORD: disposable_ci_only_not_a_real_secret
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Exact SHA, candidate isolation and ownerless HTTP lockdown
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          base=Path('tests/security/migration-candidates')
+          v1=(base/'V1__review_tenant_project_registry.sql').read_text()
+          v2=(base/'V2__review_additive_task_owner_binding.sql').read_text()
+          for token in ('CREATE TABLE registry_tenants', 'CREATE TABLE registry_projects',
+                        'CREATE TABLE registry_tenant_memberships',
+                        'CREATE TABLE registry_project_memberships',
+                        'FOREIGN KEY(tenant_key,identity_uid)',
+                        'REFERENCES registry_tenant_memberships(tenant_key,identity_uid)'):
+              assert token in v1, token
+          for token in ('ADD COLUMN owner_identity_uid bigint',
+                        'ADD COLUMN owner_verified_at timestamptz',
+                        's0_task_owner_all_or_none', 'VALIDATE CONSTRAINT',
+                        's0_task_owner_project_member_fk', 'ON DELETE RESTRICT',
+                        's0_deny_task_owner_binding_update',
+                        'CREATE TRIGGER s0_lock_task_owner_binding'):
+              assert token in v2, token
+          for source in (v1,v2):
+              assert 'DROP TABLE' not in source and 'TRUNCATE' not in source
+              assert 'IF NOT EXISTS' not in source
+          assert not list(Path('orchestrator-service/src/main/resources/db/migration').glob('V*')) if Path('orchestrator-service/src/main/resources/db/migration').exists() else True
+          root=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator')
+          assert 'SC_NOT_FOUND' in (root/'api/OwnerlessTaskMissionHttpFilter.java').read_text()
+          stream=(root/'task/TaskEventStreamService.java').read_text()
+          assert 'globalEmitters' not in stream and 'subscribeAll(' not in stream
+          assert 'private VerifiedPrincipal(' in (root/'security/RuntimePinnedPrincipalVerifier.java').read_text()
+          assert 'spring.jpa.hibernate.ddl-auto=update' in Path('orchestrator-service/src/main/resources/application.properties').read_text()
+          print('AETHERIS_S0_C_VERSIONED_CANDIDATE_NOT_INSTALLED_AND_HTTP_LOCKDOWN_PASS')
+          PY
+      - name: Real PostgreSQL16 synthetic baseline snapshot and restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${PGHOST}" = 127.0.0.1
+          test "${PGDATABASE}" = ownerlab_disposable
+          test "${PGUSER}" = ownerlab_ci
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+          psql -X -v ON_ERROR_STOP=1 -d ownerlab_disposable <<'SQL'
+          CREATE DATABASE ownerlab_legacy;
+          CREATE DATABASE ownerlab_fresh;
+          CREATE DATABASE ownerlab_restore;
+          SQL
+          fixture=tests/security/migration-candidates/fixtures/jpa_shaped_tasks_baseline.sql
+          psql -X -v ON_ERROR_STOP=1 -d ownerlab_legacy -f "$fixture"
+          psql -X -v ON_ERROR_STOP=1 -d ownerlab_fresh -f "$fixture"
+          psql -X -v ON_ERROR_STOP=1 -d ownerlab_legacy <<'SQL'
+          INSERT INTO aetheris_tasks(id,title,command_text,state,mode,created_at,updated_at,version) VALUES
+          ('11111111-1111-4111-8111-111111111111','Historical unbound task','synthetic historic content','QUEUED','BALANCED',now(),now(),3),
+          ('99999999-9999-4999-8999-999999999999','Second unbound task','synthetic historic content 2','QUEUED','BALANCED',now(),now(),5);
+          SQL
+          dump="$RUNNER_TEMP/s0-before-migration.dump"
+          pg_dump --format=custom --no-owner --no-privileges -d ownerlab_legacy -f "$dump"
+          test -s "$dump"
+          pg_restore --exit-on-error --no-owner --no-privileges -d ownerlab_restore "$dump"
+          original="$(psql -X -A -t -v ON_ERROR_STOP=1 -d ownerlab_legacy -c "SELECT string_agg(id::text || ':' || title || ':' || command_text || ':' || state || ':' || mode || ':' || version::text, '|' ORDER BY id) FROM aetheris_tasks")"
+          restored="$(psql -X -A -t -v ON_ERROR_STOP=1 -d ownerlab_restore -c "SELECT string_agg(id::text || ':' || title || ':' || command_text || ':' || state || ':' || mode || ':' || version::text, '|' ORDER BY id) FROM aetheris_tasks")"
+          test -n "$original"
+          test "$original" = "$restored"
+          test "$(psql -X -A -t -d ownerlab_restore -c "SELECT COUNT(*) FROM aetheris_tasks")" = 2
+          echo AETHERIS_PG16_SYNTHETIC_PRECHANGE_BACKUP_RESTORE_PRESERVES_LEGACY_PASS
+      - name: Apply atomic forward candidates to fresh and legacy synthetic databases
+        shell: bash
+        run: |
+          set -euo pipefail
+          v1=tests/security/migration-candidates/V1__review_tenant_project_registry.sql
+          v2=tests/security/migration-candidates/V2__review_additive_task_owner_binding.sql
+          checks=tests/security/migration-candidates/fixtures/assert_candidate_migrations.sql
+          for db in ownerlab_fresh ownerlab_legacy; do
+            psql -X -1 -v ON_ERROR_STOP=1 -d "$db" -f "$v1" -f "$v2"
+            psql -X -v ON_ERROR_STOP=1 -d "$db" -f "$checks" | tee "$RUNNER_TEMP/$db-assertions.log"
+            grep -Fq 'AETHERIS_S0_VERSIONED_MIGRATION_FK_OWNER_QUARANTINE_REVOCATION_PASS' "$RUNNER_TEMP/$db-assertions.log"
+            test "$(psql -X -A -t -d "$db" -c "SELECT COUNT(*) FROM registry_tenants")" = 0
+            test "$(psql -X -A -t -d "$db" -c "SELECT COUNT(*) FROM aetheris_tasks WHERE owner_identity_uid IS NOT NULL")" = 0
+          done
+          test "$(psql -X -A -t -d ownerlab_legacy -c "SELECT COUNT(*) FROM aetheris_tasks WHERE owner_identity_uid IS NULL AND owner_tenant_key IS NULL AND owner_project_key IS NULL AND owner_verified_at IS NULL")" = 2
+          test "$(psql -X -A -t -d ownerlab_legacy -c "SELECT SUM(version) FROM aetheris_tasks")" = 8
+          test "$(psql -X -A -t -d ownerlab_fresh -c "SELECT COUNT(*) FROM aetheris_tasks")" = 0
+          psql -X -v ON_ERROR_STOP=1 -d ownerlab_legacy <<'SQL'
+          DO $assert_legacy$
+          BEGIN
+            BEGIN
+              UPDATE aetheris_tasks SET owner_identity_uid=42,
+               owner_tenant_key='alpha',owner_project_key='red',owner_verified_at=now()
+               WHERE id='11111111-1111-4111-8111-111111111111';
+              RAISE EXCEPTION 'legacy ownerless task was claimable';
+            EXCEPTION WHEN check_violation THEN NULL;
+            END;
+          END
+          $assert_legacy$;
+          SQL
+          echo AETHERIS_PG16_ATOMIC_FRESH_AND_LEGACY_FORWARD_CANDIDATES_PASS
+      - name: Check migrated schema vs untouched restore and Stage45 NO_GO
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(psql -X -A -t -d ownerlab_restore -c "SELECT COUNT(*) FROM information_schema.columns WHERE table_name='aetheris_tasks' AND column_name='owner_identity_uid'")" = 0
+          test "$(psql -X -A -t -d ownerlab_legacy -c "SELECT COUNT(*) FROM information_schema.columns WHERE table_name='aetheris_tasks' AND column_name='owner_identity_uid'")" = 1
+          test "$(psql -X -A -t -d ownerlab_restore -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name LIKE 'registry_%'")" = 0
+          grep -Fq 'Stage45 NO_GO' docs/security/RUNTIME_S0_VERSIONED_MIGRATION_REHEARSAL_20261029.md
+          echo AETHERIS_PG16_SYNTHETIC_RESTORE_UNTOUCHED_NO_PRODUCTION_MIGRATION_NO_GO_PASS
