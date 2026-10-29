@@ -47,7 +47,7 @@ jobs:
               'FilterRegistrationBean<OwnerlessTaskMissionHttpFilter>',
               'FilterRegistrationBean<RuntimePinnedHttpBearerGate>',
               'Ordered.HIGHEST_PRECEDENCE + 1', 'Ordered.HIGHEST_PRECEDENCE)',
-              'get("/api/orchestrator/tasks"', 'PROTECTED_DISPATCHES',
+              '"/api/orchestrator/tasks",', 'PROTECTED_DISPATCHES',
               'RuntimePinnedPrincipalVerifier', 'HttpClient.newHttpClient()',
               '@LocalServerPort', '@Test'
           ):
