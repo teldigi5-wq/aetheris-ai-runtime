@@ -1,0 +1,129 @@
+name: Runtime S0-D3 Database-Login-Bound RLS (Disposable PG16)
+on:
+  pull_request:
+    branches:
+      - security/s0-restricted-registry-read-role-20261029
+    paths:
+      - 'tests/security/s0-db-roles/disposable_login_bound_rls.sql'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeVerifiedLoginBoundRlsReadProbe.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedLoginBoundRlsReadProbeTest.java'
+      - 'docs/security/RUNTIME_S0_LOGIN_BOUND_FORCE_RLS_20261029.md'
+      - '.github/workflows/runtime-s0-login-bound-rls.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-s0-d3-rls-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  signed-db-login-rls:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: s0rls_disposable
+          POSTGRES_USER: s0_owner_ci
+          POSTGRES_PASSWORD: disposable_owner_ci_not_a_real_secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U s0_owner_ci -d s0rls_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: '127.0.0.1'
+      PGPORT: '5432'
+      PGUSER: s0_owner_ci
+      PGDATABASE: s0rls_disposable
+      PGPASSWORD: disposable_owner_ci_not_a_real_secret
+      AETHERIS_S0_RLS_MUST_RUN: 'yes'
+      AETHERIS_S0_RLS_DISPOSABLE_ONLY: 'yes'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Immutable head, safely pinned role ownership and locked HTTP
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('tests/security/s0-db-roles/disposable_login_bound_rls.sql').read_text()
+          probe=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeVerifiedLoginBoundRlsReadProbe.java').read_text()
+          for tok in ('NOSUPERUSER','NOBYPASSRLS','NOINHERIT',
+                      'session_user::name', 'SECURITY DEFINER',
+                      'SET search_path = pg_catalog, pg_temp',
+                      'FORCE ROW LEVEL SECURITY', 'CREATE POLICY s0_test_owner_login_rls',
+                      'GRANT SELECT(id,owner_identity_uid', 's0_rls_login_identity'):
+              assert tok in src, tok
+          for tok in ('VerifiedPrincipal principal', 'principal.identityUid()',
+                      'principal.hasScope("orchestrator:read")',
+                      'connection.isReadOnly()', 'Connection.TRANSACTION_READ_COMMITTED',
+                      'PreparedStatement','owner_verified_at IS NOT NULL'):
+              assert tok in probe, tok
+          assert 'current_setting(' not in src
+          assert 'GRANT ALL' not in src and 'GRANT UPDATE' not in src
+          for forbidden in ('@Component','@Bean','System.getenv(', 'executeUpdate(',
+                            'commit()', 'rollback()'):
+              assert forbidden not in probe, forbidden
+          root=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator')
+          auth=(root/'security/RuntimePinnedPrincipalVerifier.java').read_text()
+          assert 'private VerifiedPrincipal(' in auth
+          http=(root/'api/OwnerlessTaskMissionHttpFilter.java').read_text()
+          ev=(root/'task/TaskEventStreamService.java').read_text()
+          assert '@Component' in http and 'SC_NOT_FOUND' in http
+          assert 'globalEmitters' not in ev and 'subscribeAll(' not in ev
+          assert 'spring.jpa.hibernate.ddl-auto=update' in Path('orchestrator-service/src/main/resources/application.properties').read_text()
+          print('AETHERIS_S0_D3_DB_LOGIN_RLS_SOURCE_AND_HTTP_LOCKDOWN_PASS')
+          PY
+      - name: Apply ONLY to fresh disposable PG16 from nondeployable V1/V2 review fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_ACTIONS}" = true
+          test "${AETHERIS_S0_RLS_DISPOSABLE_ONLY}" = yes
+          test "${PGHOST}" = 127.0.0.1
+          test "${PGDATABASE}" = s0rls_disposable
+          test "${PGUSER}" = s0_owner_ci
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+          psql -X -1 -v ON_ERROR_STOP=1 \
+            -f tests/security/migration-candidates/fixtures/jpa_shaped_tasks_baseline.sql \
+            -f tests/security/migration-candidates/V1__review_tenant_project_registry.sql \
+            -f tests/security/migration-candidates/V2__review_additive_task_owner_binding.sql \
+            -f tests/security/s0-db-roles/disposable_login_bound_rls.sql
+          test "$(psql -X -A -t -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) FROM public.aetheris_tasks")" = 6
+          test "$(psql -X -A -t -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_policies WHERE tablename='aetheris_tasks' AND policyname='s0_test_owner_login_rls'")" = 1
+          test "$(psql -X -A -t -v ON_ERROR_STOP=1 -c "SELECT relforcerowsecurity::int FROM pg_class WHERE oid='public.aetheris_tasks'::regclass")" = 1
+          echo AETHERIS_S0_D3_REAL_PG16_FORCE_RLS_DISPOSABLE_SCHEMA_PASS
+      - name: Real JDBC separate login credentials, signed RS256, RLS bypass and revoke tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml \
+            -Dtest=RuntimeVerifiedLoginBoundRlsReadProbeTest,RuntimePinnedPrincipalVerifierTest,OwnerlessTaskMissionHttpFilterTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
+          grep -Fq 'Stage45 NO_GO' docs/security/RUNTIME_S0_LOGIN_BOUND_FORCE_RLS_20261029.md
+          echo AETHERIS_S0_D3_REAL_SIGNED_UID_DB_SESSION_RLS_JAVA_NEGATIVE_TESTS_PASS
+      - name: Review-only boundary, no customer schema or task access activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(psql -X -A -t -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) FROM public.aetheris_tasks WHERE state='QUEUED'")" = 6
+          test "$(psql -X -A -t -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='s0_ci_escape'")" = 0
+          test "$(psql -X -A -t -v ON_ERROR_STOP=1 -c "SELECT status FROM public.registry_tenant_memberships WHERE tenant_key='alpha' AND identity_uid=42")" = ACTIVE
+          echo AETHERIS_S0_D3_RLS_REVIEW_ONLY_STAGE45_NO_GO_PASS
