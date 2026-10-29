@@ -1,0 +1,99 @@
+name: Runtime S0-E3 Full App H2 Loopback HTTP Containment
+on:
+  pull_request:
+    branches:
+      - security/s0-springboot-real-http-jwt-containment-20261029
+    paths:
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeFullAppHttpContainmentTest.java'
+      - '.github/workflows/runtime-s0-e3-full-app-http-containment.yml'
+      - 'docs/security/RUNTIME_S0_FULL_APP_HTTP_CONTAINMENT_20261029.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-s0-e3-fullapp-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-full-context-h2-http:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      # No public or CI-provisioned external database, model, agent, cloud key.
+      AETHERIS_DISPATCHER_ENABLED: 'false'
+      AETHERIS_SYNTRA_OWNER_RUNTIME_ENABLED: 'false'
+      AETHERIS_CLOUD_PROVIDER_ENABLED: 'false'
+      AETHERIS_EXECUTION_WORKSPACE_WRITE_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Immutable head, genuine application and no production auth registration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path("orchestrator-service/src")
+          test=(root/"test/java/io/aetheris/orchestrator/security/RuntimeFullAppHttpContainmentTest.java").read_text()
+          for marker in (
+            "classes = AetherisOrchestratorApplication.class",
+            "@Import(RuntimeFullAppHttpContainmentTest.OnlyInThisJunitContext.class)",
+            "SpringBootTest.WebEnvironment.RANDOM_PORT",
+            '"server.address=127.0.0.1"',
+            "jdbc:h2:mem:s0_e3_full_application",
+            "spring.jpa.hibernate.ddl-auto=create-drop",
+            "aetheris.dispatcher.enabled=false",
+            "aetheris.execution.workspace-write-enabled=false",
+            "@TestConfiguration(proxyBeanMethods = false)",
+            "FilterRegistrationBean<RuntimePinnedHttpBearerGate>",
+            "Ordered.HIGHEST_PRECEDENCE + 1",
+            "app.getBean(TaskController.class)",
+            "app.getBean(MissionController.class)",
+            "app.getBean(TaskRepository.class)",
+            "handlers.getHandlerMethods()",
+            "assertTrue(controllers.size() >= 30",
+            "HttpClient.newBuilder()",
+            "response.statusCode()",
+            '"/api/orchestrator/tasks"',
+            '"/api/orchestrator/agents"',
+            "@Test"
+          ):
+            assert marker in test, marker
+          assert "DataSourceAutoConfiguration.class" not in test
+          assert "HibernateJpaAutoConfiguration.class" not in test
+          main=(root/"main/java/io/aetheris/orchestrator/AetherisOrchestratorApplication.java").read_text()
+          assert "@SpringBootApplication" in main
+          lock=(root/"main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java").read_text()
+          assert "@Component" in lock and "SC_NOT_FOUND" in lock
+          auth=(root/"main/java/io/aetheris/orchestrator/security/RuntimePinnedHttpBearerGate.java").read_text()
+          assert "@Component" not in auth and "@Configuration" not in auth
+          events=(root/"main/java/io/aetheris/orchestrator/task/TaskEventStreamService.java").read_text()
+          assert "globalEmitters" not in events and "subscribeAll(" not in events
+          assert "spring.jpa.hibernate.ddl-auto=update" in (root/"main/resources/application.properties").read_text()
+          print("AETHERIS_S0_E3_GENUINE_FULL_APP_H2_TEST_ONLY_FILTER_AND_HTTP_LOCKDOWN_PASS")
+          PY
+      - name: Launch genuine Aetheris Orchestrator Spring Boot app in H2 and test signed HTTP
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml \
+            -Dtest=RuntimeFullAppHttpContainmentTest,RuntimePinnedSpringBootHttpIntegrationTest,RuntimePinnedHttpBearerGateLoopbackTest,RuntimePinnedPrincipalVerifierTest,OwnerlessTaskMissionHttpFilterTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
+          grep -Fq 'Stage45 NO_GO' docs/security/RUNTIME_S0_FULL_APP_HTTP_CONTAINMENT_20261029.md
+          echo AETHERIS_S0_E3_REAL_FULL_AETHERIS_BOOT_H2_LOOPBACK_JWT_TESTS_PASS
+      - name: No protected main changes, migrations or customer task activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -f orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimePinnedHttpBearerGateRegistration.java
+          test ! -f orchestrator-service/src/main/java/io/aetheris/orchestrator/api/SignedTaskController.java
+          echo AETHERIS_S0_E3_DRAFT_ONLY_NO_PROD_RESOURCE_SERVER_STAGE45_NO_GO_PASS
