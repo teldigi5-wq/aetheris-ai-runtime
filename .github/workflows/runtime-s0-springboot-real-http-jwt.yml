@@ -1,0 +1,84 @@
+name: Runtime S0-E2 Real Spring Boot JWT Containment (Loopback)
+on:
+  pull_request:
+    branches:
+      - security/s0-loopback-runtime-jwt-http-20261029
+    paths:
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimePinnedSpringBootHttpIntegrationTest.java'
+      - '.github/workflows/runtime-s0-springboot-real-http-jwt.yml'
+      - 'docs/security/RUNTIME_S0_SPRINGBOOT_HTTP_CONTAINMENT_20261029.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-s0-e2-real-boot-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  isolated-real-springboot-http:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Immutable head and no deployable filter registration / unsafe route grant
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('orchestrator-service/src')
+          test=(root/'test/java/io/aetheris/orchestrator/security/RuntimePinnedSpringBootHttpIntegrationTest.java').read_text()
+          for marker in (
+              '@SpringBootTest(', 'SpringBootTest.WebEnvironment.RANDOM_PORT',
+              '@SpringBootConfiguration', '@EnableAutoConfiguration(exclude = {',
+              'DataSourceAutoConfiguration.class', 'HibernateJpaAutoConfiguration.class',
+              '"server.address=127.0.0.1"', '"server.port=0"',
+              'FilterRegistrationBean<OwnerlessTaskMissionHttpFilter>',
+              'FilterRegistrationBean<RuntimePinnedHttpBearerGate>',
+              'Ordered.HIGHEST_PRECEDENCE + 1', 'Ordered.HIGHEST_PRECEDENCE)',
+              'get("/api/orchestrator/tasks"', 'PROTECTED_DISPATCHES',
+              'RuntimePinnedPrincipalVerifier', 'HttpClient.newHttpClient()',
+              '@LocalServerPort', '@Test'
+          ):
+              assert marker in test, marker
+          assert test.index('ownerlessSafetyFirst()') < test.index('testOnlyPinnedBearerSecond()')
+          assert 'AetherisOrchestratorApplication.class' not in test
+          base=root/'main/java/io/aetheris/orchestrator'
+          gate=(base/'security/RuntimePinnedHttpBearerGate.java').read_text()
+          assert '@Component' not in gate and '@Configuration' not in gate
+          assert 'verifier.verifyBearer(bearer)' in gate
+          auth=(base/'security/RuntimePinnedPrincipalVerifier.java').read_text()
+          assert 'private VerifiedPrincipal(' in auth
+          lockdown=(base/'api/OwnerlessTaskMissionHttpFilter.java').read_text()
+          assert '@Component' in lockdown and 'SC_NOT_FOUND' in lockdown
+          events=(base/'task/TaskEventStreamService.java').read_text()
+          assert 'globalEmitters' not in events and 'subscribeAll(' not in events
+          assert 'spring.jpa.hibernate.ddl-auto=update' in (root/'main/resources/application.properties').read_text()
+          print('AETHERIS_S0_E2_MINIMAL_SPRINGBOOT_TEST_ONLY_FILTER_REGISTRATION_LOCKDOWN_PASS')
+          PY
+      - name: Real Spring Boot localhost HTTP plus predecessor JWT/Tomcat/lockdown tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml \
+            -Dtest=RuntimePinnedSpringBootHttpIntegrationTest,RuntimePinnedHttpBearerGateLoopbackTest,RuntimePinnedPrincipalVerifierTest,OwnerlessTaskMissionHttpFilterTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
+          grep -Fq 'Stage45 NO_GO' docs/security/RUNTIME_S0_SPRINGBOOT_HTTP_CONTAINMENT_20261029.md
+          echo AETHERIS_S0_E2_REAL_SPRINGBOOT_RANDOM_PORT_SIGNED_JWT_HTTP_TESTS_PASS
+      - name: Negative release boundary and no application registration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -f orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimePinnedHttpBearerGateRegistration.java
+          test ! -f orchestrator-service/src/main/java/io/aetheris/orchestrator/api/RuntimeSignedTaskController.java
+          echo AETHERIS_S0_E2_NO_PRODUCTION_RUNTIME_AUTH_FILTER_OR_TASK_UNLOCK_NO_GO_PASS
