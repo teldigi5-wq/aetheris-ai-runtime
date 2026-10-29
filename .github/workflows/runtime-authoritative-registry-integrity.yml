@@ -1,0 +1,102 @@
+name: Runtime S0 Registry Integrity (Disposable PG16)
+on:
+  pull_request:
+    branches:
+      - security/runtime-verified-principal-jdbc-membership-20261028
+    paths:
+      - 'tests/security/sql/disposable_authoritative_registry_integrity.sql'
+      - '.github/workflows/runtime-authoritative-registry-integrity.yml'
+      - 'docs/security/RUNTIME_AUTHORITATIVE_REGISTRY_INTEGRITY_20261029.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-s0-registry-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  disposable-registry-integrity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ownerlab_disposable
+          POSTGRES_USER: ownerlab_ci
+          POSTGRES_PASSWORD: disposable_ci_only_not_a_real_secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ownerlab_ci -d ownerlab_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGDATABASE: ownerlab_disposable
+      PGUSER: ownerlab_ci
+      PGPASSWORD: disposable_ci_only_not_a_real_secret
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Immutable head and containment/source checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          script=Path('tests/security/sql/disposable_authoritative_registry_integrity.sql').read_text()
+          required=('CREATE TEMP TABLE registry_tenants',
+                    'CREATE TEMP TABLE registry_projects',
+                    'CREATE TEMP TABLE registry_tenant_memberships',
+                    'CREATE TEMP TABLE registry_project_memberships',
+                    'CREATE TEMP TABLE registry_tasks',
+                    'REFERENCES registry_projects(tenant_key,project_key)',
+                    'REFERENCES registry_tenant_memberships(tenant_key,identity_uid)',
+                    'deny_owner_binding_update', 'SECURITY INVOKER',
+                    'FOREIGN KEY(owner_tenant_key,owner_project_key,owner_identity_uid)',
+                    'ROLLBACK;', 'AETHERIS_PG16_REGISTRY_PARENT_FK_LIFECYCLE_REVOCATION_IMMUTABLE_OWNER_PASS')
+          for token in required:
+              assert token in script, token
+          assert 'CREATE TABLE ' not in script
+          assert 'COMMIT;' not in script
+          assert 'CREATE EXTENSION' not in script
+          root=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator')
+          http=(root/'api/OwnerlessTaskMissionHttpFilter.java').read_text()
+          events=(root/'task/TaskEventStreamService.java').read_text()
+          auth=(root/'security/RuntimePinnedPrincipalVerifier.java').read_text()
+          assert '@Component' in http and 'SC_NOT_FOUND' in http
+          assert 'subscribeAll(' not in events and 'globalEmitters' not in events
+          assert 'private VerifiedPrincipal(' in auth
+          print('AETHERIS_S0_REGISTRY_SOURCE_AND_HTTP_LOCKDOWN_STILL_INTACT_PASS')
+          PY
+      - name: Real PostgreSQL16 disposable registry and revocation proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${PGHOST}" = '127.0.0.1'
+          test "${PGDATABASE}" = 'ownerlab_disposable'
+          test "${PGUSER}" = 'ownerlab_ci'
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+          psql -X -v ON_ERROR_STOP=1 -f tests/security/sql/disposable_authoritative_registry_integrity.sql |
+            tee /tmp/aetheris-registry-proof.log
+          grep -Fq 'AETHERIS_PG16_REGISTRY_PARENT_FK_LIFECYCLE_REVOCATION_IMMUTABLE_OWNER_PASS' /tmp/aetheris-registry-proof.log
+          test "$(psql -X -A -t -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name LIKE 'registry_%' AND table_schema NOT LIKE 'pg_temp_%'")" = '0'
+          echo AETHERIS_PG16_ZERO_PERSISTED_REGISTRY_TABLES_PASS
+      - name: Explicit review-only release boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'Stage45 NO_GO' docs/security/RUNTIME_AUTHORITATIVE_REGISTRY_INTEGRITY_20261029.md
+          grep -Fq 'spring.jpa.hibernate.ddl-auto=update' orchestrator-service/src/main/resources/application.properties
+          echo AETHERIS_S0_REGISTRY_REVIEW_ONLY_NO_MIGRATION_STAGE45_NO_GO_PASS
