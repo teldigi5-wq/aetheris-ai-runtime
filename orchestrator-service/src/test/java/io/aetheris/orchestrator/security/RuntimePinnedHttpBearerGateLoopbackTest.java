@@ -15,7 +15,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.net.InetAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -67,7 +66,7 @@ class RuntimePinnedHttpBearerGateLoopbackTest {
 
         tomcat = new Tomcat();
         tomcat.setBaseDir(Files.createTempDirectory("s0-loopback-tomcat-").toString());
-        tomcat.setHostname(InetAddress.getLoopbackAddress().getHostAddress());
+        tomcat.setHostname("127.0.0.1");
         tomcat.setPort(0);
         tomcat.getConnector();
         Context context = tomcat.addContext("", Files.createTempDirectory("s0-probe-webroot-").toString());
