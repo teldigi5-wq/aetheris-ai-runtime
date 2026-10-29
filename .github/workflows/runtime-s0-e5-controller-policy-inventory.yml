@@ -1,0 +1,110 @@
+name: Runtime S0-E5 Full Handler Security Policy Inventory
+on:
+  pull_request:
+    branches:
+      - security/s0-e4-production-api-quarantine-20261029
+    paths:
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeControllerPolicyInventoryTest.java'
+      - '.github/workflows/runtime-s0-e5-controller-policy-inventory.yml'
+      - 'docs/security/RUNTIME_S0_E5_ROUTE_POLICY_MATRIX_20261029.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-s0-e5-policy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-full-context-route-inventory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      AETHERIS_DISPATCHER_ENABLED: 'false'
+      AETHERIS_SYNTRA_OWNER_RUNTIME_ENABLED: 'false'
+      AETHERIS_CLOUD_PROVIDER_ENABLED: 'false'
+      AETHERIS_EXECUTION_WORKSPACE_WRITE_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Verify immutable SHA, production quarantine and no new route grants
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('orchestrator-service/src')
+          source=(root/'test/java/io/aetheris/orchestrator/security/RuntimeControllerPolicyInventoryTest.java').read_text()
+          for needle in (
+            'classes = AetherisOrchestratorApplication.class',
+            'jdbc:h2:mem:s0_e5_policy_inventory',
+            'spring.jpa.hibernate.ddl-auto=create-drop',
+            'handlers.getHandlerMethods().entrySet()',
+            'RuntimeUncertifiedApiHttpFilter.quarantinedPath(path)',
+            'UNCLASSIFIED_STOP', 'DENY_404',
+            'TASK_MISSION_OWNER_BOUNDARY', 'LIVE_EVENT_AND_REPLAY',
+            'EXTERNAL_CREDENTIAL_AND_CONNECTOR', 'EXECUTION_AND_CONTROL',
+            'OTHER_UNCERTIFIED_API', 'OPERATOR_MONITORING',
+            'unclassified.isEmpty()', 'runtime-handler-policy-matrix.tsv',
+            'SHA-256', '@Test'
+          ):
+              assert needle in source,needle
+          assert '@TestConfiguration' not in source
+          assert 'FilterRegistrationBean' not in source
+          assert 'sendError' not in source
+          main=(root/'main/java/io/aetheris/orchestrator/security/RuntimeUncertifiedApiHttpFilter.java').read_text()
+          assert '@Component' in main and '@Order(Ordered.HIGHEST_PRECEDENCE + 1)' in main
+          assert 'response.sendError(HttpServletResponse.SC_NOT_FOUND)' in main
+          assert 'verifyBearer(' not in main and 'getHeader(' not in main
+          task=(root/'main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java').read_text()
+          assert '@Component' in task and '@Order(Ordered.HIGHEST_PRECEDENCE)' in task
+          events=(root/'main/java/io/aetheris/orchestrator/task/TaskEventStreamService.java').read_text()
+          assert 'globalEmitters' not in events and 'subscribeAll(' not in events
+          assert 'spring.jpa.hibernate.ddl-auto=update' in (root/'main/resources/application.properties').read_text()
+          print('AETHERIS_S0_E5_SOURCE_REAL_ROUTE_INVENTORY_NO_UNLOCK_PASS')
+          PY
+      - name: Full runtime MVC audit and all preceding HTTP/JWT/SSE regression checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml \
+            -Dtest=RuntimeControllerPolicyInventoryTest,RuntimeProductionApiQuarantineTest,RuntimeFullAppHttpContainmentTest,RuntimePinnedSpringBootHttpIntegrationTest,RuntimePinnedHttpBearerGateLoopbackTest,RuntimePinnedPrincipalVerifierTest,OwnerlessTaskMissionHttpFilterTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
+          grep -Fq 'Stage45 NO_GO' docs/security/RUNTIME_S0_E5_ROUTE_POLICY_MATRIX_20261029.md
+          echo AETHERIS_S0_E5_FULL_APP_DENY_FIRST_POLICY_MATRIX_AND_REGRESSIONS_PASS
+      - name: Verify route matrix artifact is nonempty and contains no allow decisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=orchestrator-service/target/s0-e5-route-audit/runtime-handler-policy-matrix.tsv
+          test -s "$FILE"
+          test "$(wc -l < "$FILE")" -ge 71
+          head -n1 "$FILE" | grep -Fq $'method\tpattern\tcontroller\tjava_method\trisk_group\tcurrent_boundary\trelease_prerequisites'
+          if grep -E '(^|[[:space:]])(ALLOW|PERMIT|UNLOCKED)([[:space:]]|$)|UNCLASSIFIED_STOP' "$FILE"; then
+            echo 'Unsafe route inventory classification' >&2
+            exit 1
+          fi
+          test "$(grep -c 'DENY_404' "$FILE")" -ge 70
+          sha256sum "$FILE"
+          echo AETHERIS_S0_E5_DETERMINISTIC_REVIEW_MATRIX_DENY_404_ARTIFACT_PASS
+      - name: Preserve private review inventory for human approval
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: s0-e5-deny-only-route-review-${{ github.sha }}
+          path: orchestrator-service/target/s0-e5-route-audit/runtime-handler-policy-matrix.tsv
+          if-no-files-found: error
+          retention-days: 7
+      - name: Release remains blocked and original customer APIs still denied
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -f orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimePinnedHttpBearerGateRegistration.java
+          echo AETHERIS_S0_E5_ZERO_CUSTOMER_API_AUTHORITY_STAGE45_NO_GO_PASS
