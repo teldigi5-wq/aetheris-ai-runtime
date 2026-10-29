@@ -1,0 +1,90 @@
+name: Runtime S0-E6C Adversarial Direct Port Quarantine
+on:
+  pull_request:
+    branches:
+      - security/s0-e6b-real-http-identity-verification-20261029
+    paths:
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeRealDirectPortDenialRegressionTest.java'
+      - '.github/workflows/runtime-s0-e6c-direct-port-regression.yml'
+      - 'docs/security/RUNTIME_S0_E6C_DIRECT_PORT_PROBES_20261029.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-s0-e6c-probes-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  full-app-direct-port-negative-probes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      AETHERIS_DISPATCHER_ENABLED: 'false'
+      AETHERIS_SYNTRA_OWNER_RUNTIME_ENABLED: 'false'
+      AETHERIS_CLOUD_PROVIDER_ENABLED: 'false'
+      AETHERIS_EXECUTION_WORKSPACE_WRITE_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Exact head, no production route/filter mutations, real loopback negative corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('orchestrator-service/src')
+          test=(src/'test/java/io/aetheris/orchestrator/security/RuntimeRealDirectPortDenialRegressionTest.java').read_text()
+          for marker in (
+            'classes = AetherisOrchestratorApplication.class',
+            'SpringBootTest.WebEnvironment.RANDOM_PORT',
+            '"server.address=127.0.0.1"',
+            'jdbc:h2:mem:s0_e6c_http_denial',
+            'spring.jpa.hibernate.ddl-auto=create-drop',
+            'aetheris.execution.workspace-write-enabled=false',
+            'HttpClient.newBuilder()', 'HttpClient.Redirect.NEVER',
+            'List.of(', '"GET","HEAD","POST","PUT","PATCH","DELETE","OPTIONS"',
+            'X-Forwarded-Client-Cert','X-Original-Authorization',
+            'X-HTTP-Method-Override','/api;v=1/orchestrator/tasks',
+            '/%61pi/orchestrator/agents', 'tasks.count()',
+            'RuntimeRouteAdmissionPolicy.Verdict.QUARANTINED',
+            'assertEquals(404, result.statusCode()',
+          ):
+            assert marker in test,marker
+          assert '@TestConfiguration' not in test
+          assert 'FilterRegistrationBean' not in test
+          original=(src/'main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java').read_text()
+          quarantine=(src/'main/java/io/aetheris/orchestrator/security/RuntimeUncertifiedApiHttpFilter.java').read_text()
+          policy=(src/'main/java/io/aetheris/orchestrator/security/RuntimeRouteAdmissionPolicy.java').read_text()
+          assert '@Component' in original and '@Order(Ordered.HIGHEST_PRECEDENCE)' in original
+          assert '@Component' in quarantine and '@Order(Ordered.HIGHEST_PRECEDENCE + 1)' in quarantine
+          assert 'enum Verdict { QUARANTINED }' in policy
+          assert 'SC_NOT_FOUND' in original and 'SC_NOT_FOUND' in quarantine
+          assert 'spring.jpa.hibernate.ddl-auto=update' in (src/'main/resources/application.properties').read_text()
+          events=(src/'main/java/io/aetheris/orchestrator/task/TaskEventStreamService.java').read_text()
+          assert 'globalEmitters' not in events and 'subscribeAll(' not in events
+          print('AETHERIS_S0_E6C_ACTUAL_FILTER_ORDER_UNCHANGED_NO_API_UNQUARANTINE_PASS')
+          PY
+      - name: True full application TCP HTTP denial methods and all previous JWT/SSE regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml \
+            -Dtest=RuntimeRealDirectPortDenialRegressionTest,RuntimeRouteAdmissionPolicyTest,RuntimeFullAppPinnedIdentityAuthorityTest,RuntimeControllerPolicyInventoryTest,RuntimeProductionApiQuarantineTest,RuntimeFullAppHttpContainmentTest,RuntimePinnedSpringBootHttpIntegrationTest,RuntimePinnedHttpBearerGateLoopbackTest,RuntimePinnedPrincipalVerifierTest,OwnerlessTaskMissionHttpFilterTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
+          grep -Fq 'Stage45 NO_GO' docs/security/RUNTIME_S0_E6C_DIRECT_PORT_PROBES_20261029.md
+          echo AETHERIS_S0_E6C_REAL_FULL_RUNTIME_TCP_METHOD_AND_PROXY_DENY_TESTS_PASS
+      - name: No deployment, principal-based route admission, or release grant
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -f orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimePinnedHttpBearerGateRegistration.java
+          echo AETHERIS_S0_E6C_STILL_NO_LIVE_HTTP_AUTH_OR_OWNER_BINDING_STAGE45_NO_GO_PASS
