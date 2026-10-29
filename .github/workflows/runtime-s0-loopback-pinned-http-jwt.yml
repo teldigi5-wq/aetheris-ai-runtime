@@ -54,7 +54,7 @@ jobs:
           for marker in ('Tomcat()', 'setHostname("127.0.0.1")',
                          'setPort(0)', 'HttpClient.newBuilder()', 'PROTECTED_DISPATCHES',
                          'OwnerlessTaskMissionHttpFilter()',
-                         'test(', 'RuntimePinnedHttpBearerGate(verifier)',
+                         '@Test', 'RuntimePinnedHttpBearerGate(verifier)',
                          'Jwts.builder()', 'SC_NO_CONTENT'):
             assert marker in tests, marker
           assert tests.index('register(context, "ownerless-deny"') < tests.index('register(context, "pinned-probe-only"')
