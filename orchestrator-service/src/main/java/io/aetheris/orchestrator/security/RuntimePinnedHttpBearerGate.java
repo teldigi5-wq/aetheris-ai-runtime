@@ -12,7 +12,7 @@ import java.util.Objects;
 
 /**
  * S0-E1 stand-alone servlet authentication candidate; deliberately NOT a
- * Spring @Component, controller or FilterRegistrationBean. Only the fixed
+ * Spring-managed component, controller or filter registration. Only the fixed
  * synthetic /__s0/auth-probe route is permitted in a test-only Tomcat server.
  *
  * It NEVER authenticates/unlocks customer Task or Mission HTTP routes.
