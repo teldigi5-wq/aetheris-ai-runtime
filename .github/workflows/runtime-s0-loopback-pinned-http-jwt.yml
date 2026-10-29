@@ -1,0 +1,84 @@
+name: Runtime S0-E1 Pinned HTTP JWT on Real Loopback Tomcat
+on:
+  pull_request:
+    branches:
+      - security/s0-db-login-bound-rls-20261029
+    paths:
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimePinnedHttpBearerGate.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimePinnedHttpBearerGateLoopbackTest.java'
+      - '.github/workflows/runtime-s0-loopback-pinned-http-jwt.yml'
+      - 'docs/security/RUNTIME_S0_PINNED_LOOPBACK_HTTP_20261029.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-s0-e1-signed-http-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-loopback-tomcat:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Exact SHA and independent nonproduction servlet defense
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('orchestrator-service/src/main/java/io/aetheris/orchestrator')
+          gate=(root/'security/RuntimePinnedHttpBearerGate.java').read_text()
+          tests=Path('orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimePinnedHttpBearerGateLoopbackTest.java').read_text()
+          for required in ('RuntimePinnedPrincipalVerifier verifier','verifier.verifyBearer(bearer)',
+                           'hasScope("orchestrator:read")',
+                           'getHeaders("Authorization")', 'headers.hasMoreElements()',
+                           'PROBE_PATH.equals(path)', 'PROBE_PATH.equals(request.getServletPath())',
+                           'SC_NOT_FOUND', 'SC_UNAUTHORIZED', 'SC_FORBIDDEN'):
+            assert required in gate, required
+          for forbidden in ('@Component','@Bean','@Configuration',
+                            'FilterRegistrationBean', 'System.getenv(',
+                            'X-Aetheris-Verified-Uid', 'getRemoteUser()'):
+            assert forbidden not in gate, forbidden
+          for marker in ('Tomcat()', 'setHostname("127.0.0.1")',
+                         'setPort(0)', 'HttpClient.newBuilder()', 'PROTECTED_DISPATCHES',
+                         'OwnerlessTaskMissionHttpFilter()',
+                         '@Test', 'RuntimePinnedHttpBearerGate(verifier)',
+                         'Jwts.builder()', 'SC_NO_CONTENT'):
+            assert marker in tests, marker
+          assert tests.index('register(context, "ownerless-deny"') < tests.index('register(context, "pinned-probe-only"')
+          http=(root/'api/OwnerlessTaskMissionHttpFilter.java').read_text()
+          event=(root/'task/TaskEventStreamService.java').read_text()
+          principal=(root/'security/RuntimePinnedPrincipalVerifier.java').read_text()
+          assert '@Component' in http and 'SC_NOT_FOUND' in http
+          assert 'globalEmitters' not in event and 'subscribeAll(' not in event
+          assert 'private VerifiedPrincipal(' in principal
+          assert 'spring.jpa.hibernate.ddl-auto=update' in Path('orchestrator-service/src/main/resources/application.properties').read_text()
+          print('AETHERIS_S0_E1_HTTP_FILTER_NOT_REGISTERED_AND_LOCKDOWN_INTACT_PASS')
+          PY
+      - name: Actual loopback Tomcat/TCP signed JWT and 404-before-dispatch suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml \
+            -Dtest=RuntimePinnedHttpBearerGateLoopbackTest,RuntimePinnedPrincipalVerifierTest,OwnerlessTaskMissionHttpFilterTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
+          grep -Fq 'Stage45 NO_GO' docs/security/RUNTIME_S0_PINNED_LOOPBACK_HTTP_20261029.md
+          echo AETHERIS_S0_E1_REAL_LOOPBACK_TCP_JWT_VERIFIED_HTTP_AND_404_PASS
+      - name: No production route grants or deployable migration introduced
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -f orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimePinnedHttpBearerGateRegistration.java
+          test ! -f orchestrator-service/src/main/java/io/aetheris/orchestrator/api/SignedTaskController.java
+          echo AETHERIS_S0_E1_STAGE45_NO_GO_NO_RUNTIME_RESOURCE_SERVER_REGISTRATION_PASS
