@@ -91,6 +91,21 @@ class E4RouteAdmission(unittest.TestCase):
         self.assertEqual(e4.advisory(request(),observed(),True)["reason"],
                          "UNTRUSTED_OR_INCOMPLETE_SCHEMA")
 
+    def test_website_copy_is_a_separate_local_only_task_not_remotely_admitted(self):
+        local = e4.advisory(request(task="website-copy"), observed(), 2000)
+        self.assertEqual(local["decision"], "CANDIDATE_FOR_SEPARATE_RUNTIME_VERIFICATION")
+        self.assertFalse(local["inferenceExecuted"])
+        self.assertFalse(local["ownerApprovalVerified"])
+        remote = e4.advisory(request(task="website-copy",provider="openrouter",
+            modelId=old.CLOUD_CANDIDATES[1],
+            externalInferenceConsent=True,sourceDisclosureConsent=True),
+            observed(installedLocalModelIds=[],
+                cloudModelDetail={"data":{"id":old.CLOUD_CANDIDATES[1],
+                     "pricing":{"prompt":"0","completion":"0","request":"0"}}},
+                catalogFetchedUnixSeconds=1999), 2000)
+        self.assertEqual(remote["decision"], "DENIED_NO_FALLBACK")
+        self.assertEqual(remote["reason"], "WEBSITE_COPY_LOCAL_ONLY")
+
     def test_admission_is_pure_no_network_or_local_provider_execution(self):
         with mock.patch.object(old,"send",side_effect=AssertionError("NETWORK_CALL")) as fn:
             a=e4.advisory(request(),observed(),2000)
