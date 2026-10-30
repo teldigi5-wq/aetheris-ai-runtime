@@ -61,8 +61,9 @@ async function snapshot(page){
   };
  });
 }
-async function move(page,t){
- const start=await page.evaluate(()=>{const el=document.querySelector('#studio-story');return scrollY+el.getBoundingClientRect().top;});
+async function move(page,start,t){
+ // The story is pinned; resolve this absolute scroll origin exactly once.
+ // Recomputing it after each step would shift the playhead on reverse scroll.
  await page.evaluate(({start,t})=>scrollTo({top:start+innerHeight*2.2*t,behavior:'instant'}),{start,t});
  await page.waitForTimeout(620);
  return snapshot(page);
@@ -119,9 +120,13 @@ try{
    const response=await page.request.get(origin+'/e6-blender-preview.glb');
    assert.equal(response.status(),200);
    assert.equal(hash(await response.body()),proof.previewGlbSha256);
+   const storyStart=await page.evaluate(()=>{
+    const el=document.querySelector('#studio-story');
+    return scrollY+el.getBoundingClientRect().top;
+   });
    const frames=[];
    for(const [act,t] of [['arrival',0.10],['material',0.44],['precision',0.95],['reverse',0.10]]){
-    const s=await move(page,t);
+    const s=await move(page,storyStart,t);
     assert.equal(s.assetVariant,'blender');
     assert.equal(s.act,act==='reverse'?'arrival':act);
     assert(s.progress>=0&&s.progress<=1);
