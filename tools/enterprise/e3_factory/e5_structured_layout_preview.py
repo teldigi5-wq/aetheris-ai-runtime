@@ -27,6 +27,13 @@ COPY = gate.PROPOSAL
 LAYOUT = FOLDER / "layout-proposal.json"
 OUTPUT = FOLDER / "structured-layout-review.zip"
 MAX_LAYOUT_BYTES = 500
+# Reviewed E3.9H reference Git-blob fingerprints, not new model code.
+PINNED_SCENE_BLOB = "f8ae004f8678ebe312ea5179e01dc85147319343"
+PINNED_STYLES_BLOB = "7d06ac0a58fb97d94414771290deea055b64b67c"
+
+
+def _git_blob_sha(data: bytes) -> str:
+    return hashlib.sha1(b"blob " + str(len(data)).encode("ascii") + b"\x00" + data).hexdigest()
 KEYS = {"version", "composition", "palette", "typography"}
 OPTIONS = {
     "composition": frozenset(("split", "centered", "gallery")),
@@ -45,6 +52,7 @@ body[data-e5-palette="charcoal"] .masthead,
 body[data-e5-palette="charcoal"] footer{border-color:#647889}
 body[data-e5-palette="paper"] .masthead,
 body[data-e5-palette="paper"] footer{border-color:#9f8b75}
+body[data-e5-palette="paper"] footer{color:#41494e}
 body[data-e5-palette="charcoal"] .chapter{background:#172433}
 body[data-e5-palette="paper"] .chapter{background:#e8ded0}
 body[data-e5-palette="charcoal"] .intro p,
@@ -115,7 +123,6 @@ def build(brief: dict, proposal: dict, layout: dict) -> tuple[bytes, dict]:
     decision = read_layout(canonical(layout))
     # Rebuild, not just trust, E5's independent brief/copy acceptance.
     parent_bytes, parent_evidence = gate.build(brief, proposal)
-    parent_manifest = json.loads(parent_evidence)
     with zipfile.ZipFile(io.BytesIO(parent_bytes)) as parent:
         names = set(parent.namelist())
         if names != set(reference.FILES) | {"copy-proposal.json", "preview-manifest.json"}:
@@ -139,9 +146,9 @@ def build(brief: dict, proposal: dict, layout: dict) -> tuple[bytes, dict]:
             "./styles.css", "./e5-layout.css", "./scene.js"
         } or len(parser.assets) != 3:
         raise ValueError("E5_LAYOUT_UNEXPECTED_ACTIVE_ASSET")
-    if source["scene.js"] != (reference.REFERENCE / "scene.js").read_bytes():
+    if _git_blob_sha(source["scene.js"]) != PINNED_SCENE_BLOB:
         raise ValueError("E5_LAYOUT_SCRIPT_CHANGED")
-    if source["styles.css"] != (reference.REFERENCE / "styles.css").read_bytes():
+    if _git_blob_sha(source["styles.css"]) != PINNED_STYLES_BLOB:
         raise ValueError("E5_LAYOUT_BASE_STYLE_CHANGED")
 
     assets = {
