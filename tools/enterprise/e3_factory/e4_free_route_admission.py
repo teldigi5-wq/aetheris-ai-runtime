@@ -11,7 +11,7 @@ from typing import Any
 
 import e36_free_model_router as baseline
 
-ALLOWED_TASKS=frozenset(("scroll","mobile","reduced","website-copy"))
+ALLOWED_TASKS=frozenset(("scroll","mobile","reduced","website-copy","website-layout"))
 REQ_KEYS=frozenset(("task","provider","modelId","externalInferenceConsent",
                    "sourceDisclosureConsent","highResourceConsent","maxCostUsd"))
 EVIDENCE_KEYS=frozenset(("installedLocalModelIds","cloudModelDetail",
@@ -85,10 +85,10 @@ def advisory(request: object, evidence: object, now_unix_seconds: int)->dict[str
             "highResourceFitMeasured":False,
         }
 
-    if request["task"]=="website-copy":
-        # Copy-trial capability is deliberately restricted to installed local
+    if request["task"] in ("website-copy","website-layout"):
+        # Design/copy trials are deliberately restricted to installed local
         # models. Remote pricing/consent advisory is NOT copy-disclosure approval.
-        return deny("WEBSITE_COPY_LOCAL_ONLY")
+        return deny("WEBSITE_COPY_LOCAL_ONLY" if request["task"] == "website-copy" else "WEBSITE_LAYOUT_LOCAL_ONLY")
     if provider!="openrouter":
         return deny("UNKNOWN_PROVIDER")
     if not request["externalInferenceConsent"] or not request["sourceDisclosureConsent"]:
