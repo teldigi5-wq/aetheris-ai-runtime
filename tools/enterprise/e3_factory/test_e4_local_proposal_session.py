@@ -68,6 +68,12 @@ class E4LocalProposal(unittest.TestCase):
                 session.propose("qwen2.5-coder:1.5b","scroll")
             delegate.assert_not_called()
 
+    def test_code_repair_session_cannot_take_website_copy_task(self):
+        with (mock.patch.dict(os.environ,signed_off()),
+              mock.patch.object(e36,"send",side_effect=AssertionError("NETWORK"))):
+            with self.assertRaisesRegex(ValueError,"UNAPPROVED_TASK"):
+                e4.LocalProposalSession().propose("qwen2.5-coder:1.5b","website-copy")
+
     def test_high_resource_and_unknown_ids_refused_before_network(self):
         with (mock.patch.dict(os.environ,signed_off()),
               mock.patch.object(e36,"send") as send):
