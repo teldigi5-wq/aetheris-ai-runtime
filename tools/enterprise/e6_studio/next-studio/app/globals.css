@@ -19,6 +19,19 @@ a{color:inherit}a:focus-visible,button:focus-visible{outline:3px solid #f0cba0;o
 .visual-panel,.visual-panel>div{position:absolute;inset:0;width:100%;height:100%}
 /* Opaque editorial safety scrim: real contrast over any camera pose, never glass. */
 .studio-story::before{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(90deg,rgba(10,15,18,.97) 0%,rgba(10,15,18,.91) 24%,rgba(10,15,18,.56) 42%,transparent 68%)}
+/* Separate, build-flagged Blender research art direction: grounded charcoal,
+   tactile alloy and muted amber. No assets, typefaces, bloom or glass fetched. */
+.studio-story--blender{background:radial-gradient(ellipse at 77% 62%,#29363b 0%,#172025 44%,#0c1215 100%)}
+.studio-story--blender .studio-text{max-width:390px}
+.studio-story--blender .studio-text h2{font-size:clamp(3rem,5.5vw,6.2rem)}
+.studio-story--blender .eyebrow{color:#e8c9a4}
+.studio-story--blender .story-caption{color:#f2d3ac}
+.studio-story--blender .progress-indicator span{background:#d6a56e}
+@media(max-width:760px){
+ .studio-story--blender .studio-text{max-width:83%;top:7%}
+ .studio-story--blender .studio-text h2{font-size:clamp(2.5rem,11vw,4.2rem)}
+}
+
 .visual-panel canvas{display:block}
 .static-geometry{display:grid;place-items:center;background:radial-gradient(ellipse at 70% 65%,#323d42,#11181d 70%)}
 .static-geometry__panel{height:min(48vw,350px);width:min(32vw,230px);border:12px solid #8c9da0;background:linear-gradient(120deg,#36434a,#1a262d);transform:rotate(-12deg);box-shadow:30px 24px 70px #05090c}

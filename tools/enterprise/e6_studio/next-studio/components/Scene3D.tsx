@@ -4,10 +4,13 @@ import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { ACESFilmicToneMapping, PerspectiveCamera } from "three";
 import { sampleCamera } from "./cameraTimeline";
-type SceneProps={progress:number;onReady:()=>void};
-function AuthoredPanel({progress,onReady}:SceneProps){
-  const asset=useLoader(GLTFLoader,"/research-panel.glb");
+type SceneProps={progress:number;onReady:()=>void;assetVariant?:"fixture"|"blender"};
+function AuthoredPanel({progress,onReady,assetVariant="fixture"}:SceneProps){
+  // Review-gated literal paths only. No user-supplied URLs or arbitrary loader endpoints.
+  const blenderPreview=assetVariant==="blender";
+  const asset=useLoader(GLTFLoader,blenderPreview?"/e6-blender-preview.glb":"/research-panel.glb");
   const invalidate=useThree(state=>state.invalidate);
+  const stageWidth=useThree(state=>state.size.width);
   useEffect(()=>{onReady();},[onReady]);
   useEffect(()=>{invalidate();},[progress,invalidate]);
   useFrame(({camera})=>{
@@ -21,14 +24,21 @@ function AuthoredPanel({progress,onReady}:SceneProps){
       camera.updateProjectionMatrix();
     }
   });
+  const rotation:[number,number,number]=blenderPreview?[Math.PI/2-0.16,0,0.1]:[0.08,0,-0.08];
+  // Preview-only framing uses the measured canvas width, never browser sniffing.
+  // This preserves the original fixture scale and all camera-timeline values.
+  const modelScale:number|[number,number,number]=blenderPreview?(stageWidth<600?0.58:0.84):[0.82,1.25,0.12];
   return <>
-    <ambientLight intensity={0.95}/>
-    <directionalLight position={[-3,5,6]} intensity={3.1} color="#f4e5ce"/>
-    <directionalLight position={[3,0,-4]} intensity={1.6} color="#a9bed0"/>
-    <group rotation={[0.08,0,-0.08]}><primitive object={asset.scene} scale={[0.82,1.25,0.12]}/></group>
+    <ambientLight intensity={blenderPreview?0.56:0.95}/>
+    <directionalLight position={[-3,5,6]} intensity={blenderPreview?3.5:3.1} color="#f4e5ce"/>
+    <directionalLight position={[3,0,-4]} intensity={blenderPreview?2.2:1.6} color="#a9bed0"/>
+    {blenderPreview&&<directionalLight position={[1,4,-2]} intensity={1.4} color="#d9a86d"/>}
+    <group rotation={rotation}>
+      <primitive object={asset.scene} scale={modelScale}/>
+    </group>
   </>;
 }
-export default function Scene3D({progress,onReady}:SceneProps){
+export default function Scene3D({progress,onReady,assetVariant="fixture"}:SceneProps){
   return <Canvas frameloop="demand" dpr={[1,1.5]} shadows={false}
     gl={{powerPreference:"low-power",antialias:true,alpha:false}}
     camera={{position:[0,0.5,4.5],fov:38,near:0.1,far:25}}
@@ -38,6 +48,6 @@ export default function Scene3D({progress,onReady}:SceneProps){
       gl.toneMappingExposure=1.0;
     }}
     aria-label="Decorative WebGL product study">
-    <AuthoredPanel progress={progress} onReady={onReady}/>
+    <AuthoredPanel progress={progress} onReady={onReady} assetVariant={assetVariant}/>
   </Canvas>;
 }
