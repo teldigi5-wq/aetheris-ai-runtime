@@ -40,3 +40,23 @@ Direct parent is [E6 draft PR #233](https://github.com/teldigi5-wq/aetheris-ai-r
 ## Strict no-go
 
 No customer data or model calls, no paid APIs, no automatic Webflow/Spline asset import, no external/untrusted glTF parsing, no autonomous model-code execution, no deployments or protected main merges. This is not certified original AI visual design, real GPU performance or a finished Cinematic Studio. Enterprise E3.9 coding, E4 model quality, E5 complete website factory, full E6, E7 multi-agent companies, E8 Syntra control and E9 integrated release remain unfinished. Independent S0 security last verified to S0-E6I. **Stage45 0/9 certified. Stage45 NO_GO.**
+
+
+## E6 dependency-provenance follow-up (30 October 2026, draft)
+
+The exact-head #234 workflow run 41034930896 produced a **provisional** npm
+lockfile in its 7-day evidence artifact. This follow-up validates the lockfile
+v3 graph, exact top-level manifest equality, official npm HTTPS tarball URLs
+and SHA-512 integrity fields, plus compares the provisional lock's SHA-256
+against the recorded artifact digest
+`efe16b99de61d2042a05fa19f43a89e943ee105cfa65a36112cb67e0d686ee33`.
+Changed registry resolution fails closed rather than silently changing tested
+dependencies. The workflow runs npm ci with lifecycle scripts disabled, emits
+a CycloneDX SBOM, and requires an npm audit without high/critical advisories.
+
+**Not yet achieved:** the lockfile is not committed; the generated provenance
+check alone cannot prove reproducible production installation or that registry
+integrity metadata is trustworthy. The live audit, full license review, independent
+security acceptance, physical GPU testing, Stage45 certification and deployment
+remain pending. Preserve the draft stack and commit a reviewed, exact lock in
+a separate safe follow-up before any release.
