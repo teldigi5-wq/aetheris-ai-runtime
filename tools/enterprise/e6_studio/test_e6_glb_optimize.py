@@ -47,6 +47,8 @@ class GLBOptimizationPolicyTests(unittest.TestCase):
         self.assertEqual(result["originalUVAttributeSets"], 1)
         self.assertEqual(result["candidateUVAttributeSets"], 0)
         self.assertTrue(result["geometryAndMaterialMetadataEqual"])
+        self.assertTrue(result["trianglePositionNormalDataEqual"])
+        self.assertEqual(len(result["trianglePositionNormalSha256"]), 64)
         self.assertFalse(result["realGpuBenchmarked"])
         self.assertFalse(result["visualParityVerified"])
         self.assertFalse(result["stage45Go"])
@@ -59,6 +61,14 @@ class GLBOptimizationPolicyTests(unittest.TestCase):
     def test_refuse_changed_position_accessors(self):
         with self.assertRaisesRegex(ValueError, "MATERIAL_CHANGED"):
             compare(sample(), sample(with_uv=False, vertices=6))
+
+    def test_reject_geometry_payload_modified_without_metadata_change(self):
+        altered = bytearray(sample(with_uv=False))
+        json_size = struct.unpack_from("<I", altered, 12)[0]
+        binary_start = 20 + json_size + 8
+        struct.pack_into("<f", altered, binary_start + 12, 0.5)
+        with self.assertRaisesRegex(ValueError, "TRIANGLE_DATA_CHANGED"):
+            compare(sample(), bytes(altered))
 
     def test_refuse_unremoved_uv(self):
         with self.assertRaisesRegex(ValueError, "UV_REMOVAL"):
