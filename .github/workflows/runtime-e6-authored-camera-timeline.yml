@@ -85,7 +85,8 @@ jobs:
           assert len(r['cases'])==3
           assert all(x['threeActs'] and x['reversible'] for x in r['cases'][:2])
           assert r['cases'][2]['staticOnly'] and r['cases'][2]['noWebglCanvas']
-          assert len(list(p.parent.glob('*.png')))==6
+          assert len(list(p.parent.glob('*.png')))==12
+          assert all(x['screenshots']==6 and x['fullViewportCompositionCaptured'] is True for x in r['cases'][:2])
           print('E6_HUMAN_AUTHORED_CAMERA_THREE_ACTS_BROWSER_ONLY_PASS')
           PY
       - name: Retain research-only camera evidence
