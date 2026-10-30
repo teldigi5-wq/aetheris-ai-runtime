@@ -20,5 +20,5 @@ export default function BlenderResearchPreview() {
       </main>
     );
   }
-  return <CinematicExperience assetVariant="blender"/>;
+  return <main id="e6-blender-concept-preview"><CinematicExperience assetVariant="blender"/></main>;
 }
