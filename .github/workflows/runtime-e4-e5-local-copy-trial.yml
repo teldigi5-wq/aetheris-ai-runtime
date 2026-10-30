@@ -12,6 +12,11 @@ on:
       - 'tools/enterprise/e3_factory/test_e5_creative_brief_gate.py'
       - 'tools/enterprise/e3_factory/e5_local_copy_trial.py'
       - 'tools/enterprise/e3_factory/test_e5_local_copy_trial.py'
+      - 'tools/enterprise/e3_factory/e4_free_route_admission.py'
+      - 'tools/enterprise/e3_factory/e4_local_proposal_session.py'
+      - 'tools/enterprise/e3_factory/e4_local_proposal_cli.py'
+      - 'tools/enterprise/e3_factory/test_e4_free_route_admission.py'
+      - 'tools/enterprise/e3_factory/test_e4_local_proposal_session.py'
       - 'docs/runtime/E4_E5_LOCAL_MODEL_COPY_TRIAL_20261030.md'
 
 permissions:
@@ -47,10 +52,15 @@ jobs:
           new=Path('tools/enterprise/e3_factory/e5_creative_brief_gate.py').read_text()
           connector=Path('tools/enterprise/e3_factory/e5_local_copy_trial.py').read_text()
           for marker in ('PLAN_ONLY_NO_INFERENCE','AETHERIS_E4_EXPLICIT_LOCAL_SESSION_OPT_IN','LocalCopyTrial','models.send("ollama", "GET", "/api/tags")','models.send("ollama", "POST", "/api/generate"','creative.build(brief, proposal)','providerIdentityCryptographicallyAttested','siteGeneratedByModel'):
-              assert marker in (new+connector) or marker == 'AETHERIS_E4_EXPLICIT_LOCAL_SESSION_OPT_IN',marker
+              assert marker in (new+connector),marker
           for forbidden in ('openrouter.ai', 'model.pull(', 'subprocess.run(', 'os.system(', 'vercel deploy'):
               assert forbidden not in connector, forbidden
           older=Path('tools/enterprise/e3_factory/e5_untrusted_copy_preview.py').read_text()
+          e4=Path('tools/enterprise/e3_factory/e4_free_route_admission.py').read_text()
+          code_repair=Path('tools/enterprise/e3_factory/e4_local_proposal_session.py').read_text()
+          assert '"website-copy"' in e4
+          assert 'WEBSITE_COPY_LOCAL_ONLY' in e4
+          assert 'task not in e36.CATEGORIES' in code_repair
           for marker in ('MAX_BRIEF_BYTES = 1200', 'read_brief(', 'def build(',
                          'briefAuthenticityVerified', 'copyAuthenticityVerified',
                          'LEXICAL_CONSTRAINT_MATCH_ONLY_NOT_APPROVAL',
@@ -67,6 +77,9 @@ jobs:
           python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_reference_preview.py' -v
           python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_untrusted_copy_preview.py' -v
           python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_creative_brief_gate.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e4_free_route_admission.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e4_local_proposal_session.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e4_local_proposal_cli.py' -v
           python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_local_copy_trial.py' -v
           python -m py_compile tools/enterprise/e3_factory/e5_creative_brief_gate.py tools/enterprise/e3_factory/e5_local_copy_trial.py
           node --check tools/enterprise/e3_factory/e5_untrusted_copy_browser.mjs
