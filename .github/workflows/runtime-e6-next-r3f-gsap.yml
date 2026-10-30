@@ -70,7 +70,8 @@ jobs:
           python3 - <<'PY'
           import json
           from pathlib import Path
-          data=json.loads(Path('target/e6-studio/supply-chain/sbom.cdx.json').read_text())
+          import os
+          data=json.loads((Path(os.environ['GITHUB_WORKSPACE'])/'target/e6-studio/supply-chain/sbom.cdx.json').read_text())
           assert data['bomFormat']=='CycloneDX'
           assert isinstance(data.get('components'),list) and data['components']
           print('E6_CYCLONEDX_SBOM_GENERATED_NOT_CERTIFIED')
