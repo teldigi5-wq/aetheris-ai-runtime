@@ -22,12 +22,15 @@ import e36_free_model_router as models
 import e4_free_route_admission as routes
 import e4_local_proposal_session as sessions
 import e5_creative_brief_gate as briefs
+import e5_layout_design_intent as intent_spec
 import e5_structured_layout_preview as layouts
 import e5_untrusted_copy_preview as copies
 
 TASK = "website-layout"
 OPT_LAYOUT = "AETHERIS_E5_LOCAL_LAYOUT_TRIAL_OPT_IN"
+OPT_INTENT = "AETHERIS_E5_ABSTRACT_DESIGN_INTENT_OPT_IN"
 FOLDER = layouts.FOLDER
+INTENT = FOLDER / "layout-intent.json"
 BRIEF = layouts.BRIEF
 COPY = layouts.COPY
 OUTPUT = FOLDER / "local-model-layout-review.zip"
@@ -54,13 +57,19 @@ class LocalLayoutTrial:
         self._attempted = False
 
     def execute(self, model_id: str, creative_brief: dict,
-                copy_proposal: dict) -> tuple[bytes, dict]:
+                copy_proposal: dict, design_intent: dict | None = None) -> tuple[bytes, dict]:
         if type(model_id) is not str:
             raise ValueError("E5_LAYOUT_INVALID_MODEL")
         models.checked_choice("ollama", model_id)
         # Both independently constrained inputs must pass before inference.
         # Only validation occurs; parent ZIP is not published or executed.
         briefs.build(creative_brief, copy_proposal)
+        # Independent categorical design-intent may be supplied by the operator,
+        # never inferred from private brand/copy. Check before any model call.
+        constrained_intent = (None if design_intent is None else
+            intent_spec.read_intent(intent_spec.canonical(design_intent)))
+        if constrained_intent is not None and os.environ.get(OPT_INTENT) != "yes":
+            raise ValueError("E5_INTENT_EXPLICIT_FOURTH_OPT_IN_REQUIRED")
         if (os.environ.get(models.OPT_LOCAL) != "yes"
             or os.environ.get(sessions.LOCAL_EXPERIMENT_OPT_IN) != "yes"
             or os.environ.get(OPT_LAYOUT) != "yes"):
@@ -99,14 +108,22 @@ class LocalLayoutTrial:
         # No source, user/customer data, secret, brand, browser history or
         # creative brief is sent to the model. Its task is solely choosing
         # a finite set of compiler tokens from static literal enumerations.
-        prompt = _canonical({
+        prompt_data = {
             "schemaVersion": 1,
             "composition": sorted(layouts.OPTIONS["composition"]),
             "palette": sorted(layouts.OPTIONS["palette"]),
             "typography": sorted(layouts.OPTIONS["typography"]),
             "selectionPolicy": "Select exactly one allowed value per field; "
                                "return JSON with version 1.",
-        }).decode("utf-8")
+        }
+        if constrained_intent is not None:
+            # The model sees ONLY the three abstract enums, not the brief,
+            # brand, candidate copy or user's untrusted written instructions.
+            prompt_data["abstractDesignIntent"] = constrained_intent
+        prompt = _canonical(prompt_data).decode("utf-8")
+        if len(prompt.encode("utf-8")) > 1000:
+            raise ValueError("E5_LAYOUT_PROMPT_TOO_LARGE")
+
         answer, _ = models.send("ollama", "POST", "/api/generate", payload={
             "model": model_id,
             "system": SYSTEM,
@@ -122,6 +139,8 @@ class LocalLayoutTrial:
         raw = answer["response"].encode("utf-8")
         decision = layouts.read_layout(raw)
         preview, manifest = layouts.build(creative_brief, copy_proposal, decision)
+        alignment = (None if constrained_intent is None else
+                     intent_spec.score(constrained_intent, decision))
         receipt = {
             "formatVersion": 1,
             "result": "UNVERIFIED_LOCAL_MODEL_LAYOUT_TOKENS_REVIEW_ONLY",
@@ -131,6 +150,12 @@ class LocalLayoutTrial:
             "modelIdentityCryptographicallyAttested": False,
             "modelAuthorshipIndependentlyVerified": False,
             "briefAndCopySentToModel": False,
+            "onlyAbstractDesignEnumsSent": constrained_intent is not None,
+            "abstractDesignIntentProvided": constrained_intent is not None,
+            "abstractDesignIntentSha256": (None if constrained_intent is None
+                else intent_spec.sha256(constrained_intent)),
+            "staticPreferenceAlignment": alignment,
+            "humanAestheticReviewPerformed": False,
             "sourceCodeSentToModel": False,
             "modelAuthoredCssOrJavascript": False,
             "candidateResponseSha256": hashlib.sha256(raw).hexdigest(),
@@ -159,6 +184,8 @@ def cli(argv: Sequence[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--model", required=True)
     p.add_argument("--run-local", action="store_true")
+    p.add_argument("--with-intent", action="store_true",
+                   help="Send only separately opted-in abstract design categories")
     args = p.parse_args(argv)
     try:
         models.checked_choice("ollama", args.model)
@@ -177,13 +204,19 @@ def cli(argv: Sequence[str] | None = None) -> int:
             or os.environ.get(sessions.LOCAL_EXPERIMENT_OPT_IN) != "yes"
             or os.environ.get(OPT_LAYOUT) != "yes"):
             raise ValueError("E5_LAYOUT_THREE_OPT_INS_REQUIRED")
+        if args.with_intent and os.environ.get(OPT_INTENT) != "yes":
+            raise ValueError("E5_INTENT_EXPLICIT_FOURTH_OPT_IN_REQUIRED")
         if not FOLDER.is_dir() or FOLDER.is_symlink():
             raise ValueError("E5_LAYOUT_UNSAFE_FOLDER")
         if OUTPUT.is_symlink() or OUTPUT.exists():
             raise ValueError("E5_LAYOUT_OUTPUT_ALREADY_EXISTS")
         brief = briefs.read_brief(briefs._read_regular(BRIEF, briefs.MAX_BRIEF_BYTES))
         text_proposal = copies.read_proposal(briefs._read_regular(COPY, copies.MAX_INPUT))
-        bundle, receipt = LocalLayoutTrial().execute(args.model, brief, text_proposal)
+        design_intent = (intent_spec.read_intent(
+            briefs._read_regular(INTENT, intent_spec.MAX_INTENT_BYTES))
+            if args.with_intent else None)
+        bundle, receipt = LocalLayoutTrial().execute(
+            args.model, brief, text_proposal, design_intent)
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
         fd = os.open(OUTPUT, flags, 0o600)
         with os.fdopen(fd, "wb") as output:

@@ -15,6 +15,12 @@ const e5=path.join(root,'target/e5');
 const reference=path.join(root,'tools/enterprise/e3_factory/e39h/reference');
 const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const expected=[
+  // Two separate abstract-intent scenarios use mocked model output; these
+  // still require real Chromium rendering without disclosing any brand to AI.
+  {name:'intent-informational',composition:'centered',palette:'charcoal',typography:'modern-sans',
+   background:'rgb(17, 24, 33)'},
+  {name:'intent-immersive',composition:'gallery',palette:'paper',typography:'editorial-serif',
+   background:'rgb(246, 240, 231)'},
   // Test-only mocked Ollama response is independently reviewed in Chromium.
   {name:'model-proposed',composition:'gallery',palette:'paper',typography:'editorial-serif',
    background:'rgb(246, 240, 231)'},

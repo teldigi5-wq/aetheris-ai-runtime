@@ -1,0 +1,459 @@
+name: E5 Abstract Design Intent Grounding and Real Browser Review
+on:
+  pull_request:
+    branches:
+      - feat/e5-local-model-layout-trial-20261030
+    paths:
+      - '.github/workflows/runtime-e5-abstract-design-intent.yml'
+      - 'tools/enterprise/e3_factory/e5_creative_brief_gate.py'
+      - 'tools/enterprise/e3_factory/test_e5_creative_brief_gate.py'
+      - 'tools/enterprise/e3_factory/e5_local_copy_trial.py'
+      - 'tools/enterprise/e3_factory/test_e5_local_copy_trial.py'
+      - 'tools/enterprise/e3_factory/e5_local_brief_evaluation.py'
+      - 'tools/enterprise/e3_factory/test_e5_local_brief_evaluation.py'
+      - 'tools/enterprise/e3_factory/e5_structured_layout_preview.py'
+      - 'tools/enterprise/e3_factory/test_e5_structured_layout_preview.py'
+      - 'tools/enterprise/e3_factory/e5_structured_layout_browser.mjs'
+      - 'tools/enterprise/e3_factory/e5_local_layout_trial.py'
+      - 'tools/enterprise/e3_factory/test_e5_local_layout_trial.py'
+      - 'tools/enterprise/e3_factory/e5_layout_design_intent.py'
+      - 'tools/enterprise/e3_factory/test_e5_layout_design_intent.py'
+      - 'tools/enterprise/e3_factory/e4_free_route_admission.py'
+      - 'tools/enterprise/e3_factory/e4_local_proposal_session.py'
+      - 'tools/enterprise/e3_factory/e4_local_proposal_cli.py'
+      - 'tools/enterprise/e3_factory/test_e4_free_route_admission.py'
+      - 'tools/enterprise/e3_factory/test_e4_local_proposal_session.py'
+      - 'docs/runtime/E5_ABSTRACT_DESIGN_INTENT_20261030.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e5-structured-layout-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  independent-brief-and-real-offline-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Exact reviewed E5 head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Immutable head, independent brief, no model/network/deployment capability
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          new=Path('tools/enterprise/e3_factory/e5_creative_brief_gate.py').read_text()
+          connector=Path('tools/enterprise/e3_factory/e5_local_copy_trial.py').read_text()
+          evaluation=Path('tools/enterprise/e3_factory/e5_local_brief_evaluation.py').read_text()
+          structured=Path('tools/enterprise/e3_factory/e5_structured_layout_preview.py').read_text()
+          for token in ('TRUSTED_CSS', 'PINNED_SCENE_BLOB', 'PINNED_STYLES_BLOB', 'data-e5-composition', 'E5_UNTRUSTED_STRUCTURED_LAYOUT_REVIEW_ONLY', 'ownerApproved', 'productionReady', 'runtimeReleaseStatus'):
+              assert token in structured,token
+          for banned in ('requests.post(', 'subprocess.run(', 'os.system(', 'https://vercel', 'model.generate('):
+              assert banned not in structured,banned
+          for marker in ('MAX_ATTEMPTS = 4', 'OPT_EVALUATE', 'local-evaluation-suite.json', 'read_suite(', 'LEXICAL_GATE_ACCEPTED_NOT_QUALITY_CERTIFIED', 'REJECTED_OR_PROVIDER_UNAVAILABLE', 'visualDesignQualityAssessed', 'siteGeneratedByModel'):
+              assert marker in evaluation,marker
+          for marker in ('PLAN_ONLY_NO_INFERENCE','TASK = "website-copy"','LocalCopyTrial','models.send("ollama", "GET", "/api/tags")','models.send("ollama", "POST", "/api/generate"','creative.build(brief, proposal)','providerIdentityCryptographicallyAttested','siteGeneratedByModel'):
+              assert marker in (new+connector),marker
+          for forbidden in ('openrouter.ai', 'model.pull(', 'subprocess.run(', 'os.system(', 'vercel deploy'):
+              assert forbidden not in connector, forbidden
+          older=Path('tools/enterprise/e3_factory/e5_untrusted_copy_preview.py').read_text()
+          e4=Path('tools/enterprise/e3_factory/e4_free_route_admission.py').read_text()
+          code_repair=Path('tools/enterprise/e3_factory/e4_local_proposal_session.py').read_text()
+          assert '"website-copy"' in e4
+          assert '"website-layout"' in e4
+          assert 'WEBSITE_LAYOUT_LOCAL_ONLY' in e4
+          intent_source=Path('tools/enterprise/e3_factory/e5_layout_design_intent.py').read_text()
+          for required in ('MAX_INTENT_BYTES = 350','read_intent(','PREFERENCES','aestheticQualityCertified','layoutGoal','contrastPreference','typographicVoice'):
+              assert required in intent_source,required
+          local_layout=Path('tools/enterprise/e3_factory/e5_local_layout_trial.py').read_text()
+          for required in ('OPT_INTENT','--with-intent','prompt_data["abstractDesignIntent"]','onlyAbstractDesignEnumsSent','humanAestheticReviewPerformed'):
+              assert required in local_layout,required
+          for marker in ('TASK = "website-layout"', 'OPT_LAYOUT', 'LocalLayoutTrial', 'models.send("ollama", "GET", "/api/tags")', 'models.send("ollama", "POST", "/api/generate", payload=', 'layouts.read_layout(raw)', 'layouts.build(creative_brief, copy_proposal, decision)', 'briefAndCopySentToModel', 'modelAuthoredCssOrJavascript', 'stage45Go'):
+              assert marker in local_layout, marker
+          assert 'WEBSITE_COPY_LOCAL_ONLY' in e4
+          assert 'task not in e36.CATEGORIES' in code_repair
+          optin=Path('tools/enterprise/e3_factory/e4_local_proposal_session.py').read_text()
+          assert 'AETHERIS_E4_EXPLICIT_LOCAL_SESSION_OPT_IN' in optin
+          assert 'local_session.LOCAL_EXPERIMENT_OPT_IN' in connector
+          for marker in ('MAX_BRIEF_BYTES = 1200', 'read_brief(', 'def build(',
+                         'briefAuthenticityVerified', 'copyAuthenticityVerified',
+                         'LEXICAL_CONSTRAINT_MATCH_ONLY_NOT_APPROVAL',
+                         'ownerApproved', 'deploymentAuthorized',
+                         'modelAuthored', 'stage45Status', 'reference.PROJECT'):
+              assert marker in new,marker
+          for prohibited in ('requests.post(', 'subprocess.run(', 'os.system(',
+                             'eval(', 'exec(', 'model.generate(', 'https://vercel'):
+              assert prohibited not in new,prohibited
+          assert 'modelAuthored": None' in older
+          assert 'E5_UNTRUSTED_COPY_REVIEW_ONLY' in older
+          print('E5_INDEPENDENT_BRIEF_NO_MODEL_INFERENCE_OR_DEPLOYMENT_PASS')
+          PY
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_reference_preview.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_untrusted_copy_preview.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_creative_brief_gate.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e4_free_route_admission.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e4_local_proposal_session.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e4_local_proposal_cli.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_local_copy_trial.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_local_brief_evaluation.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_structured_layout_preview.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_local_layout_trial.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_layout_design_intent.py' -v
+          python -m py_compile tools/enterprise/e3_factory/e5_creative_brief_gate.py tools/enterprise/e3_factory/e5_local_copy_trial.py tools/enterprise/e3_factory/e5_local_brief_evaluation.py tools/enterprise/e3_factory/e5_structured_layout_preview.py tools/enterprise/e3_factory/e5_local_layout_trial.py tools/enterprise/e3_factory/e5_layout_design_intent.py
+          node --check tools/enterprise/e3_factory/e5_untrusted_copy_browser.mjs
+          node --check tools/enterprise/e3_factory/e5_structured_layout_browser.mjs
+      - name: Build identical review ZIP and independently check SHA-256 evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/e5
+          cat > target/e5/creative-brief.json <<'EOF'
+          {"version":1,"brandLabel":"Prototype Atelier","requiredTerms":["quiet","motion"],"forbiddenTerms":["guaranteed","certified"]}
+          EOF
+          cat > target/e5/copy-proposal.json <<'EOF'
+          {"version":1,"brandLabel":"Prototype Atelier","headlineLines":["Quiet materials.","Purposeful motion."]}
+          EOF
+          python tools/enterprise/e3_factory/e5_creative_brief_gate.py > target-e5-brief-report-1.json
+          cp target/e5/brief-gated-copy-evidence.json target-e5-brief-evidence-first.json
+          first="$(sha256sum target/e5/brief-gated-copy-preview.zip | cut -d ' ' -f 1)"
+          python tools/enterprise/e3_factory/e5_creative_brief_gate.py > target-e5-brief-report-2.json
+          second="$(sha256sum target/e5/brief-gated-copy-preview.zip | cut -d ' ' -f 1)"
+          test "$first" = "$second"
+          cmp target-e5-brief-report-1.json target-e5-brief-report-2.json
+          cmp target-e5-brief-evidence-first.json target/e5/brief-gated-copy-evidence.json
+          python -m zipfile -t target/e5/brief-gated-copy-preview.zip
+          python -m zipfile -e target/e5/brief-gated-copy-preview.zip target/e5/untrusted-copy-site
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,hashlib
+          folder=Path('target/e5')
+          evidence=json.loads((folder/'brief-gated-copy-evidence.json').read_text())
+          assert evidence['decision']=='LEXICAL_CONSTRAINT_MATCH_ONLY_NOT_APPROVAL'
+          assert evidence['previewZipSha256']==hashlib.sha256((folder/'brief-gated-copy-preview.zip').read_bytes()).hexdigest()
+          for key in ['briefAuthenticityVerified','copyAuthenticityVerified','ownerApproved',
+                      'deploymentAuthorized','productionReady']:
+              assert evidence[key] is False,key
+          assert evidence['modelAuthored'] is None
+          assert evidence['stage45Status']=='NO_GO'
+          assert (folder/'untrusted-copy-site/preview-manifest.json').is_file()
+          print('E5_CREATIVE_BRIEF_EVIDENCE_AND_REPRODUCIBLE_ZIP_PASS')
+          PY
+      - name: Mocked Ollama transport end-to-end through independent E5 validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools/enterprise/e3_factory python3 - <<'PY'
+          import contextlib, hashlib, io, json, os
+          from unittest import mock
+          import e5_local_copy_trial as trial
+          import e36_free_model_router as models
+          import e4_local_proposal_session as local
+          model="qwen2.5-coder:1.5b"
+          proposal={"version":1,"brandLabel":"Prototype Atelier",
+                    "headlineLines":["Quiet materials.","Purposeful motion."]}
+          def fake(provider,method,route,**kwargs):
+              assert provider=="ollama"
+              if method=="GET" and route=="/api/tags":
+                  return {"models":[{"name":model}]},1
+              assert method=="POST" and route=="/api/generate"
+              assert kwargs["payload"]["format"]=="json"
+              assert kwargs["payload"]["stream"] is False
+              return {"model":model,"done":True,"response":json.dumps(proposal)},2
+          with (mock.patch.dict(os.environ,{
+                  local.LOCAL_EXPERIMENT_OPT_IN:"yes",
+                  models.OPT_LOCAL:"yes"},clear=False),
+                mock.patch.object(models,"send",side_effect=fake) as transport,
+                contextlib.redirect_stdout(io.StringIO()) as capture):
+              outcome=trial.cli(["--model",model,"--run-local"])
+              assert outcome==0
+              assert transport.call_count==2
+          info=json.loads(capture.getvalue())
+          assert info["status"]=="LOCAL_MODEL_COPY_UNTRUSTED_OFFLINE_REVIEW"
+          receipt=json.loads(trial.RECEIPT.read_text())
+          evidence=json.loads(trial.EVIDENCE.read_text())
+          assert receipt["reviewZipSha256"]==hashlib.sha256(trial.ZIP.read_bytes()).hexdigest()
+          assert receipt["siteGeneratedByModel"] is False
+          assert receipt["providerIdentityCryptographicallyAttested"] is False
+          assert evidence["ownerApproved"] is False
+          assert evidence["modelAuthored"] is None
+          print("E4_E5_MOCK_PROVIDER_EXPLICIT_LOCAL_CONTRACT_TO_REVIEW_ARTIFACT_PASS")
+          PY
+          python -m zipfile -t target/e5/local-model-copy-trial-preview.zip
+          python -m zipfile -e target/e5/local-model-copy-trial-preview.zip target/e5/untrusted-copy-site
+      - name: Two-case evaluation with mock Ollama, score full denominator and record evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools/enterprise/e3_factory python3 - <<'PY'
+          from pathlib import Path
+          from unittest import mock
+          import hashlib, io, json, os, zipfile
+          import e36_free_model_router as models
+          import e4_local_proposal_session as local
+          import e5_local_brief_evaluation as bench
+          brief_a={"version":1,"brandLabel":"Prototype Atelier",
+                   "requiredTerms":["quiet","motion"],"forbiddenTerms":["certified"]}
+          brief_b={"version":1,"brandLabel":"Stone Workshop",
+                   "requiredTerms":["stone","craft"],"forbiddenTerms":["guaranteed"]}
+          suite={"version":1,"cases":[
+              {"caseId":"case-one","brief":brief_a},
+              {"caseId":"case-two","brief":brief_b}]}
+          model="qwen2.5-coder:1.5b"
+          def simulated(provider,method,route,**args):
+              assert provider=="ollama"
+              if route=="/api/tags":
+                  return {"models":[{"name":model}]},1
+              assert route=="/api/generate"
+              brand=json.loads(args["payload"]["prompt"])["brandLabel"]
+              copy={"version":1,"brandLabel":brand,"headlineLines":
+                  ["Quiet materials.","Purposeful motion."] if brand=="Prototype Atelier"
+                  else ["Untrusted content.", "Does not match."]}
+              return {"model":model,"done":True,"response":json.dumps(copy)},1
+          opts={bench.OPT_EVALUATE:"yes",models.OPT_LOCAL:"yes",
+                local.LOCAL_EXPERIMENT_OPT_IN:"yes"}
+          with (mock.patch.dict(os.environ,opts,clear=True),
+                mock.patch.object(models,"send",side_effect=simulated) as transport):
+              archive, report=bench.evaluate(suite,model)
+          assert transport.call_count==4
+          assert report["experimentalAdapterInvocations"]==2
+          assert report["acceptedLexically"]==1
+          assert report["rejectedOrUnavailable"]==1
+          assert report["acceptanceFraction"]=="1/2"
+          assert report["stage45Go"] is False
+          assert report["visualDesignQualityAssessed"] is False
+          assert report["siteGeneratedByModel"] is False
+          assert report["hardwareBenchmarkCertified"] is False
+          assert report["providerIdentityCryptographicallyAttested"] is False
+          with zipfile.ZipFile(io.BytesIO(archive)) as z:
+              assert z.testzip() is None
+              assert json.loads(z.read("evaluation.json"))==report
+              assert "previews/case-one.zip" in z.namelist()
+              assert "previews/case-two.zip" not in z.namelist()
+          folder=Path("target/e5")
+          folder.mkdir(parents=True,exist_ok=True)
+          (folder/"mocked-evaluation-evidence.zip").write_bytes(archive)
+          print("E4_E5_MOCK_ONLY_TWO_BRIEFS_ONE_ACCEPT_ONE_REJECT_DENOMINATOR_PASS")
+          PY
+      - name: Compile three real layout variants without any model, remote network or arbitrary code
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools/enterprise/e3_factory python3 - <<'PY'
+          import hashlib,json,zipfile
+          from pathlib import Path
+          import e5_structured_layout_preview as compiler
+          brief={"version":1,"brandLabel":"Prototype Atelier",
+                 "requiredTerms":["quiet","motion"],"forbiddenTerms":["certified"]}
+          copy={"version":1,"brandLabel":"Prototype Atelier",
+                "headlineLines":["Quiet materials.","Purposeful motion."]}
+          variations=[
+            ("gallery","paper","editorial-serif"),
+            ("split","charcoal","modern-sans"),
+            ("centered","warm-stone","editorial-serif")
+          ]
+          fingerprints=set()
+          for composition,palette,typography in variations:
+              choice={"version":1,"composition":composition,"palette":palette,
+                      "typography":typography}
+              data,proof=compiler.build(brief,copy,choice)
+              again,identical=compiler.build(brief,copy,choice)
+              assert data==again and proof==identical
+              sha=hashlib.sha256(data).hexdigest()
+              assert sha not in fingerprints
+              fingerprints.add(sha)
+              folder=Path("target/e5/layout-"+composition)
+              folder.mkdir(parents=True,exist_ok=True)
+              with zipfile.ZipFile(__import__('io').BytesIO(data)) as archive:
+                  assert archive.testzip() is None
+                  assert len(archive.namelist())==7
+                  archive.extractall(folder)
+              assert proof["siteCodeModelAuthored"] is False
+              assert proof["deploymentAuthorized"] is False
+              assert proof["runtimeReleaseStatus"]=="NO_GO"
+              print("E5_FINITE_STRUCTURED_LAYOUT_ZIP_PASS",composition,sha)
+          assert len(fingerprints)==3
+          PY
+      - name: Mocked local Ollama layout tokens to trusted compiler and real browser artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools/enterprise/e3_factory python3 - <<'PY'
+          import hashlib, io, json, os, zipfile
+          from pathlib import Path
+          from unittest import mock
+          import e36_free_model_router as models
+          import e4_local_proposal_session as sessions
+          import e5_local_layout_trial as trial
+          import e5_creative_brief_gate as gate
+          import e5_untrusted_copy_preview as copy_schema
+          model="qwen2.5-coder:1.5b"
+          picked={"version":1,"composition":"gallery","palette":"paper",
+                  "typography":"editorial-serif"}
+          def fake(provider,method,route,**kw):
+              assert provider=="ollama"
+              if method=="GET" and route=="/api/tags":
+                  return {"models":[{"name":model}]},1
+              assert method=="POST" and route=="/api/generate"
+              assert kw["payload"]["format"]=="json"
+              assert kw["payload"]["stream"] is False
+              prompt=json.loads(kw["payload"]["prompt"])
+              assert set(prompt)=={"schemaVersion","composition","palette",
+                                   "typography","selectionPolicy"}
+              assert "Prototype Atelier" not in kw["payload"]["prompt"]
+              return {"model":model,"done":True,
+                      "response":json.dumps(picked)},3
+          base=Path("target/e5")
+          b=gate.read_brief((base/"creative-brief.json").read_bytes())
+          c=copy_schema.read_proposal((base/"copy-proposal.json").read_bytes())
+          env={models.OPT_LOCAL:"yes",sessions.LOCAL_EXPERIMENT_OPT_IN:"yes",
+               trial.OPT_LAYOUT:"yes"}
+          with (mock.patch.dict(os.environ,env,clear=True),
+                mock.patch.object(models,"send",side_effect=fake) as calls):
+              archive,receipt=trial.LocalLayoutTrial().execute(model,b,c)
+          assert calls.call_count==2
+          assert receipt["task"]=="website-layout"
+          assert receipt["modelAuthoredCssOrJavascript"] is False
+          assert receipt["sourceCodeSentToModel"] is False
+          assert receipt["briefAndCopySentToModel"] is False
+          assert receipt["stage45Go"] is False
+          (base/"mocked-layout-trial.zip").write_bytes(archive)
+          with zipfile.ZipFile(io.BytesIO(archive)) as outer:
+              assert set(outer.namelist())=={"receipt.json","preview.zip"}
+              preview=outer.read("preview.zip")
+              assert hashlib.sha256(preview).hexdigest()==receipt["previewSha256"]
+          target=base/"layout-model-proposed"
+          target.mkdir(exist_ok=True)
+          with zipfile.ZipFile(io.BytesIO(preview)) as site:
+              assert site.testzip() is None
+              site.extractall(target)
+          assert json.loads((target/"layout-proposal.json").read_text())==picked
+          print("E4_E5_MOCKED_LOCAL_LAYOUT_SELECT_TO_TRUSTED_COMPOSITION_PASS")
+          PY
+      - name: Two isolated abstract intents through mocked local Ollama and trusted compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools/enterprise/e3_factory python3 - <<'PY'
+          import hashlib, io, json, os, zipfile
+          from pathlib import Path
+          from unittest import mock
+          import e36_free_model_router as models
+          import e4_local_proposal_session as sessions
+          import e5_creative_brief_gate as brief_schema
+          import e5_untrusted_copy_preview as copy_schema
+          import e5_layout_design_intent as intent_schema
+          import e5_local_layout_trial as local
+          base=Path("target/e5")
+          brief=brief_schema.read_brief((base/"creative-brief.json").read_bytes())
+          copy=copy_schema.read_proposal((base/"copy-proposal.json").read_bytes())
+          scenarios=[
+              ("intent-informational",
+               {"version":1,"layoutGoal":"informational",
+                "contrastPreference":"dark","typographicVoice":"contemporary"},
+               {"version":1,"composition":"centered",
+                "palette":"charcoal","typography":"modern-sans"}),
+              ("intent-immersive",
+               {"version":1,"layoutGoal":"immersive",
+                "contrastPreference":"light","typographicVoice":"editorial"},
+               {"version":1,"composition":"gallery",
+                "palette":"paper","typography":"editorial-serif"})
+          ]
+          model="qwen2.5-coder:1.5b"
+          all_previews=set()
+          env={models.OPT_LOCAL:"yes",sessions.LOCAL_EXPERIMENT_OPT_IN:"yes",
+               local.OPT_LAYOUT:"yes",local.OPT_INTENT:"yes"}
+          for name,intent,decision in scenarios:
+              def fake(provider,method,route,**kwargs):
+                  assert provider=="ollama"
+                  if method=="GET" and route=="/api/tags":
+                      return {"models":[{"name":model}]},1
+                  assert method=="POST" and route=="/api/generate"
+                  prompt=json.loads(kwargs["payload"]["prompt"])
+                  assert prompt["abstractDesignIntent"]==intent
+                  assert set(prompt["abstractDesignIntent"])==intent_schema.KEYS
+                  assert "Prototype Atelier" not in kwargs["payload"]["prompt"]
+                  assert "Quiet materials" not in kwargs["payload"]["prompt"]
+                  return {"model":model,"done":True,
+                          "response":json.dumps(decision)},1
+              with (mock.patch.dict(os.environ,env,clear=True),
+                    mock.patch.object(models,"send",side_effect=fake) as call):
+                  bundle,receipt=local.LocalLayoutTrial().execute(
+                      model,brief,copy,intent)
+              assert call.call_count==2
+              assert receipt["staticPreferenceAlignment"]["matched"]==3
+              assert receipt["staticPreferenceAlignment"]["total"]==3
+              assert receipt["staticPreferenceAlignment"]["aestheticQualityCertified"] is False
+              assert receipt["humanAestheticReviewPerformed"] is False
+              assert receipt["onlyAbstractDesignEnumsSent"] is True
+              assert receipt["abstractDesignIntentSha256"]==intent_schema.sha256(intent)
+              assert receipt["briefAndCopySentToModel"] is False
+              assert receipt["sourceCodeSentToModel"] is False
+              assert receipt["ownerApproved"] is False
+              assert receipt["stage45Go"] is False
+              folder=base/("layout-"+name)
+              folder.mkdir(parents=True,exist_ok=True)
+              with zipfile.ZipFile(io.BytesIO(bundle)) as package:
+                  assert package.testzip() is None
+                  preview=package.read("preview.zip")
+                  assert hashlib.sha256(preview).hexdigest()==receipt["previewSha256"]
+              with zipfile.ZipFile(io.BytesIO(preview)) as site:
+                  assert site.testzip() is None
+                  site.extractall(folder)
+              assert json.loads((folder/"layout-proposal.json").read_text())==decision
+              all_previews.add(receipt["previewSha256"])
+              print("E5_ABSTRACT_INTENT_MOCK_RESPONSE_TO_TRUSTED_RENDER_PASS",name)
+          assert len(all_previews)==2
+          PY
+      - name: Install pinned Chromium for real offline browser quality regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Actual desktop/mobile/reduced-motion browser and code-hash verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/enterprise/e3_factory/e5_untrusted_copy_browser.mjs
+          node tools/enterprise/e3_factory/e5_structured_layout_browser.mjs
+          echo E5_CREATIVE_BRIEF_ACTUAL_EXTRACTED_CHROMIUM_QA_PASS
+      - name: Explicit no autonomous commercial website or release certification
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'Stage45 NO_GO' docs/runtime/E5_ABSTRACT_DESIGN_INTENT_20261030.md
+          echo E5_CREATIVE_BRIEF_OFFLINE_REVIEW_ONLY_STAGE45_NO_GO_PASS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: e5-brief-gated-copy-review-not-approved
+          path: |
+            target/e5/brief-gated-copy-preview.zip
+            target/e5/brief-gated-copy-evidence.json
+            target-e5-brief-report-1.json
+            target/e5/local-model-copy-trial-preview.zip
+            target/e5/local-model-copy-trial-evidence.json
+            target/e5/local-model-copy-trial-receipt.json
+            target/e5/mocked-evaluation-evidence.zip
+            target/e5/layout-gallery/
+            target/e5/layout-split/
+            target/e5/layout-centered/
+            target/e5/layout-model-proposed/
+            target/e5/layout-intent-informational/
+            target/e5/layout-intent-immersive/
+            target/e5/mocked-layout-trial.zip
+          if-no-files-found: warn
+          retention-days: 7
