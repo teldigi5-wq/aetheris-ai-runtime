@@ -71,13 +71,10 @@ async function phase(page,fraction){
     pixels:Number(document.querySelector('#story').dataset.canvasPixels),
     canvasHidden:document.querySelector('#stage-canvas').hidden,
     fallbackHidden:document.querySelector('#static-stage').hidden,
-    gl:document.querySelector('#stage-canvas').getContext('webgl2'),
     width:document.documentElement.scrollWidth,
     viewport:innerWidth,
     chapters:document.querySelectorAll('.chapters article').length,
   }));
-  // Gl context is not serializable, so check its existence on page directly.
-  delete d.gl;
   assert.equal(d.mode,'webgl2-active');
   assert(d.pixels>0&&d.pixels<=1202500,'Exceeded bounded pixel budget');
   assert.equal(d.canvasHidden,false);
