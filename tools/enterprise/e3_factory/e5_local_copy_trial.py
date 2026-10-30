@@ -30,7 +30,7 @@ ZIP = FOLDER / "local-model-copy-trial-preview.zip"
 EVIDENCE = FOLDER / "local-model-copy-trial-evidence.json"
 RECEIPT = FOLDER / "local-model-copy-trial-receipt.json"
 MAX_PROVIDER_TEXT_BYTES = copy_schema.MAX_INPUT
-TASK = "scroll"  # Existing E4 admission category; not website generator authorization.
+TASK = "website-copy"  # New E4 local-only task authorization; not a code-repair category.
 SYSTEM = (
     "You are an UNTRUSTED text-only two-line research-copy proposer. "
     "Do not produce code, instructions, URLs, HTML, secrets, owner claims or "
