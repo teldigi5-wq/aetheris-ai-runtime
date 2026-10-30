@@ -31,6 +31,8 @@ async function ready(){
 async function inspect(page){
  return page.evaluate(()=>{
   const el=document.querySelector('#studio-story');
+  const stage=el.querySelector('.visual-panel').getBoundingClientRect();
+  const area=el.getBoundingClientRect();
   const number=k=>Number(el?.getAttribute(k));
   return {
     progress:number('data-progress'),
@@ -44,6 +46,8 @@ async function inspect(page){
     canvas:document.querySelectorAll('canvas').length,
     chapters:document.querySelectorAll('.chapters article').length,
     horizontalOverflow:document.documentElement.scrollWidth>innerWidth+2,
+    contrastScrim:getComputedStyle(el,'::before').backgroundImage.includes('linear-gradient'),
+    stageTopFraction:(stage.top-area.top)/area.height,
     smooth:document.querySelector('button[aria-pressed]')?.getAttribute('aria-pressed'),
   };
  });
@@ -92,6 +96,8 @@ try{
    assert.equal(current.smooth,'false');
    assert.equal(await page.locator('button[aria-pressed]').isDisabled(),true);
    assert.equal(current.chapters,3);
+   assert.equal(current.contrastScrim,true,'Reduced-motion story must retain readable contrast');
+   assert(current.stageTopFraction>0.25,'Mobile static model must not occupy header copy');
    report.cases.push({name:cfg.name,staticOnly:true,noWebglCanvas:true});
   } else {
    await page.waitForFunction(()=>document.querySelector('#studio-story')?.dataset.engine==='r3f-loaded',null,{timeout:22000});
@@ -100,6 +106,9 @@ try{
    assert.equal(initial.cameraShot,'arrival');
    assert.equal(initial.fov,38);
    assert.equal(initial.smooth,'false');
+   assert.equal(initial.contrastScrim,true,'Camera imagery must be darkened beneath narrative copy');
+   if(cfg.mobile)assert(initial.stageTopFraction>0.25,'Mobile 3D must start beneath editorial header');
+   else assert(Math.abs(initial.stageTopFraction)<0.05,'Desktop scene should fill its editorial stage');
    const start=await page.evaluate(()=>{
     const el=document.querySelector('#studio-story');
     return scrollY+el.getBoundingClientRect().top;
