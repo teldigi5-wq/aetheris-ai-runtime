@@ -2,6 +2,7 @@
 import { useEffect } from "react";
 import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { ACESFilmicToneMapping } from "three";
 type SceneProps={progress:number;onReady:()=>void};
 function AuthoredPanel({progress,onReady}:SceneProps){
   const asset=useLoader(GLTFLoader,"/research-panel.glb");
@@ -27,6 +28,10 @@ export default function Scene3D({progress,onReady}:SceneProps){
     gl={{powerPreference:"low-power",antialias:true,alpha:false}}
     camera={{position:[0,0.5,4.5],fov:38,near:0.1,far:25}}
     fallback={<span role="status">WebGL unavailable. Static studio silhouette available.</span>}
+    onCreated={({gl})=>{
+      gl.toneMapping=ACESFilmicToneMapping;
+      gl.toneMappingExposure=1.0;
+    }}
     aria-label="Decorative WebGL product study">
     <AuthoredPanel progress={progress} onReady={onReady}/>
   </Canvas>;
