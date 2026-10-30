@@ -54,9 +54,15 @@ Changed registry resolution fails closed rather than silently changing tested
 dependencies. The workflow runs npm ci with lifecycle scripts disabled, emits
 a CycloneDX SBOM, and requires an npm audit without high/critical advisories.
 
-**Not yet achieved:** the lockfile is not committed; the generated provenance
-check alone cannot prove reproducible production installation or that registry
-integrity metadata is trustworthy. The live audit, full license review, independent
-security acceptance, physical GPU testing, Stage45 certification and deployment
-remain pending. Preserve the draft stack and commit a reviewed, exact lock in
-a separate safe follow-up before any release.
+**Reviewed follow-up (same draft PR):** the recovered 45,977-byte npm lockfile
+was checked against the exact PR #234 artifact digest, inspected offline and then
+committed as a tracked file. CI now uses that checked-in lock via `npm ci`, without
+first generating a replacement; metadata validation, the dependency audit, SBOM
+and existing E6 browser checks remain required. The old digest is historical
+provenance rather than a permanent workflow pin.
+
+**Still pending:** fresh exact-head CI on the committed-lock revision, independent
+package/license and supply-chain review, signed release provenance, production
+reproducibility acceptance, security review, physical GPU testing, Stage45
+certification and deployment. Registry SHA-512 metadata is not itself a
+third-party trust attestation; never treat the passing CI as release approval.
