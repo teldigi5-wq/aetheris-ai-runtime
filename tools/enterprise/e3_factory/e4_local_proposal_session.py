@@ -36,7 +36,7 @@ class LocalProposalSession:
         if os.environ.get(LOCAL_EXPERIMENT_OPT_IN) != "yes" or os.environ.get(e36.OPT_LOCAL) != "yes":
             raise ValueError("E4_LOCAL_EXPLICIT_DOUBLE_OPT_IN_REQUIRED")
         e36.checked_choice("ollama", model_id)
-        if task not in e4.ALLOWED_TASKS:
+        if task not in e4.ALLOWED_TASKS or task not in e36.CATEGORIES:
             raise ValueError("E4_LOCAL_UNAPPROVED_TASK")
         high = model_id in e36.HIGH_RESOURCE_LOCAL_CANDIDATES
         if high and os.environ.get(e36.OPT_HIGH_RESOURCE) != "yes":
