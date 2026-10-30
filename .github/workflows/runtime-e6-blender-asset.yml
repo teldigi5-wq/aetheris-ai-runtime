@@ -38,12 +38,12 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y 'blender=4.0.2+dfsg-1ubuntu8' python3-numpy
           blender --version | head -n 3
-          blender --background --factory-startup --python-exit-code 17 --python-expr 'import numpy; print("E6_BLENDER_NUMPY_AVAILABLE", numpy.__version__)'
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python-expr 'import numpy; print("E6_BLENDER_NUMPY_AVAILABLE", numpy.__version__)'
       - name: Generate actual Blender project and glTF 2 binary, then verify provenance
         shell: bash
         run: |
           set -euo pipefail
-          blender --background --factory-startup --python-exit-code 17 \
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 \
             --python tools/enterprise/e6_studio/next-studio/blender/author_command_module.py
           python3 - <<'PY'
           import hashlib, json, sys
