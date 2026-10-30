@@ -118,25 +118,29 @@ try{
    assert.equal(middle.shot,'material');
    assert(middle.fov<38&&middle.fov>30);
    const middleShot=await page.locator('canvas').first().screenshot({animations:'disabled'});
+   const middleViewport=await page.screenshot({fullPage:false,animations:'disabled'});
    const last=await step(page,start,0.95);
    assert(last.progress>0.67,'Precision act missing');
    assert.equal(last.shot,'precision');
    assert(last.fov<middle.fov);
    const lastShot=await page.locator('canvas').first().screenshot({animations:'disabled'});
+   const lastViewport=await page.screenshot({fullPage:false,animations:'disabled'});
    const reverse=await step(page,start,0.10);
    assert(reverse.progress<middle.progress);
    assert.equal(reverse.shot,'arrival');
    assert(reverse.fov>middle.fov);
    const reverseShot=await page.locator('canvas').first().screenshot({animations:'disabled'});
+   const reverseViewport=await page.screenshot({fullPage:false,animations:'disabled'});
    assert.notEqual(sha(middleShot),sha(lastShot));
    assert.notEqual(sha(lastShot),sha(reverseShot));
-   for(const [n,bytes] of [['material',middleShot],['precision',lastShot],['reverse-arrival',reverseShot]]){
+   for(const [n,bytes,viewport] of [['material',middleShot,middleViewport],['precision',lastShot,lastViewport],['reverse-arrival',reverseShot,reverseViewport]]){
     await fs.writeFile(path.join(out,cfg.name+'-'+n+'.png'),bytes);
+    await fs.writeFile(path.join(out,cfg.name+'-'+n+'-viewport.png'),viewport);
    }
    report.cases.push({name:cfg.name,threeActs:true,reversible:true,canvas:initial.canvas,
     progress:[initial.progress,middle.progress,last.progress,reverse.progress],
     fov:[initial.fov,middle.fov,last.fov,reverse.fov],noExternalRequests:true,
-    screenshots:3});
+    screenshots:6,fullViewportCompositionCaptured:true});
   }
   assert.deepEqual(errors,[],'Browser JS/console errors');
   assert.deepEqual(outside,[],'Untrusted external request');
