@@ -59,6 +59,9 @@ class E4E5LocalCopyContractTests(TestCase):
         self.assertFalse(obj["modelInstalledVerified"])
         self.assertFalse(obj["deploymentAuthorized"])
 
+    def test_dedicated_copy_task_is_not_legacy_scroll_repair(self):
+        self.assertEqual(trial.TASK, "website-copy")
+
     def test_missing_local_optins_or_unknown_model_never_contact_provider(self):
         for flags in ({}, {local.LOCAL_EXPERIMENT_OPT_IN: "yes"},
                       {models.OPT_LOCAL: "yes"}):
