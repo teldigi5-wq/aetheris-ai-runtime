@@ -20,7 +20,7 @@ from e4_local_proposal_session import LOCAL_EXPERIMENT_OPT_IN, LocalProposalSess
 def cli(argv: Sequence[str] | None = None) -> int:
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model",required=True,help="Exact allowlisted local Ollama model")
-    parser.add_argument("--task",required=True,choices=sorted(e4.ALLOWED_TASKS))
+    parser.add_argument("--task",required=True,choices=sorted(e36.CATEGORIES))
     parser.add_argument("--run-local",action="store_true",
         help="Explicitly contact locally installed Ollama; requires TWO more opt-ins")
     args=parser.parse_args(argv)
