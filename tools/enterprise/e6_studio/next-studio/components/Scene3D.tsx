@@ -10,6 +10,7 @@ function AuthoredPanel({progress,onReady,assetVariant="fixture"}:SceneProps){
   const blenderPreview=assetVariant==="blender";
   const asset=useLoader(GLTFLoader,blenderPreview?"/e6-blender-preview.glb":"/research-panel.glb");
   const invalidate=useThree(state=>state.invalidate);
+  const stageWidth=useThree(state=>state.size.width);
   useEffect(()=>{onReady();},[onReady]);
   useEffect(()=>{invalidate();},[progress,invalidate]);
   useFrame(({camera})=>{
@@ -24,7 +25,9 @@ function AuthoredPanel({progress,onReady,assetVariant="fixture"}:SceneProps){
     }
   });
   const rotation:[number,number,number]=blenderPreview?[Math.PI/2-0.16,0,0.1]:[0.08,0,-0.08];
-  const modelScale:number|[number,number,number]=blenderPreview?1.05:[0.82,1.25,0.12];
+  // Preview-only framing uses the measured canvas width, never browser sniffing.
+  // This preserves the original fixture scale and all camera-timeline values.
+  const modelScale:number|[number,number,number]=blenderPreview?(stageWidth<600?0.58:0.84):[0.82,1.25,0.12];
   return <>
     <ambientLight intensity={blenderPreview?0.56:0.95}/>
     <directionalLight position={[-3,5,6]} intensity={blenderPreview?3.5:3.1} color="#f4e5ce"/>
