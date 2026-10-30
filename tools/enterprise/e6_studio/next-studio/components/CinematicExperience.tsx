@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { motion } from "motion/react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { sampleCamera } from "./cameraTimeline";
 const Scene3D=dynamic(()=>import("./Scene3D"),{ssr:false});
 const descriptions=[
   ["01","Arrival","Proportion","The silhouette establishes scale and a measured point of view."],
@@ -58,6 +59,7 @@ export default function CinematicExperience(){
       {duration:540,easing:"ease-out",fill:"both"});
     return ()=>animation.cancel();
   },[reduced]);
+  const camera=sampleCamera(progress);
   const shot=Math.min(2,Math.floor(Math.min(progress,0.999999)*3));
   return <>
     <a href="#studio-story" className="skip-link">Skip to the studio story</a>
@@ -78,18 +80,22 @@ export default function CinematicExperience(){
     <section ref={story} id="studio-story" className="studio-story"
       aria-label="Scroll-directed architectural product composition"
       data-engine={engine} data-shot={descriptions[shot][1].toLowerCase()}
-      data-progress={progress.toFixed(3)}>
+      data-progress={progress.toFixed(3)} data-camera-shot={camera.shot}
+      data-camera-x={camera.position[0].toFixed(4)}
+      data-camera-y={camera.position[1].toFixed(4)}
+      data-camera-z={camera.position[2].toFixed(4)}
+      data-camera-fov={camera.fov.toFixed(3)}>
       <div className="visual-panel" aria-hidden="true">
         {!reduced&&<Scene3D progress={progress} onReady={sceneReady}/>}
         {(!ready||reduced)&&<StaticGeometry/>}
       </div>
       <div className="studio-text">
-        <span className="eyebrow">01 / 03 — ORIGINAL RESEARCH STUDY</span>
+        <span className="eyebrow">{descriptions[shot][0]} / 03 — ORIGINAL RESEARCH STUDY</span>
         <h2>{descriptions[shot][1]}.</h2><p>{descriptions[shot][3]}</p>
         <p className="tech-state" role="status">{reduced?"Static presentation · reduced motion":ready?"WebGL scene · demand rendering":"Static presentation · loading or unavailable"}</p>
       </div>
       <div className="progress-indicator" aria-hidden="true"><span style={{width:String(Math.round(progress*100))+"%"}}/></div>
-      <p className="story-caption">SCROLL TO DIRECT THE CAMERA — 01 / 03</p>
+      <p className="story-caption">SCROLL TO DIRECT THE CAMERA — {descriptions[shot][0]} / 03</p>
     </section>
     <section className="chapters" id="approach" aria-label="Storyboard design method">
       {descriptions.map(([number,name,heading,description])=>
@@ -109,7 +115,7 @@ export default function CinematicExperience(){
     <section className="limitations" id="limits" aria-label="Research status and release limitations">
       <p className="eyebrow">BUILD EVIDENCE / NOT A CUSTOMER RELEASE</p>
       <h2>Craft backed by verifiable boundaries.</h2>
-      <p>Next.js App Router, React, React Three Fiber, Three.js, GSAP ScrollTrigger, Motion, optional Lenis and WAAPI are integrated as an isolated human-authored research prototype. The GLB is generated from one pinned owned geometry fixture. This does not demonstrate Blender authoring, Draco/Meshopt optimization, real customer assets, validated 60fps, GPU thermals, external design certification or autonomous AI-generated websites.</p>
+      <p>Next.js App Router, React, React Three Fiber, Three.js, GSAP ScrollTrigger, Motion, optional Lenis and WAAPI are integrated as an isolated human-authored research prototype. Three deterministic, reviewable camera keyframes now direct this page while its original GLB remains unchanged. A separate unmerged E6 Blender research pipeline has produced and compared an original Blender source, but that asset has not been adopted by this page. No physical GPU performance, VRAM or thermal benchmark, independent human visual acceptance, external design certification, complete E6 production pipeline or autonomous AI-generated website has been verified.</p>
     </section>
     <footer>STAGE45 NO_GO · NO PRODUCTION DEPLOYMENT · NO CUSTOMER DATA</footer>
   </>;
