@@ -3,6 +3,7 @@ on:
   pull_request:
     branches:
       - feat/e6-vetted-gltf-asset-pipeline-20261030
+      - feat/e6-next-r3f-gsap-studio-integration-20261030
     paths:
       - '.github/workflows/runtime-e6-next-r3f-gsap.yml'
       - 'tools/enterprise/e6_studio/**'
@@ -53,13 +54,27 @@ jobs:
           assert "Stage45 NO_GO" in Path('docs/runtime/E6_NEXT_R3F_GSAP_ARCHITECTURE_20261030.md').read_text()
           print('E6_NEXT_OWNED_ASSET_PROVENANCE_NO_CERTIFICATION_PASS')
           PY
-      - name: Resolve exact declared packages to a provisional lock and install offline-safe lifecycle
+      - name: Verify committed lock provenance, audit dependencies, build and emit SBOM
         shell: bash
         run: |
           set -euo pipefail
           cd tools/enterprise/e6_studio/next-studio
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          python3 scripts/validate_dependency_lock.py
+          # npm ci enforces the tracked lockfile without resolving or rewriting it.
           npm ci --ignore-scripts --no-audit --no-fund
+          mkdir -p "$GITHUB_WORKSPACE/target/e6-studio/supply-chain"
+          npm sbom --sbom-format cyclonedx > "$GITHUB_WORKSPACE/target/e6-studio/supply-chain/sbom.cdx.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          import os
+          data=json.loads((Path(os.environ['GITHUB_WORKSPACE'])/'target/e6-studio/supply-chain/sbom.cdx.json').read_text())
+          assert data['bomFormat']=='CycloneDX'
+          assert isinstance(data.get('components'),list) and data['components']
+          print('E6_CYCLONEDX_SBOM_GENERATED_NOT_CERTIFIED')
+          PY
+          # No automatic fix or dependency upgrades. Nonzero fails the job.
+          npm audit --audit-level=high --json > "$GITHUB_WORKSPACE/target/e6-studio/supply-chain/npm-audit.json"
           npm run typecheck
           npm run build
           test -f out/index.html
@@ -107,6 +122,7 @@ jobs:
             target/e6-studio/storyboard-proof/
             target/e6-studio/gltf-proof/
             target/e6-studio/next-r3f-evidence/
+            target/e6-studio/supply-chain/
             tools/enterprise/e6_studio/next-studio/package-lock.json
             tools/enterprise/e6_studio/next-studio/public/research-panel-manifest.json
           if-no-files-found: warn
