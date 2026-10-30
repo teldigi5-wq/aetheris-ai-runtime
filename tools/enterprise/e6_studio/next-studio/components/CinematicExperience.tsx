@@ -12,7 +12,8 @@ const descriptions=[
   ["03","Precision","Detail","A closer angle gives the edge treatment a deliberate place."]
 ] as const;
 function StaticGeometry(){return <div className="static-geometry" aria-hidden="true"><div className="static-geometry__panel"><span/><span/></div></div>;}
-export default function CinematicExperience(){
+export default function CinematicExperience({assetVariant="fixture"}:{assetVariant?:"fixture"|"blender"}){
+  const blenderPreview=assetVariant==="blender";
   const story=useRef<HTMLElement>(null);
   const [reduced,setReduced]=useState(true);
   const [progress,setProgress]=useState(0);
@@ -65,20 +66,21 @@ export default function CinematicExperience(){
     <a href="#studio-story" className="skip-link">Skip to the studio story</a>
     <header className="nav-shell">
       <a href="#top" className="mark">AETHERIS <span>/ CINEMATIC LAB</span></a>
-      <div className="nav-right"><span className="waapi-marker">E6 RESEARCH</span>
+      <div className="nav-right"><span className="waapi-marker">{blenderPreview?"BLENDER PROOF / UNRELEASED":"E6 RESEARCH"}</span>
         <a href="#approach">Method</a><a href="#limits">Boundaries</a></div>
     </header>
     <section className="intro" id="top" aria-labelledby="studio-title">
-      <p className="eyebrow">CINEMATIC PRODUCT ENGINEERING / EXPERIMENT 002</p>
+      <p className="eyebrow">{blenderPreview?"AETHERIS / PHYSICAL DESIGN RESEARCH / 003":"CINEMATIC PRODUCT ENGINEERING / EXPERIMENT 002"}</p>
       <motion.h1 id="studio-title" initial={false}
         animate={reduced?{}:{opacity:1,y:0}} transition={{duration:0.6}}>
-        Engineering <em>the reveal.</em>
+        {blenderPreview?<>Designed to <em>make trust tangible.</em></>:<>Engineering <em>the reveal.</em></>}
       </motion.h1>
-      <p className="lead">A restrained three-act product story: authored geometry, physically based material, and camera direction shaped by your scroll. A local research study, not a production AI-generated customer experience.</p>
+      <p className="lead">{blenderPreview?"A conceptual command module, authored in Blender from original primitives. Brushed alloy, graphite and restrained amber details reveal a hypothetical physical expression of governed intelligence—not a manufactured device or shipping product.":"A restrained three-act product story: authored geometry, physically based material, and camera direction shaped by your scroll. A local research study, not a production AI-generated customer experience."}</p>
       <a href="#studio-story" className="jump">Explore the sequence <span aria-hidden="true">↘</span></a>
     </section>
-    <section ref={story} id="studio-story" className="studio-story"
+    <section ref={story} id="studio-story" className={blenderPreview?"studio-story studio-story--blender":"studio-story"}
       aria-label="Scroll-directed architectural product composition"
+      data-asset-variant={assetVariant}
       data-engine={engine} data-shot={descriptions[shot][1].toLowerCase()}
       data-progress={progress.toFixed(3)} data-camera-shot={camera.shot}
       data-camera-x={camera.position[0].toFixed(4)}
@@ -86,7 +88,7 @@ export default function CinematicExperience(){
       data-camera-z={camera.position[2].toFixed(4)}
       data-camera-fov={camera.fov.toFixed(3)}>
       <div className="visual-panel" aria-hidden="true">
-        {!reduced&&<Scene3D progress={progress} onReady={sceneReady}/>}
+        {!reduced&&<Scene3D progress={progress} onReady={sceneReady} assetVariant={assetVariant}/>} 
         {(!ready||reduced)&&<StaticGeometry/>}
       </div>
       <div className="studio-text">
@@ -115,7 +117,7 @@ export default function CinematicExperience(){
     <section className="limitations" id="limits" aria-label="Research status and release limitations">
       <p className="eyebrow">BUILD EVIDENCE / NOT A CUSTOMER RELEASE</p>
       <h2>Craft backed by verifiable boundaries.</h2>
-      <p>Next.js App Router, React, React Three Fiber, Three.js, GSAP ScrollTrigger, Motion, optional Lenis and WAAPI are integrated as an isolated human-authored research prototype. Three deterministic, reviewable camera keyframes now direct this page while its original GLB remains unchanged. A separate unmerged E6 Blender research pipeline has produced and compared an original Blender source, but that asset has not been adopted by this page. No physical GPU performance, VRAM or thermal benchmark, independent human visual acceptance, external design certification, complete E6 production pipeline or autonomous AI-generated website has been verified.</p>
+      <p>{blenderPreview?"This opt-in, unmerged E6 research preview uses an original Blender-authored conceptual module generated in CI and checked against the prior geometry/provenance evidence. It is not a manufactured product, final brand asset, hardware benchmark, licensed third-party asset inventory, independent design review, security release or production deployment. The normal research page remains untouched.":"Next.js App Router, React, React Three Fiber, Three.js, GSAP ScrollTrigger, Motion, optional Lenis and WAAPI are integrated as an isolated human-authored research prototype. Three deterministic, reviewable camera keyframes now direct this page while its original GLB remains unchanged. A separate unmerged E6 Blender research pipeline has produced and compared an original Blender source, but that asset has not been adopted by this page. No physical GPU performance, VRAM or thermal benchmark, independent human visual acceptance, external design certification, complete E6 production pipeline or autonomous AI-generated website has been verified."}</p>
     </section>
     <footer>STAGE45 NO_GO · NO PRODUCTION DEPLOYMENT · NO CUSTOMER DATA</footer>
   </>;
