@@ -51,7 +51,7 @@ class E6StoryboardSourcePolicy(TestCase):
                     "id=\"render-status\"", "id=\"shot-label\""):
             self.assertIn(id_, html)
         self.assertIn("human-coded research artifact", html)
-        self.assertIn("Stage45 NO_GO", html)
+        self.assertIn("STAGE45 NO_GO", html)
 
     def test_no_remote_scripts_fonts_network_or_product_auth_claims(self):
         for file in (HTML, CSS, JS):
@@ -105,7 +105,7 @@ class E6StoryboardSourcePolicy(TestCase):
         for name,sha in digests.items():
             self.assertEqual(len(sha),64,name)
         self.assertNotIn("autonomous AI-generated", JS.read_text())
-        self.assertIn("No remote", JS.read_text()) if "No remote" in JS.read_text() else self.assertIn("no remote",JS.read_text().lower())
+        self.assertIn("No models, remote assets or deployment", JS.read_text())
 
 
 if __name__ == "__main__":
