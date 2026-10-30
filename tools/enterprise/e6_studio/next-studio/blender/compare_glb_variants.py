@@ -73,12 +73,73 @@ def describe(raw: bytes) -> dict:
     }
 
 
+
+def _triangle_stream(raw: bytes) -> list:
+    """Decode all original POSITION+NORMAL triangle payloads, ignoring UVs.
+
+    Intentionally strict: no sparse accessors, normalized data, unsupported
+    component types or changes to triangle order are silently accepted.
+    """
+    js_len = struct.unpack_from("<I", raw, 12)[0]
+    model = json.loads(raw[20:20 + js_len].rstrip(b" "))
+    bin_header = 20 + js_len
+    bin_len, bin_kind = struct.unpack_from("<I4s", raw, bin_header)
+    if bin_kind != b"BIN\x00":
+        raise ValueError("E6_OPT_BINARY_CHUNK_MISSING")
+    payload = raw[bin_header + 8:bin_header + 8 + bin_len]
+    views = model["bufferViews"]
+    accessors = model["accessors"]
+
+    def decode(number: int) -> list:
+        accessor = accessors[number]
+        if accessor.get("sparse") or accessor.get("normalized"):
+            raise ValueError("E6_OPT_UNSUPPORTED_ACCESSOR")
+        view = views[accessor["bufferView"]]
+        if view.get("buffer") != 0:
+            raise ValueError("E6_OPT_EXTERNAL_VIEW_DENIED")
+        component = {5121: "B", 5123: "H", 5125: "I", 5126: "f"}.get(accessor["componentType"])
+        count_per_value = {"SCALAR": 1, "VEC2": 2, "VEC3": 3}.get(accessor["type"])
+        if not component or not count_per_value:
+            raise ValueError("E6_OPT_UNSUPPORTED_COMPONENT")
+        fmt = "<" + component * count_per_value
+        width = struct.calcsize(fmt)
+        stride = view.get("byteStride", width)
+        count = accessor["count"]
+        view_offset = view.get("byteOffset", 0)
+        item_offset = accessor.get("byteOffset", 0)
+        if (not isinstance(count, int) or count < 0 or stride < width
+                or item_offset + max(count - 1, 0) * stride + (width if count else 0) > view["byteLength"]
+                or view_offset + view["byteLength"] > len(payload)):
+            raise ValueError("E6_OPT_ACCESSOR_BOUNDS")
+        start = view_offset + item_offset
+        return [struct.unpack_from(fmt, payload, start + i * stride) for i in range(count)]
+
+    triangles = []
+    for mesh_number, mesh in enumerate(model["meshes"]):
+        for primitive in mesh["primitives"]:
+            xyz = decode(primitive["attributes"]["POSITION"])
+            normals = decode(primitive["attributes"]["NORMAL"])
+            indices = [i[0] for i in decode(primitive["indices"])] if "indices" in primitive else list(range(len(xyz)))
+            if len(xyz) != len(normals) or len(indices) % 3 or any(i >= len(xyz) for i in indices):
+                raise ValueError("E6_OPT_INVALID_TRIANGLE_REFERENCES")
+            for offset in range(0, len(indices), 3):
+                triangles.append((mesh_number, primitive["material"], tuple(
+                    (xyz[j], normals[j]) for j in indices[offset:offset + 3])))
+    return triangles
+
 def compare(original: bytes, candidate: bytes) -> dict:
     before = describe(original)
     after = describe(candidate)
     for key in ("geometry", "pbrMaterials", "sceneNodes", "triangleCount"):
         if before[key] != after[key]:
             raise ValueError(f"E6_OPT_GEOMETRY_OR_MATERIAL_CHANGED:{key}")
+    original_triangles = _triangle_stream(original)
+    candidate_triangles = _triangle_stream(candidate)
+    if original_triangles != candidate_triangles:
+        raise ValueError("E6_OPT_TRIANGLE_DATA_CHANGED")
+    triangle_sha256 = hashlib.sha256(
+        json.dumps(original_triangles, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
     if before["uvAttributeSets"] == 0 or after["uvAttributeSets"] != 0:
         raise ValueError("E6_OPT_UV_REMOVAL_NOT_DEMONSTRATED")
     if len(candidate) >= len(original):
@@ -99,6 +160,8 @@ def compare(original: bytes, candidate: bytes) -> dict:
         "materialCount": before["validation"]["materialCount"],
         "originalUVAttributeSets": before["uvAttributeSets"],
         "candidateUVAttributeSets": after["uvAttributeSets"],
+        "trianglePositionNormalDataEqual": True,
+        "trianglePositionNormalSha256": triangle_sha256,
         "geometryAndMaterialMetadataEqual": True,
         "assetAdoptedByR3F": False,
         "visualParityVerified": False,
