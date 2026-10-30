@@ -51,7 +51,7 @@ jobs:
           from pathlib import Path
           new=Path('tools/enterprise/e3_factory/e5_creative_brief_gate.py').read_text()
           connector=Path('tools/enterprise/e3_factory/e5_local_copy_trial.py').read_text()
-          for marker in ('PLAN_ONLY_NO_INFERENCE','AETHERIS_E4_EXPLICIT_LOCAL_SESSION_OPT_IN','LocalCopyTrial','models.send("ollama", "GET", "/api/tags")','models.send("ollama", "POST", "/api/generate"','creative.build(brief, proposal)','providerIdentityCryptographicallyAttested','siteGeneratedByModel'):
+          for marker in ('PLAN_ONLY_NO_INFERENCE','TASK = "website-copy"','LocalCopyTrial','models.send("ollama", "GET", "/api/tags")','models.send("ollama", "POST", "/api/generate"','creative.build(brief, proposal)','providerIdentityCryptographicallyAttested','siteGeneratedByModel'):
               assert marker in (new+connector),marker
           for forbidden in ('openrouter.ai', 'model.pull(', 'subprocess.run(', 'os.system(', 'vercel deploy'):
               assert forbidden not in connector, forbidden
@@ -61,6 +61,9 @@ jobs:
           assert '"website-copy"' in e4
           assert 'WEBSITE_COPY_LOCAL_ONLY' in e4
           assert 'task not in e36.CATEGORIES' in code_repair
+          optin=Path('tools/enterprise/e3_factory/e4_local_proposal_session.py').read_text()
+          assert 'AETHERIS_E4_EXPLICIT_LOCAL_SESSION_OPT_IN' in optin
+          assert 'local_session.LOCAL_EXPERIMENT_OPT_IN' in connector
           for marker in ('MAX_BRIEF_BYTES = 1200', 'read_brief(', 'def build(',
                          'briefAuthenticityVerified', 'copyAuthenticityVerified',
                          'LEXICAL_CONSTRAINT_MATCH_ONLY_NOT_APPROVAL',
