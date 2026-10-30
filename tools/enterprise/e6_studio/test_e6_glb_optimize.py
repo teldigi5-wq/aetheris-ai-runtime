@@ -19,10 +19,10 @@ def sample(with_uv=True, pbr=None, vertices=3, name="Module"):
         "buffers": [{"byteLength": 48}],
         "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 48}],
         "accessors": [
-            {"count": vertices, "type": "VEC3", "componentType": 5126,
+            {"count": vertices, "bufferView": 0, "type": "VEC3", "componentType": 5126,
              "min": [0, 0, 0], "max": [1, 1, 1]},
-            {"count": vertices, "type": "VEC3", "componentType": 5126},
-            {"count": 3, "type": "VEC2", "componentType": 5126},
+            {"count": vertices, "bufferView": 0, "type": "VEC3", "componentType": 5126},
+            {"count": 3, "bufferView": 0, "type": "VEC2", "componentType": 5126},
         ],
         "meshes": [{"name": name, "primitives": [
             {"attributes": attrs, "material": 0, "mode": 4}
