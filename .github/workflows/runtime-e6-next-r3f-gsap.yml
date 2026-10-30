@@ -54,16 +54,13 @@ jobs:
           assert "Stage45 NO_GO" in Path('docs/runtime/E6_NEXT_R3F_GSAP_ARCHITECTURE_20261030.md').read_text()
           print('E6_NEXT_OWNED_ASSET_PROVENANCE_NO_CERTIFICATION_PASS')
           PY
-      - name: Verify provisional lock provenance, audit dependencies, build and emit SBOM
+      - name: Verify committed lock provenance, audit dependencies, build and emit SBOM
         shell: bash
         run: |
           set -euo pipefail
           cd tools/enterprise/e6_studio/next-studio
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
           python3 scripts/validate_dependency_lock.py
-          # SHA-256 from the exact-head PR #234 CI artifact (run 41034930896).
-          # Fail closed if registry resolution changes before review/commit.
-          echo 'efe16b99de61d2042a05fa19f43a89e943ee105cfa65a36112cb67e0d686ee33  package-lock.json' | sha256sum --check
+          # npm ci enforces the tracked lockfile without resolving or rewriting it.
           npm ci --ignore-scripts --no-audit --no-fund
           mkdir -p "$GITHUB_WORKSPACE/target/e6-studio/supply-chain"
           npm sbom --sbom-format cyclonedx > "$GITHUB_WORKSPACE/target/e6-studio/supply-chain/sbom.cdx.json"
