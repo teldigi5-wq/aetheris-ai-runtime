@@ -104,7 +104,8 @@ class GltfAssetTests(unittest.TestCase):
         page=ASSET_PAGE.read_text()
         self.assertIn('src="./gltf_scene.js"',page)
         self.assertIn('href="../reference/studio.css"',page)
-        self.assertIn("not autonomous AI-generated design",page.lower())
+        self.assertIn("human-coded research artifact",page.lower())
+        self.assertIn("not an ai-produced customer site",page.lower())
 
     def test_real_browser_proof_requires_asset_and_tamper_case(self):
         script=BROWSER.read_text()
