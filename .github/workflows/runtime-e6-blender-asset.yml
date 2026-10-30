@@ -1,0 +1,78 @@
+name: Enterprise E6 Blender Procedural Asset Source Proof
+on:
+  pull_request:
+    branches:
+      - feat/e6-license-inventory-20261030
+    paths:
+      - '.github/workflows/runtime-e6-blender-asset.yml'
+      - 'tools/enterprise/e6_studio/next-studio/blender/**'
+      - 'tools/enterprise/e6_studio/test_e6_blender_source.py'
+permissions:
+  contents: read
+concurrency:
+  group: e6-blender-source-\${{ github.workflow }}-\${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  blender-source-research:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: SHA-pinned source checkout without credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: \${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Prove offline negative asset-safety controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "\${{ github.event.pull_request.head.sha }}"
+          python3 -m unittest discover -s tools/enterprise/e6_studio -p 'test_e6_blender_source.py' -v
+      - name: Install signed Ubuntu Noble Blender package at reviewed version
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y 'blender=4.0.2+dfsg-1ubuntu8'
+          blender --version | head -n 3
+      - name: Generate actual Blender project and glTF 2 binary, then verify provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          blender --background --factory-startup --python-exit-code 17 \
+            --python tools/enterprise/e6_studio/next-studio/blender/author_command_module.py
+          python3 - <<'PY'
+          import hashlib, json, sys
+          from pathlib import Path
+          root=Path.cwd()
+          base=root/'target/e6-studio/blender-proof'
+          source=base/'aetheris-command-module.blend'
+          binary=base/'aetheris-command-module.glb'
+          manifest=base/'aetheris-command-module.manifest.json'
+          sys.path.insert(0,str(root/'tools/enterprise/e6_studio/next-studio/blender'))
+          from validate_blender_glb import inspect_glb
+          proof=inspect_glb(binary.read_bytes())
+          data=json.loads(manifest.read_text())
+          assert source.is_file() and source.stat().st_size>1000
+          assert data['sha256']==proof['sha256']
+          assert data['blenderSourceSha256']==hashlib.sha256(source.read_bytes()).hexdigest()
+          assert data['authoringScriptSha256']==hashlib.sha256((root/'tools/enterprise/e6_studio/next-studio/blender/author_command_module.py').read_bytes()).hexdigest()
+          assert data['vertexCount']==proof['vertexCount']
+          assert data['assetApproved'] is False
+          assert data['ownerApproved'] is False
+          assert data['licensingCertified'] is False
+          assert data['productionReady'] is False
+          assert data['stage45Go'] is False
+          print('E6_ACTUAL_BLENDER_EXPORT_RESEARCH_ONLY_PASS')
+          PY
+      - name: Store Blender research-source evidence, never a production deploy artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e6-blender-source-research-not-release
+          path: target/e6-studio/blender-proof/
+          if-no-files-found: warn
+          retention-days: 7
