@@ -26,3 +26,9 @@ The pure `cameraTimeline.ts` module clamps all finite progress to [0,1], maps in
 ## Not included / gates still open
 
 No vendor asset authoring import, Theatre.js installation, shader/postprocess/bloom/DoF, measured visual camera-composition approval, hand-sculpted production hero, physical NVIDIA/AMD/Apple GPU profiling, 60-fps/frame-time percentiles, VRAM/thermal budget, independent WCAG verification or real-device browser matrix. The stored research screenshots are software-WebGL only, not independent design approval. Stage45 remains 0/9 certified, **NO_GO**. This is not E7/E8/E9 production capability, a main merge, or a deployment.
+
+## Visual QA correction after the first browser pass
+
+The initial screenshots (CI run 41073126863) passed functional/scroll tests but exposed **insufficient text separation on mobile** and an oversized Precision composition crossing desktop copy. Passing E2E tests alone is not visual design approval. This draft adds an opaque CSS editorial luminance scrim over the render (desktop left-to-right; mobile top-to-bottom) without glassmorphism or content blurring. On narrow viewports the visual panel starts at 34% of the story height, leaving the top readable without covering the 3D with text. Browser tests additionally assert the scrim exists and the mobile 3D stage is below the editorial header, including reduced-motion visitors.
+
+The adjustments must pass a new exact-head Chromium test and be inspected visually before Task 4 can be considered a satisfactory research milestone. A deterministic contrast scrim is not an independent WCAG 2.2 AA audit or professional design acceptance.
