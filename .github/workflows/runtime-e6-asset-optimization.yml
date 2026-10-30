@@ -1,0 +1,78 @@
+name: Enterprise E6 Blender GLB Optimization Baseline
+on:
+  pull_request:
+    branches:
+      - feat/e6-blender-asset-source-20261030
+    paths:
+      - '.github/workflows/runtime-e6-asset-optimization.yml'
+      - 'tools/enterprise/e6_studio/next-studio/blender/**'
+      - 'tools/enterprise/e6_studio/test_e6_glb_optimize.py'
+      - 'docs/runtime/E6_ASSET_OPTIMIZATION_BASELINE_20261030.md'
+permissions:
+  contents: read
+concurrency:
+  group: e6-glb-optimization-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  actual-blender-two-variant-baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: SHA-pinned checkout without persistent credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Offline negative-policy tests and exact source checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          python3 -m unittest discover -s tools/enterprise/e6_studio -p 'test_e6_glb_optimize.py' -v
+          python3 -m unittest discover -s tools/enterprise/e6_studio -p 'test_e6_blender_source.py' -v
+      - name: Install pinned Ubuntu Blender and system NumPy
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y 'blender=4.0.2+dfsg-1ubuntu8' python3-numpy
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python-expr 'import numpy; print("E6_BLENDER_NUMPY_READY", numpy.__version__)'
+      - name: Export two actual GLBs from the same owned Blender scene
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/author_command_module.py
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/export_no_uv_candidate.py
+          python3 tools/enterprise/e6_studio/next-studio/blender/compare_glb_variants.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('target/e6-studio/blender-proof/asset-size-comparison.json').read_text())
+          assert report['kind']=='E6_BLENDER_NO_UV_OFFLINE_SIZE_COMPARISON'
+          assert report['candidateRawBytes'] < report['originalRawBytes']
+          assert report['rawBytesSaved'] > 0
+          assert report['geometryAndMaterialMetadataEqual'] is True
+          assert report['trianglePositionNormalDataEqual'] is True
+          assert len(report['trianglePositionNormalSha256']) == 64
+          assert report['originalUVAttributeSets'] == 7
+          assert report['candidateUVAttributeSets'] == 0
+          assert report['meshCount'] == 7 and report['materialCount'] == 4
+          assert report['vertexCount'] == 1512 and report['triangleCount'] == 756
+          assert report['assetAdoptedByR3F'] is False
+          assert report['visualParityVerified'] is False
+          assert report['networkTransferMeasured'] is False
+          assert report['realGpuBenchmarked'] is False
+          assert report['ownerApproved'] is False and report['stage45Go'] is False
+          print('E6_REAL_BLENDER_TWO_VARIANT_SIZE_BASELINE_PASS')
+          PY
+      - name: Upload research-only baseline and optimized candidate
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e6-asset-optimization-size-research-not-release
+          path: target/e6-studio/blender-proof/
+          if-no-files-found: warn
+          retention-days: 7
