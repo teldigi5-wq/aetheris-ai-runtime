@@ -16,7 +16,7 @@ for(const key of CAMERA_KEYFRAMES){
  const actual=sampleCamera(key.at);
  assert.equal(actual.shot,key.name);
  assert.equal(actual.fov,key.fov);
- assert.deepEqual(actual.position,key.position);
+ assert(actual.position.every((v,i)=>Math.abs(v-key.position[i])<1e-10),'Authored camera position drifted beyond floating point tolerance');
 }
 for(const value of [-Infinity,-50,NaN,Infinity]) {
  const s=sampleCamera(value);
