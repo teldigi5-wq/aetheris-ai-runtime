@@ -55,6 +55,8 @@ jobs:
           assert report['candidateRawBytes'] < report['originalRawBytes']
           assert report['rawBytesSaved'] > 0
           assert report['geometryAndMaterialMetadataEqual'] is True
+          assert report['trianglePositionNormalDataEqual'] is True
+          assert len(report['trianglePositionNormalSha256']) == 64
           assert report['originalUVAttributeSets'] == 7
           assert report['candidateUVAttributeSets'] == 0
           assert report['meshCount'] == 7 and report['materialCount'] == 4
