@@ -4,6 +4,7 @@ on:
     branches:
       - feat/e6-vetted-gltf-asset-pipeline-20261030
       - feat/e6-next-r3f-gsap-studio-integration-20261030
+      - feat/e6-dependency-provenance-20261030
     paths:
       - '.github/workflows/runtime-e6-next-r3f-gsap.yml'
       - 'tools/enterprise/e6_studio/**'
