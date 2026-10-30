@@ -4,6 +4,7 @@ on:
     branches:
       - feat/e6-vetted-gltf-asset-pipeline-20261030
       - feat/e6-next-r3f-gsap-studio-integration-20261030
+      - feat/e6-dependency-provenance-20261030
     paths:
       - '.github/workflows/runtime-e6-next-r3f-gsap.yml'
       - 'tools/enterprise/e6_studio/**'
@@ -64,6 +65,9 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund
           mkdir -p "$GITHUB_WORKSPACE/target/e6-studio/supply-chain"
           npm sbom --sbom-format cyclonedx > "$GITHUB_WORKSPACE/target/e6-studio/supply-chain/sbom.cdx.json"
+          python3 scripts/report_dependency_licenses.py \
+            "$GITHUB_WORKSPACE/target/e6-studio/supply-chain/sbom.cdx.json" \
+            "$GITHUB_WORKSPACE/target/e6-studio/supply-chain/license-review.json"
           python3 - <<'PY'
           import json
           from pathlib import Path
