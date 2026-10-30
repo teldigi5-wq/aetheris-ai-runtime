@@ -93,7 +93,7 @@ class E5CreativeBriefConstraintTests(TestCase):
                 gate.read_brief(raw)
 
     def test_brief_rejects_non_ascii_ambiguous_values_and_type_coercion(self):
-        for value in (True, 1, None, ["quiet"], {"$exec": "deploy"}):
+        for value in (True, 1, None, [["quiet"]], {"$exec": "deploy"}):
             with self.subTest(value=value):
                 payload = {**BRIEF, "requiredTerms": value}
                 with self.assertRaises(ValueError):
