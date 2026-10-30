@@ -13,7 +13,7 @@ import sys
 import zlib
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[4]
+ROOT = Path(__file__).resolve().parents[5]
 EVIDENCE = ROOT / "target" / "e6-studio" / "browser-visual-parity"
 SCENES = ("desktop-front", "desktop-detail", "mobile-front")
 MAX_PNG_BYTES = 7_000_000
