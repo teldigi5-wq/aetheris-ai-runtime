@@ -1,0 +1,105 @@
+name: Enterprise E6 Software WebGL Blender GLB Visual Parity
+on:
+  pull_request:
+    branches:
+      - feat/e6-asset-optimization-baseline-20261030
+    paths:
+      - '.github/workflows/runtime-e6-browser-visual-parity.yml'
+      - 'tools/enterprise/e6_studio/**'
+      - 'docs/runtime/E6_BROWSER_VISUAL_PARITY_20261030.md'
+permissions:
+  contents: read
+concurrency:
+  group: e6-visual-parity-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  reproducible-source-to-chromium-visual-parity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: SHA-pinned read-only checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Set up fixed Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Set up fixed Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Verify negative policies and exact Git commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          python3 -m unittest discover -s tools/enterprise/e6_studio -p 'test_e6_visual_pixel_policy.py' -v
+          python3 -m unittest discover -s tools/enterprise/e6_studio -p 'test_e6_glb_optimize.py' -v
+          python3 -m unittest discover -s tools/enterprise/e6_studio -p 'test_e6_blender_source.py' -v
+          node --check tools/enterprise/e6_studio/next-studio/browser_visual_parity.mjs
+      - name: Install official Ubuntu Blender and system NumPy
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y 'blender=4.0.2+dfsg-1ubuntu8' python3-numpy
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python-expr 'import numpy; print("E6_VISUAL_BLENDER_DEPENDENCY_READY", numpy.__version__)'
+      - name: Author identical original source and export both Blender GLBs
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/author_command_module.py
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/export_no_uv_candidate.py
+          python3 tools/enterprise/e6_studio/next-studio/blender/compare_glb_variants.py
+      - name: Install from tracked npm lock and build existing research R3F page
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          python3 scripts/validate_dependency_lock.py
+          npm ci --ignore-scripts --no-audit --no-fund
+          python3 scripts/build_research_glb.py
+          npm run typecheck
+          npm run build
+          test -f out/index.html
+          test -f out/research-panel.glb
+      - name: Install fixed Playwright Chromium and OS requirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix tools/enterprise/e6_studio --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e6_studio/node_modules/.bin/playwright install --with-deps chromium
+      - name: Capture real Chromium software-WebGL comparisons
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/enterprise/e6_studio/next-studio/browser_visual_parity.mjs
+          python3 tools/enterprise/e6_studio/next-studio/scripts/compare_visual_png.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          base=Path('target/e6-studio/browser-visual-parity')
+          report=json.loads((base/'pixel-diff-report.json').read_text())
+          assert report['kind']=='E6_SOFTWARE_CHROMIUM_TWO_GLB_PIXEL_PARITY'
+          assert report['noOwnerGpuCertification']
+          assert report['noIndependentDesignAcceptance']
+          assert report['noWebsiteAssetChange']
+          assert report['ownerApproved'] is False
+          assert report['stage45Go'] is False
+          assert len(report['cases'])==3
+          assert all(x['softwareRenderedPixelParityPassed'] for x in report['cases'])
+          assert all(x['physicalGpuMeasured'] is False for x in report['cases'])
+          print('E6_R3F_TWO_GLB_CHROMIUM_SWIFTSHADER_PIXEL_PARITY_ONLY_PASS')
+          PY
+      - name: Preserve short-lived research screenshots, artifacts and reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e6-r3f-blender-software-visual-qa-not-release
+          path: |
+            target/e6-studio/blender-proof/
+            target/e6-studio/browser-visual-parity/
+          if-no-files-found: warn
+          retention-days: 7
