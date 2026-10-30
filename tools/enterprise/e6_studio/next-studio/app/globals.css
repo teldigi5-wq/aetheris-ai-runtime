@@ -17,6 +17,8 @@ a{color:inherit}a:focus-visible,button:focus-visible{outline:3px solid #f0cba0;o
 .jump{margin-top:24px;text-underline-offset:7px}
 .studio-story{position:relative;min-height:100svh;overflow:hidden;background:linear-gradient(135deg,#182126,#0d1215);isolation:isolate}
 .visual-panel,.visual-panel>div{position:absolute;inset:0;width:100%;height:100%}
+/* Opaque editorial safety scrim: real contrast over any camera pose, never glass. */
+.studio-story::before{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(90deg,rgba(10,15,18,.97) 0%,rgba(10,15,18,.91) 24%,rgba(10,15,18,.56) 42%,transparent 68%)}
 .visual-panel canvas{display:block}
 .static-geometry{display:grid;place-items:center;background:radial-gradient(ellipse at 70% 65%,#323d42,#11181d 70%)}
 .static-geometry__panel{height:min(48vw,350px);width:min(32vw,230px);border:12px solid #8c9da0;background:linear-gradient(120deg,#36434a,#1a262d);transform:rotate(-12deg);box-shadow:30px 24px 70px #05090c}
@@ -44,6 +46,8 @@ footer{padding:34px clamp(22px,7vw,115px);font-size:.68rem;letter-spacing:.1em}
 @media(max-width:760px){
  .nav-shell{align-items:flex-start;flex-direction:column;gap:12px}.nav-right{flex-wrap:wrap}
  .intro{min-height:calc(100svh - 130px)}.intro h1{font-size:clamp(3.4rem,12vw,6rem)}
+ .visual-panel{inset:34% 0 0;height:66%}
+ .studio-story::before{background:linear-gradient(180deg,#10171b 0%,#10171b 25%,rgba(16,23,27,.93) 35%,rgba(16,23,27,.45) 48%,transparent 69%)}
  .studio-text{top:8%;max-width:80%}
  .static-geometry__panel{height:220px;width:140px;border-width:7px}
  .chapters{grid-template-columns:1fr;padding-block:80px}
