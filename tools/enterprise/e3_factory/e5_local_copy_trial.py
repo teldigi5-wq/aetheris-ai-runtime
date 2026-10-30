@@ -69,6 +69,8 @@ class LocalCopyTrial:
 
         # No cloud fallback, no shell tools, no automatic model installation.
         tags, _ = models.send("ollama", "GET", "/api/tags")
+        if type(tags) is not dict:
+            raise ValueError("E5_LOCAL_MODEL_INVENTORY_INVALID")
         installed = tags.get("models")
         if (type(installed) is not list or len(installed) > 64
             or any(type(m) is not dict or type(m.get("name")) is not str
