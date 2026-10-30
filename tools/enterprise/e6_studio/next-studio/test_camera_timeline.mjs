@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 
 const require=createRequire(import.meta.url);
-const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../../');
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../../../');
 const {CAMERA_KEYFRAMES,sampleCamera}=require(path.join(root,'target/e6-studio/camera-compiled/cameraTimeline.js'));
 
 assert.equal(CAMERA_KEYFRAMES.length,3);
