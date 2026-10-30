@@ -23,13 +23,15 @@ function AuthoredPanel({progress,onReady,assetVariant="fixture"}:SceneProps){
       camera.updateProjectionMatrix();
     }
   });
+  const rotation:[number,number,number]=blenderPreview?[Math.PI/2-0.16,0,0.1]:[0.08,0,-0.08];
+  const modelScale:number|[number,number,number]=blenderPreview?1.05:[0.82,1.25,0.12];
   return <>
     <ambientLight intensity={blenderPreview?0.56:0.95}/>
     <directionalLight position={[-3,5,6]} intensity={blenderPreview?3.5:3.1} color="#f4e5ce"/>
     <directionalLight position={[3,0,-4]} intensity={blenderPreview?2.2:1.6} color="#a9bed0"/>
     {blenderPreview&&<directionalLight position={[1,4,-2]} intensity={1.4} color="#d9a86d"/>}
-    <group rotation={blenderPreview?[Math.PI/2-0.16,0,0.1]:[0.08,0,-0.08]}>
-      <primitive object={asset.scene} scale={blenderPreview?1.05:[0.82,1.25,0.12]}/>
+    <group rotation={rotation}>
+      <primitive object={asset.scene} scale={modelScale}/>
     </group>
   </>;
 }
