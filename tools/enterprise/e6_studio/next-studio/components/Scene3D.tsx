@@ -2,7 +2,8 @@
 import { useEffect } from "react";
 import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { ACESFilmicToneMapping } from "three";
+import { ACESFilmicToneMapping, PerspectiveCamera } from "three";
+import { sampleCamera } from "./cameraTimeline";
 type SceneProps={progress:number;onReady:()=>void};
 function AuthoredPanel({progress,onReady}:SceneProps){
   const asset=useLoader(GLTFLoader,"/research-panel.glb");
@@ -10,11 +11,15 @@ function AuthoredPanel({progress,onReady}:SceneProps){
   useEffect(()=>{onReady();},[onReady]);
   useEffect(()=>{invalidate();},[progress,invalidate]);
   useFrame(({camera})=>{
-    const t=Math.max(0,Math.min(1,progress));
-    const yaw=-0.6+t*2.15;
-    const pitch=0.13+Math.sin(t*Math.PI)*0.13;
-    camera.position.set(Math.sin(yaw)*4.5,0.75+pitch,Math.cos(yaw)*4.5);
+    // The ScrollTrigger progress prop is the only playhead; useFrame applies it
+    // on-demand without creating a competing RAF or autonomous camera loop.
+    const shot=sampleCamera(progress);
+    camera.position.set(...shot.position);
     camera.lookAt(0,0,0);
+    if(camera instanceof PerspectiveCamera && Math.abs(camera.fov-shot.fov)>0.001){
+      camera.fov=shot.fov;
+      camera.updateProjectionMatrix();
+    }
   });
   return <>
     <ambientLight intensity={0.95}/>
