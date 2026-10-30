@@ -1,0 +1,181 @@
+name: E4-to-E5 Opt-in Local Ollama Copy Trial and Independent Offline QA
+on:
+  push:
+    branches:
+      - feat/e4-e5-optin-local-model-copy-trial-20261030
+  pull_request:
+    branches:
+      - feat/e4-e5-local-copy-independent-review-20261030
+    paths:
+      - '.github/workflows/runtime-e4-e5-local-copy-trial.yml'
+      - 'tools/enterprise/e3_factory/e5_creative_brief_gate.py'
+      - 'tools/enterprise/e3_factory/test_e5_creative_brief_gate.py'
+      - 'tools/enterprise/e3_factory/e5_local_copy_trial.py'
+      - 'tools/enterprise/e3_factory/test_e5_local_copy_trial.py'
+      - 'docs/runtime/E4_E5_LOCAL_MODEL_COPY_TRIAL_20261030.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e4-e5-local-copy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  independent-brief-and-real-offline-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Exact reviewed E5 head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Immutable head, independent brief, no model/network/deployment capability
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          new=Path('tools/enterprise/e3_factory/e5_creative_brief_gate.py').read_text()
+          connector=Path('tools/enterprise/e3_factory/e5_local_copy_trial.py').read_text()
+          for marker in ('PLAN_ONLY_NO_INFERENCE','AETHERIS_E4_EXPLICIT_LOCAL_SESSION_OPT_IN','LocalCopyTrial','models.send("ollama", "GET", "/api/tags")','models.send("ollama", "POST", "/api/generate"','creative.build(brief, proposal)','providerIdentityCryptographicallyAttested','siteGeneratedByModel'):
+              assert marker in (new+connector) or marker == 'AETHERIS_E4_EXPLICIT_LOCAL_SESSION_OPT_IN',marker
+          for forbidden in ('openrouter.ai', 'model.pull(', 'subprocess.run(', 'os.system(', 'vercel deploy'):
+              assert forbidden not in connector, forbidden
+          older=Path('tools/enterprise/e3_factory/e5_untrusted_copy_preview.py').read_text()
+          for marker in ('MAX_BRIEF_BYTES = 1200', 'read_brief(', 'def build(',
+                         'briefAuthenticityVerified', 'copyAuthenticityVerified',
+                         'LEXICAL_CONSTRAINT_MATCH_ONLY_NOT_APPROVAL',
+                         'ownerApproved', 'deploymentAuthorized',
+                         'modelAuthored', 'stage45Status', 'reference.PROJECT'):
+              assert marker in new,marker
+          for prohibited in ('requests.post(', 'subprocess.run(', 'os.system(',
+                             'eval(', 'exec(', 'model.generate(', 'https://vercel'):
+              assert prohibited not in new,prohibited
+          assert 'modelAuthored": None' in older
+          assert 'E5_UNTRUSTED_COPY_REVIEW_ONLY' in older
+          print('E5_INDEPENDENT_BRIEF_NO_MODEL_INFERENCE_OR_DEPLOYMENT_PASS')
+          PY
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_reference_preview.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_untrusted_copy_preview.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_creative_brief_gate.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e5_local_copy_trial.py' -v
+          python -m py_compile tools/enterprise/e3_factory/e5_creative_brief_gate.py tools/enterprise/e3_factory/e5_local_copy_trial.py
+          node --check tools/enterprise/e3_factory/e5_untrusted_copy_browser.mjs
+      - name: Build identical review ZIP and independently check SHA-256 evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/e5
+          cat > target/e5/creative-brief.json <<'EOF'
+          {"version":1,"brandLabel":"Prototype Atelier","requiredTerms":["quiet","motion"],"forbiddenTerms":["guaranteed","certified"]}
+          EOF
+          cat > target/e5/copy-proposal.json <<'EOF'
+          {"version":1,"brandLabel":"Prototype Atelier","headlineLines":["Quiet materials.","Purposeful motion."]}
+          EOF
+          python tools/enterprise/e3_factory/e5_creative_brief_gate.py > target-e5-brief-report-1.json
+          cp target/e5/brief-gated-copy-evidence.json target-e5-brief-evidence-first.json
+          first="$(sha256sum target/e5/brief-gated-copy-preview.zip | cut -d ' ' -f 1)"
+          python tools/enterprise/e3_factory/e5_creative_brief_gate.py > target-e5-brief-report-2.json
+          second="$(sha256sum target/e5/brief-gated-copy-preview.zip | cut -d ' ' -f 1)"
+          test "$first" = "$second"
+          cmp target-e5-brief-report-1.json target-e5-brief-report-2.json
+          cmp target-e5-brief-evidence-first.json target/e5/brief-gated-copy-evidence.json
+          python -m zipfile -t target/e5/brief-gated-copy-preview.zip
+          python -m zipfile -e target/e5/brief-gated-copy-preview.zip target/e5/untrusted-copy-site
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,hashlib
+          folder=Path('target/e5')
+          evidence=json.loads((folder/'brief-gated-copy-evidence.json').read_text())
+          assert evidence['decision']=='LEXICAL_CONSTRAINT_MATCH_ONLY_NOT_APPROVAL'
+          assert evidence['previewZipSha256']==hashlib.sha256((folder/'brief-gated-copy-preview.zip').read_bytes()).hexdigest()
+          for key in ['briefAuthenticityVerified','copyAuthenticityVerified','ownerApproved',
+                      'deploymentAuthorized','productionReady']:
+              assert evidence[key] is False,key
+          assert evidence['modelAuthored'] is None
+          assert evidence['stage45Status']=='NO_GO'
+          assert (folder/'untrusted-copy-site/preview-manifest.json').is_file()
+          print('E5_CREATIVE_BRIEF_EVIDENCE_AND_REPRODUCIBLE_ZIP_PASS')
+          PY
+      - name: Mocked Ollama transport end-to-end through independent E5 validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools/enterprise/e3_factory python3 - <<'PY'
+          import contextlib, hashlib, io, json, os
+          from unittest import mock
+          import e5_local_copy_trial as trial
+          import e36_free_model_router as models
+          import e4_local_proposal_session as local
+          model="qwen2.5-coder:1.5b"
+          proposal={"version":1,"brandLabel":"Prototype Atelier",
+                    "headlineLines":["Quiet materials.","Purposeful motion."]}
+          def fake(provider,method,route,**kwargs):
+              assert provider=="ollama"
+              if method=="GET" and route=="/api/tags":
+                  return {"models":[{"name":model}]},1
+              assert method=="POST" and route=="/api/generate"
+              assert kwargs["payload"]["format"]=="json"
+              assert kwargs["payload"]["stream"] is False
+              return {"model":model,"done":True,"response":json.dumps(proposal)},2
+          with (mock.patch.dict(os.environ,{
+                  local.LOCAL_EXPERIMENT_OPT_IN:"yes",
+                  models.OPT_LOCAL:"yes"},clear=False),
+                mock.patch.object(models,"send",side_effect=fake) as transport,
+                contextlib.redirect_stdout(io.StringIO()) as capture):
+              outcome=trial.cli(["--model",model,"--run-local"])
+              assert outcome==0
+              assert transport.call_count==2
+          info=json.loads(capture.getvalue())
+          assert info["status"]=="LOCAL_MODEL_COPY_UNTRUSTED_OFFLINE_REVIEW"
+          receipt=json.loads(trial.RECEIPT.read_text())
+          evidence=json.loads(trial.EVIDENCE.read_text())
+          assert receipt["reviewZipSha256"]==hashlib.sha256(trial.ZIP.read_bytes()).hexdigest()
+          assert receipt["siteGeneratedByModel"] is False
+          assert receipt["providerIdentityCryptographicallyAttested"] is False
+          assert evidence["ownerApproved"] is False
+          assert evidence["modelAuthored"] is None
+          print("E4_E5_MOCK_PROVIDER_EXPLICIT_LOCAL_CONTRACT_TO_REVIEW_ARTIFACT_PASS")
+          PY
+          python -m zipfile -t target/e5/local-model-copy-trial-preview.zip
+          python -m zipfile -e target/e5/local-model-copy-trial-preview.zip target/e5/untrusted-copy-site
+      - name: Install pinned Chromium for real offline browser quality regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Actual desktop/mobile/reduced-motion browser and code-hash verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/enterprise/e3_factory/e5_untrusted_copy_browser.mjs
+          echo E5_CREATIVE_BRIEF_ACTUAL_EXTRACTED_CHROMIUM_QA_PASS
+      - name: Explicit no autonomous commercial website or release certification
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'Stage45 NO_GO' docs/runtime/E4_E5_LOCAL_MODEL_COPY_TRIAL_20261030.md
+          echo E5_CREATIVE_BRIEF_OFFLINE_REVIEW_ONLY_STAGE45_NO_GO_PASS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: e5-brief-gated-copy-review-not-approved
+          path: |
+            target/e5/brief-gated-copy-preview.zip
+            target/e5/brief-gated-copy-evidence.json
+            target-e5-brief-report-1.json
+            target/e5/local-model-copy-trial-preview.zip
+            target/e5/local-model-copy-trial-evidence.json
+            target/e5/local-model-copy-trial-receipt.json
+          if-no-files-found: warn
+          retention-days: 7
