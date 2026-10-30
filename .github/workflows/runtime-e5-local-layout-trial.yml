@@ -74,7 +74,7 @@ jobs:
           assert '"website-layout"' in e4
           assert 'WEBSITE_LAYOUT_LOCAL_ONLY' in e4
           local_layout=Path('tools/enterprise/e3_factory/e5_local_layout_trial.py').read_text()
-          for marker in ('TASK = "website-layout"', 'OPT_LAYOUT', 'LocalLayoutTrial', 'models.send("ollama", "GET", "/api/tags")', 'models.send("ollama", "POST", "/api/generate")', 'layouts.read_layout(raw)', 'layouts.build(creative_brief, copy_proposal, decision)', 'briefAndCopySentToModel', 'modelAuthoredCssOrJavascript', 'stage45Go'):
+          for marker in ('TASK = "website-layout"', 'OPT_LAYOUT', 'LocalLayoutTrial', 'models.send("ollama", "GET", "/api/tags")', 'models.send("ollama", "POST", "/api/generate", payload=', 'layouts.read_layout(raw)', 'layouts.build(creative_brief, copy_proposal, decision)', 'briefAndCopySentToModel', 'modelAuthoredCssOrJavascript', 'stage45Go'):
               assert marker in local_layout, marker
           assert 'WEBSITE_COPY_LOCAL_ONLY' in e4
           assert 'task not in e36.CATEGORIES' in code_repair
