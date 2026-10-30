@@ -135,7 +135,7 @@ def evaluate(suite: dict, model_id: str) -> tuple[bytes, dict]:
         "suiteSha256": hashlib.sha256(_json_bytes(checked)).hexdigest(),
         "requestedLocalModel": model_id,
         "providerIdentityCryptographicallyAttested": False,
-        "realOwnerHardwareBenchmarkedByThisReport": False,
+        "hardwareBenchmarkCertified": False,
         "experimentalAdapterInvocations": len(rows),
         "maximumPermittedAdapterInvocations": MAX_ATTEMPTS,
         "acceptedLexically": accepted,
@@ -205,7 +205,7 @@ def cli(args: Sequence[str] | None = None) -> int:
             "rejectedOrUnavailable": report["rejectedOrUnavailable"],
             "acceptanceFraction": report["acceptanceFraction"],
             "evidenceZipSha256": hashlib.sha256(archive).hexdigest(),
-            "noRealModelRunInCI": True,
+            "providerIdentityCryptographicallyAttested": False,
             "ownerApproved": False,
             "stage45Go": False,
         }, sort_keys=True))
