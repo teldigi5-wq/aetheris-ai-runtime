@@ -38,7 +38,9 @@ def inspect_design(raw: bytes) -> dict:
     materials = model["materials"]
     if len(meshes) != 12 or len(materials) != 6:
         raise ValueError("E6_DETAIL_MISSING_DESIGN_PARTS")
-    names = [x.get("name", "") for x in meshes]
+    # Blender glTF mesh datablocks use Cube/Torus/Cylinder names; authored
+    # part names are preserved on scene graph nodes, not mesh data objects.
+    names = [x.get("name", "") for x in model.get("nodes", [])]
     mats = {x.get("name", "") for x in materials}
     if not all(any(fragment in name for name in names) for fragment in DETAILS):
         raise ValueError("E6_DETAIL_MISSING_GOVERNANCE_PART")
@@ -96,12 +98,18 @@ def main() -> None:
         or provenance.get("stage45Go") is not False):
         raise ValueError("E6_DETAIL_PROVENANCE_OR_PARITY_DENIED")
     before, after = inspect_design(raw), inspect_design(candidate)
-    for field in ("meshCount", "materialCount", "triangleCount", "vertexCount", "names", "materialNames"):
+    for field in ("meshCount", "materialCount", "triangleCount", "names", "materialNames"):
         if before[field] != after[field]:
             raise ValueError("E6_DETAIL_CANDIDATE_DIFFERED")
+    # Vertex stream lengths may shrink after removing unused UV seam splits;
+    # canonical ordered position+normal triangle data is verified separately.
+    if after["vertexCount"] > before["vertexCount"]:
+        raise ValueError("E6_DETAIL_CANDIDATE_NEW_VERTICES")
     before.update({
         "optimizedSha256": after["sha256"],
         "optimizedBytes": after["rawBytes"],
+        "optimizedExportVertexCount": after["vertexCount"],
+        "unusedUvSeamVertexCopiesRemoved": before["vertexCount"] - after["vertexCount"],
         "rawBytesSavedByOmittingUnusedUV": len(raw)-len(candidate),
         "provenanceVerified": True,
         "equalTrianglePositionsNormals": True,
