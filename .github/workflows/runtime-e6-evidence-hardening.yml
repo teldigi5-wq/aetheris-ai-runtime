@@ -1,0 +1,81 @@
+name: Enterprise E6 Independent Evidence Bounded Read Security
+on:
+  pull_request:
+    branches:
+      - feat/e6-independent-acceptance-gates-20261031
+    paths:
+      - '.github/workflows/runtime-e6-evidence-hardening.yml'
+      - 'tools/enterprise/e6_studio/next-studio/independent_acceptance_*.mjs'
+      - 'tools/enterprise/e6_studio/next-studio/test_independent_acceptance_policy.mjs'
+      - 'docs/runtime/E6_INDEPENDENT_ACCEPTANCE_FILE_HARDENING_20261031.md'
+      - 'docs/runtime/E6_INDEPENDENT_ACCEPTANCE_*.json'
+permissions:
+  contents: read
+concurrency:
+  group: e6-file-intake-hardening-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  negative-evidence-gates-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Read-only exact-head checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Pin Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Confirm exact PR HEAD and source syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          node --check tools/enterprise/e6_studio/next-studio/independent_acceptance_policy.mjs
+          node --check tools/enterprise/e6_studio/next-studio/independent_acceptance_cli.mjs
+          node --check tools/enterprise/e6_studio/next-studio/test_independent_acceptance_policy.mjs
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('docs/runtime/E6_INDEPENDENT_ACCEPTANCE_TEMPLATE_20261031.json').read_text())
+          assert len(d['domains'])==9 and all(x['state']=='missing' and x['files']==[] and x['reviewer'] is None for x in d['domains'])
+          assert d['stage45Go'] is False and d['releaseGo'] is False
+          assert d['exactCommit'] is None and d['glbSha256'] is None and d['authorAlias'] is None
+          print('E6_BLANK_OWNER_EVIDENCE_TEMPLATE_NO_FABRICATION_PASS')
+          PY
+      - name: Adversarial offline evidence inventory policy tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tools/enterprise/e6_studio/next-studio/test_independent_acceptance_policy.mjs
+          # The new tests exercise symlink/hardlink and oversized-file intake;
+          # no owner hardware/device evidence is available on this runner.
+      - name: Prove absent real owner evidence remains blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/e6-studio/independent-acceptance-policy
+          set +e
+          node tools/enterprise/e6_studio/next-studio/independent_acceptance_cli.mjs --case-dir target/e6-studio/independent-acceptance-policy > target/e6-studio/independent-acceptance-policy/blocked-report.json
+          result=$?
+          set -e
+          test "$result" -eq 2
+          node - <<'JS'
+          const fs=require('node:fs');
+          const p='target/e6-studio/independent-acceptance-policy/blocked-report.json';
+          const r=JSON.parse(fs.readFileSync(p,'utf8'));
+          if(r.readyForIndependentHumanReview!==false || r.status!=='BLOCKED_EVIDENCE_OR_PROVENANCE' ||
+             r.task7Completed!==false ||r.task8Completed!==false||r.stage45Go!==false||r.releaseGo!==false||
+             !r.problems.includes('E6_LOCAL_MANIFEST_NOT_PROVIDED'))process.exit(1);
+          console.log('E6_INDEPENDENT_ACCEPTANCE_BLOCKED_NO_GO_EXPECTED_PASS');
+          JS
+      - name: Preserve policy-only blocker record (no owner files)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e6-evidence-intake-hardening-policy-only-no-real-review
+          path: target/e6-studio/independent-acceptance-policy/blocked-report.json
+          if-no-files-found: warn
+          retention-days: 7
