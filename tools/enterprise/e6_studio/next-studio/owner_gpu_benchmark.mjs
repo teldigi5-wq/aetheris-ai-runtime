@@ -32,6 +32,12 @@ assert.equal(sha(glb),proof.previewGlbSha256,'Incorrect or stale local Blender p
 await fs.access(path.join(app,'out/blender-preview/index.html'));
 const commit=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
 assert.match(commit,/^[0-9a-f]{40}$/);
+const remote=execFileSync('git',['remote','get-url','origin'],{cwd:root,encoding:'utf8'}).trim();
+assert(/github\.com[:/]teldigi5-wq\/aetheris-ai-runtime(?:\.git)?$/.test(remote),
+ 'E6_INCORRECT_GITHUB_REPOSITORY');
+const dirty=execFileSync('git',['status','--porcelain','--untracked-files=no'],
+ {cwd:root,encoding:'utf8'}).trim();
+assert.equal(dirty,'','E6_OWNER_REQUIRES_CLEAN_COMMITTED_SOURCE');
 await fs.mkdir(reportDir,{recursive:true});
 const reportPath=path.join(reportDir,'owner-local-frame-trace.json');
 const assessmentPath=path.join(reportDir,'assessment.json');
@@ -62,7 +68,8 @@ let browser;
 const report={
  schemaVersion:1,kind:KIND,
  captureMode:'owner-local-headed-chrome',headless:false,emulated:false,ci:false,
- exactGitCommit:commit,glbSha256:proof.previewGlbSha256,
+ exactGitCommit:commit,repository:'teldigi5-wq/aetheris-ai-runtime',cleanSourceCheckout:true,
+ glbSha256:proof.previewGlbSha256,
  capturedAt:new Date().toISOString(),
  viewport:null,webgl2:false,renderer:null,browserVersion:null,runs:[],
  externalRequests:0,browserErrors:0,webglLosses:0,
