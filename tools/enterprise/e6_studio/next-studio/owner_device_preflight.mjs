@@ -75,7 +75,7 @@ async function availableExecutable(names){
  return false;
 }
 async function systemChromeFound(){
- if(await availableExecutable(['google-chrome','google-chrome-stable','chrome','chromium','chrome-browser']))return true;
+ if(await availableExecutable(['google-chrome','google-chrome-stable','chrome']))return true;
  if(process.platform==='win32'){
   const dirs=[process.env.PROGRAMFILES,process.env['PROGRAMFILES(X86)'],process.env.LOCALAPPDATA].filter(Boolean);
   for(const dir of dirs)if(await exists(path.join(dir,'Google','Chrome','Application','chrome.exe')))return true;
