@@ -48,7 +48,7 @@ async function verifyLocalFile(base,filename,expectedSha) {
  return {path:filename,sha256:expectedSha,bytes:bytes.length};
 }
 export async function evaluateAcceptanceInventory(manifest,caseDir,{now=Date.now()}={}){
- const problems=[],details=[],seenPaths=new Set();
+ const problems=[],details=[],seenPaths=new Set(),seenDigests=new Set();
  const result=()=>{
   const ready=problems.length===0;
   return {
@@ -100,7 +100,10 @@ export async function evaluateAcceptanceInventory(manifest,caseDir,{now=Date.now
     if(!isObject(record))throw Error('E6_EVIDENCE_OBJECT_REQUIRED');
     if(seenPaths.has(record.path))throw Error('E6_EVIDENCE_PATH_REUSED');
     seenPaths.add(record.path);
-    verified.push(await verifyLocalFile(caseDir,record.path,record.sha256));
+    const matched=await verifyLocalFile(caseDir,record.path,record.sha256);
+    if(seenDigests.has(matched.sha256))throw Error('E6_EVIDENCE_CONTENT_REUSED');
+    seenDigests.add(matched.sha256);
+    verified.push(matched);
    }catch(error){problems.push(id+':'+String(error.message||error));}
   }
   const review=d.reviewer;
