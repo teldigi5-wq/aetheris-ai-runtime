@@ -40,6 +40,9 @@ a{color:inherit}a:focus-visible,button:focus-visible{outline:3px solid #f0cba0;o
 .studio-text{position:absolute;top:14%;left:clamp(22px,7vw,115px);max-width:400px;z-index:2;pointer-events:none;text-shadow:0 1px 15px #080d10}
 .studio-text h2{font:normal clamp(2.6rem,5vw,5.6rem)/1.1 Georgia,serif;letter-spacing:-.06em;margin:20px 0}
 .studio-text p{line-height:1.75;color:#e0e5e4}.studio-text .tech-state{font-size:.71rem;color:#dbdbd0}
+/* Recovery is deliberately user-initiated and keyboard reachable. */
+.studio-text .scene-retry{pointer-events:auto;position:relative;display:inline-block;margin-top:12px;border:1px solid #e8c9a4;background:#111a1e;color:#f9ecda;font:inherit;font-size:.9rem;padding:12px 18px;cursor:pointer;min-height:44px}
+.scene-retry:focus-visible{outline:3px solid #f0cba0;outline-offset:5px}
 .progress-indicator{position:absolute;bottom:10%;left:clamp(22px,7vw,115px);right:clamp(22px,7vw,115px);height:2px;background:#879094;z-index:2}
 .progress-indicator span{display:block;background:#edcc9f;height:2px}
 .story-caption{position:absolute;bottom:3%;left:clamp(22px,7vw,115px);z-index:2}
