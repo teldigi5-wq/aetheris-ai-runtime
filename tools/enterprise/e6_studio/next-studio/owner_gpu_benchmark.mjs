@@ -6,9 +6,9 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import {spawn,execFileSync} from 'node:child_process';
+import {execFileSync} from 'node:child_process';
+import {createServer} from 'node:http';
 import {fileURLToPath} from 'node:url';
-import {setTimeout as delay} from 'node:timers/promises';
 import {createHash} from 'node:crypto';
 import {chromium} from 'playwright';
 import {KIND,evaluateHardwareEvidence} from './owner_gpu_policy.mjs';
@@ -39,7 +39,24 @@ for(const file of [reportPath,assessmentPath]){
  catch(e){if(e?.code!=='ENOENT')throw e}
 }
 const origin='http://127.0.0.1:19171';
-const server=spawn('python3',['-m','http.server','19171','--bind','127.0.0.1','--directory',path.join(app,'out')],{stdio:'ignore'});
+// Bind only to loopback. No external server or dependency is needed.
+const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8',
+ '.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8',
+ '.glb':'model/gltf-binary','.png':'image/png','.jpg':'image/jpeg',
+ '.svg':'image/svg+xml','.woff2':'font/woff2','.ico':'image/x-icon'};
+const exportDir=path.resolve(app,'out');
+const server=createServer(async(req,res)=>{
+ try{
+  const route=new URL(req.url||'/',origin).pathname;
+  const tail=route.endsWith('/')?route+'index.html':route;
+  const target=path.resolve(exportDir,'.'+decodeURIComponent(tail));
+  if(!target.startsWith(exportDir+path.sep))throw Error('E6_PATH_DENIED');
+  const body=await fs.readFile(target);
+  res.writeHead(200,{'content-type':mime[path.extname(target)]||'application/octet-stream',
+   'x-content-type-options':'nosniff','cache-control':'no-store'});
+  res.end(body);
+ }catch{res.writeHead(404,{'content-type':'text/plain'});res.end('Not found')}
+});
 let browser;
 const report={
  schemaVersion:1,kind:KIND,
@@ -52,13 +69,10 @@ const report={
   physicalMobileTested:false,realReleaseApproved:false}
 };
 try{
- let up=false;
- for(let i=0;i<80;i++){
-  if(server.exitCode!==null)throw Error('E6_BENCH_LOCAL_SERVER_EXITED');
-  try{const r=await fetch(origin+'/blender-preview/',{signal:AbortSignal.timeout(700)});if(r.ok){up=true;break}}catch{}
-  await delay(140);
- }
- if(!up)throw Error('E6_BENCH_LOCAL_SERVER_NOT_READY');
+ await new Promise((resolve,reject)=>{
+  server.once('error',reject);
+  server.listen(19171,'127.0.0.1',resolve);
+ });
  // DO NOT use bundled Chromium, SwiftShader flags, remote debugging or headless.
  // Chrome must be installed on the physical owner workstation and show a window.
  browser=await chromium.launch({channel:'chrome',headless:false,args:['--disable-extensions']});
@@ -160,5 +174,5 @@ try{
  if(!assessment.acceptedForResearch)process.exitCode=2;
 }finally{
  if(browser)await browser.close();
- server.kill('SIGTERM');
+ server.close();
 }
