@@ -56,13 +56,16 @@ def verified_stage() -> dict:
         or report.get("originalSha256") != original_sha
         or report.get("trianglePositionNormalDataEqual") is not True
         or report.get("geometryAndMaterialMetadataEqual") is not True
+        or report.get("semanticPrimitiveContractsEqual") is not True
+        or not isinstance(report.get("candidateVertexCount"), int)
+        or not 1 <= report["candidateVertexCount"] <= report.get("vertexCount", 0)
         or report.get("candidateUVAttributeSets") != 0
         or len(optimized_bytes) >= len(original_bytes)
         or report.get("assetAdoptedByR3F") is not False
         or report.get("stage45Go") is not False):
         raise ValueError("E6_PREVIEW_PROVENANCE_OR_GEOMETRY_DENIED")
     geo = inspect_glb(optimized_bytes)
-    if (geo["vertexCount"] != report["vertexCount"]
+    if (geo["vertexCount"] != report["candidateVertexCount"]
         or geo["materialCount"] != report["materialCount"]
         or geo["meshCount"] != report["meshCount"]):
         raise ValueError("E6_PREVIEW_ASSET_REPORT_DISAGREES")
