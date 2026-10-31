@@ -67,7 +67,7 @@ export async function evaluateAcceptanceInventory(manifest,caseDir,{now=Date.now
    stage45Go:false,releaseGo:false,productionDeployed:false
   };
  };
- if(!isObject(manifest))return {...result(),problems:['E6_MANIFEST_REQUIRED']};
+ if(!isObject(manifest)){problems.push('E6_MANIFEST_REQUIRED');return result();}
  if(manifest.kind!==KIND||manifest.schemaVersion!==1)problems.push('E6_SCHEMA_INVALID');
  if(manifest.repository!=='teldigi5-wq/aetheris-ai-runtime')problems.push('E6_WRONG_REPOSITORY');
  if(!HEX40.test(manifest.exactCommit||'')||!HEX64.test(manifest.glbSha256||''))problems.push('E6_SOURCE_DIGESTS_REQUIRED');
