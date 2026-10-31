@@ -121,6 +121,17 @@ test('reject stale submitted review and assembled inventory',async t=>{
  assert(res.problems.includes('E6_INVENTORY_DATE_INVALID'));
  assert(res.problems.some(x=>x.startsWith('E6_INDEPENDENT_REVIEW_METADATA_MISSING')));
 });
+test('reject copied bytes under distinct evidence filenames across domains',async t=>{
+ const {root,manifest}=await fixture(t);
+ const original=await fs.readFile(path.join(root,'evidence/synthetic-0.txt'));
+ await fs.writeFile(path.join(root,'evidence/copied-payload.txt'),original);
+ manifest.domains[1].files[0]={
+  path:'evidence/copied-payload.txt',sha256:hash(original)
+ };
+ const result=await evaluateAcceptanceInventory(manifest,root);
+ assert.equal(result.readyForIndependentHumanReview,false);
+ assert(result.problems.some(x=>x.includes('E6_EVIDENCE_CONTENT_REUSED')));
+});
 test('reject copied evidence and unbounded file sizes',async t=>{
  const {root,manifest}=await fixture(t);
  manifest.domains[0].files.push({...manifest.domains[0].files[0]});
