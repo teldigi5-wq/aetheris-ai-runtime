@@ -130,9 +130,27 @@ def _triangle_stream(raw: bytes) -> list:
 def compare(original: bytes, candidate: bytes) -> dict:
     before = describe(original)
     after = describe(candidate)
-    for key in ("geometry", "pbrMaterials", "sceneNodes", "triangleCount"):
+    # UV seam removal can deduplicate POSITION/NORMAL accessor vertices while
+    # preserving every rendered triangle. Compare stable primitive contracts,
+    # then ALL ordered decoded POSITION+NORMAL triangles. Never compare only
+    # triangle counts or accept material/node/bounds/index regressions.
+    for key in ("pbrMaterials", "sceneNodes", "triangleCount"):
         if before[key] != after[key]:
             raise ValueError(f"E6_OPT_GEOMETRY_OR_MATERIAL_CHANGED:{key}")
+    stable_fields = ("material", "positionBoundsMin", "positionBoundsMax",
+                     "triangleIndices", "indexComponentType")
+    original_primitives = [
+        {key: primitive[key] for key in stable_fields}
+        for primitive in before["geometry"]
+    ]
+    candidate_primitives = [
+        {key: primitive[key] for key in stable_fields}
+        for primitive in after["geometry"]
+    ]
+    if original_primitives != candidate_primitives:
+        raise ValueError("E6_OPT_GEOMETRY_OR_MATERIAL_CHANGED:primitiveContracts")
+    if after["validation"]["vertexCount"] > before["validation"]["vertexCount"]:
+        raise ValueError("E6_OPT_UNEXPECTED_NEW_VERTEX_DUPLICATION")
     original_triangles = _triangle_stream(original)
     candidate_triangles = _triangle_stream(candidate)
     if original_triangles != candidate_triangles:
@@ -155,6 +173,9 @@ def compare(original: bytes, candidate: bytes) -> dict:
         "originalGzip9Bytes": len(gzip.compress(original, compresslevel=9, mtime=0)),
         "candidateGzip9Bytes": len(gzip.compress(candidate, compresslevel=9, mtime=0)),
         "vertexCount": before["validation"]["vertexCount"],
+        "candidateVertexCount": after["validation"]["vertexCount"],
+        "uvSeamVerticesEliminated": before["validation"]["vertexCount"] - after["validation"]["vertexCount"],
+        "vertexStreamLayoutEqual": before["geometry"] == after["geometry"],
         "triangleCount": before["triangleCount"],
         "meshCount": before["validation"]["meshCount"],
         "materialCount": before["validation"]["materialCount"],
@@ -162,7 +183,10 @@ def compare(original: bytes, candidate: bytes) -> dict:
         "candidateUVAttributeSets": after["uvAttributeSets"],
         "trianglePositionNormalDataEqual": True,
         "trianglePositionNormalSha256": triangle_sha256,
+        # Semantic primitive contracts, materials and scene nodes agree.
+        # Distinct raw vertex accessor counts are explicitly disclosed above.
         "geometryAndMaterialMetadataEqual": True,
+        "semanticPrimitiveContractsEqual": True,
         "assetAdoptedByR3F": False,
         "visualParityVerified": False,
         "networkTransferMeasured": False,
