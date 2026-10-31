@@ -1,6 +1,7 @@
 "use client";
 /** Explicit local-only three-run browser rAF capture; never a GPU timer. */
 import {useEffect,useRef,useState} from "react";
+import {ScrollTrigger} from "gsap/ScrollTrigger";
 import {KIND,evaluateLocalBrowserRaf} from "../local_browser_raf_policy.mjs";
 import type {LocalRafRun,LocalRafReport,LocalRafAssessment} from "../local_browser_raf_policy.mjs";
 
@@ -50,6 +51,23 @@ export default function LocalBrowserRafCapture(){
   if(document.visibilityState!=="visible"){
    setMessage("Keep this browser tab visible and in the foreground.");return;
   }
+  // The optional Lenis mode can interfere with deterministic window.scrollTo.
+  if(document.querySelector('.controls button[aria-pressed="true"]')){
+   setMessage("Turn off optional Smooth scroll before starting the trace.");return;
+  }
+  const activeTrigger=ScrollTrigger.getAll().find(trigger=>trigger.trigger===story);
+  const rangeStart=activeTrigger?.start;
+  const rangeEnd=activeTrigger?.end;
+  if(!Number.isFinite(rangeStart)||!Number.isFinite(rangeEnd)||
+     !(rangeEnd! > rangeStart!+window.innerHeight)){
+   setMessage("Pinned GSAP scroll range unavailable. Reload the preview and try again.");return;
+  }
+  const start=rangeStart!;
+  const span=rangeEnd!-rangeStart!;
+  const scrollLimit=document.documentElement.scrollHeight-window.innerHeight;
+  if(start<0||rangeEnd!>scrollLimit+10){
+   setMessage("GSAP scroll range exceeds available page scroll; capture blocked.");return;
+  }
   const controller=new AbortController();
   active.current=controller;
   setWorking(true);setReport(null);setAssessment(null);
@@ -72,22 +90,25 @@ export default function LocalBrowserRafCapture(){
     unmaskedVendor:String(gl.getParameter(info.UNMASKED_VENDOR_WEBGL))
    }:{unmaskedRenderer:null,unmaskedVendor:null};
    const runs:LocalRafRun[]=[];
-   // Each run starts at the same ScrollTrigger pin origin; preserve user position.
-   const start=window.scrollY+story.getBoundingClientRect().top;
-   const span=window.innerHeight*2.2;
+   // ScrollTrigger's measured start/end are authoritative for pinned scenes.
+   // Element.getBoundingClientRect() is NOT the unpinned scroll origin.
    const hasLongTask=typeof PerformanceObserver!=="undefined"&&
       PerformanceObserver.supportedEntryTypes?.includes("longtask")===true;
    for(let repeat=0;repeat<3;repeat++){
     if(controller.signal.aborted)throw Error("Capture cancelled");
     window.scrollTo({top:start,behavior:"instant"});
     for(let n=0;n<36;n++)await nextFrame(controller.signal);
+    const progressStart=Number(story.dataset.progress);
+    if(!Number.isFinite(progressStart)||progressStart>0.15){
+     throw Error("GSAP pin start failed to reach progress 0; no idle trace saved.");
+    }
     let longTaskCount=0,maxLongTaskMs=0;
     const record=(entries:PerformanceEntry[])=>{
      for(const entry of entries){longTaskCount++;maxLongTaskMs=Math.max(maxLongTaskMs,entry.duration);}
     };
     const observer=hasLongTask?new PerformanceObserver(entries=>record(entries.getEntries())):null;
     observer?.observe({entryTypes:["longtask"]});
-    const intervals:number[]=[],progress:number[]=[];
+    const intervals:number[]=[],progress:number[]=[],scrollPositions:number[]=[];
     let previous:number|null=null;
     try{
      for(let i=0;i<=360;i++){
@@ -96,6 +117,7 @@ export default function LocalBrowserRafCapture(){
       previous=now;
       const pos=Number(story.dataset.progress);
       if(Number.isFinite(pos)&&pos>=0&&pos<=1)progress.push(pos);
+      scrollPositions.push(window.scrollY);
       const fraction=i<=180?i/180:(360-i)/180;
       window.scrollTo({top:start+span*fraction,behavior:"instant"});
      }
@@ -103,20 +125,30 @@ export default function LocalBrowserRafCapture(){
     }finally{
      if(observer){record(observer.takeRecords());observer.disconnect();}
     }
-    const middle=progress[Math.floor(progress.length/2)];
-    runs.push({
+    const midpoint=progress[Math.floor(progress.length/2)];
+    const progressEnd=Number(story.dataset.progress);
+    const observedScrollMinPx=Math.min(...scrollPositions);
+    const observedScrollMaxPx=Math.max(...scrollPositions);
+    const run:LocalRafRun={
      frameIntervalsMs:intervals,
      progressMinimum:progress.length?Math.min(...progress):Number.NaN,
      progressMaximum:progress.length?Math.max(...progress):Number.NaN,
-     reverseObserved:progress.length>300&&Number.isFinite(middle)&&
-       progress[progress.length-1]<middle-0.35,
+     progressStart,progressMidpoint:midpoint,progressEnd,
+     observedScrollMinPx,observedScrollMaxPx,scrollRangePx:span,
+     reverseObserved:progress.length>300&&Number.isFinite(midpoint)&&
+       progressStart<=0.15&&midpoint>=0.85&&progressEnd<=0.15,
      longTaskObserverSupported:hasLongTask,
      longTaskCount,maxLongTaskMs
-    });
+    };
+    if(!run.reverseObserved||
+       observedScrollMaxPx-observedScrollMinPx<span*0.80){
+     throw Error("GSAP scroll workload did not travel start → end → start; invalid trace was discarded.");
+    }
+    runs.push(run);
     setMessage("Completed local pass "+(repeat+1)+" of 3. Continue keeping Chrome visible.");
    }
    const result:LocalRafReport={
-    kind:KIND,schemaVersion:1,captureMode:"user-click-visible-loopback-browser",
+    kind:KIND,schemaVersion:2,captureMode:"user-click-visible-loopback-browser",
     localhost:true,capturedAt:new Date().toISOString(),
     engine:story.dataset.engine||"unknown",webgl2:Boolean(gl),renderer,glbSha256:digest,
     viewport:{width:window.innerWidth,height:window.innerHeight,dpr:window.devicePixelRatio},
