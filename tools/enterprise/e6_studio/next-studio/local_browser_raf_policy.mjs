@@ -2,7 +2,7 @@
  * Self-reported localhost evidence is not device attestation or GPU frame time.
  * Pure function: no browser globals, I/O, network or changes to release gates.
  */
-export const KIND='E6_LOCAL_BROWSER_RAF_DIAGNOSTIC_V1';
+export const KIND='E6_LOCAL_BROWSER_RAF_DIAGNOSTIC_V2';
 export const EXPECTED_RUNS=3;
 const finite=x=>typeof x==='number'&&Number.isFinite(x);
 const percentile=(data,f)=>[...data].sort((a,b)=>a-b)[Math.ceil(data.length*f)-1];
@@ -14,7 +14,7 @@ export function evaluateLocalBrowserRaf(report){
    physicalHardwareCertified:false,task7Completed:false,task8Completed:false,
    stage45Go:false,releaseGo:false};
  }
- if(report.kind!==KIND||report.schemaVersion!==1)reasons.push('E6_RAF_SCHEMA_INVALID');
+ if(report.kind!==KIND||report.schemaVersion!==2)reasons.push('E6_RAF_SCHEMA_INVALID');
  if(report.captureMode!=='user-click-visible-loopback-browser'||report.localhost!==true)
   reasons.push('E6_RAF_LOCAL_USER_CAPTURE_UNVERIFIED');
  if(report.webgl2!==true||report.engine!=='r3f-loaded')
@@ -38,10 +38,21 @@ export function evaluateLocalBrowserRaf(report){
        !a.every(x=>finite(x)&&x>0&&x<1000)){
     reasons.push('E6_RAF_FRAME_SAMPLES_INVALID:'+index);continue;
    }
-   if(!finite(run.progressMinimum)||!finite(run.progressMaximum)||
-       run.progressMinimum>0.15||run.progressMinimum<0||
-       run.progressMaximum<0.85||run.progressMaximum>1||
-       run.reverseObserved!==true)reasons.push('E6_RAF_REVERSE_SCROLL_UNVERIFIED:'+index);
+   // A valid progress envelope alone is not enough. Demand a witnessed
+   // start -> midpoint -> return sequence AND actual scrollY travel over
+   // the GSAP-controlled pinned ScrollTrigger range.
+   const progress=[run.progressMinimum,run.progressMaximum,run.progressStart,
+    run.progressMidpoint,run.progressEnd];
+   const positions=[run.observedScrollMinPx,run.observedScrollMaxPx,run.scrollRangePx];
+   if(!progress.every(finite)||progress.some(x=>x<0||x>1)||
+       run.progressMinimum>0.15||run.progressMaximum<0.85||
+       run.progressStart>0.15||run.progressMidpoint<0.85||
+       run.progressEnd>0.15||run.reverseObserved!==true||
+       !positions.every(finite)||run.scrollRangePx<100||
+       run.observedScrollMaxPx-run.observedScrollMinPx<
+          run.scrollRangePx*0.80){
+     reasons.push('E6_RAF_REVERSE_SCROLL_UNVERIFIED:'+index);
+   }
    if(run.longTaskObserverSupported!==true||
       !Number.isInteger(run.longTaskCount)||run.longTaskCount<0||
       !finite(run.maxLongTaskMs)||run.maxLongTaskMs<0){
