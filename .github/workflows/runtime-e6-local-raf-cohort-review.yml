@@ -1,0 +1,38 @@
+name: Enterprise E6 Local RAF Cohort Review — Synthetic, Non-Certifying
+on:
+  pull_request:
+    branches:
+      - feat/e6-native-browser-raf-capture-20261031
+    paths:
+      - '.github/workflows/runtime-e6-local-raf-cohort-review.yml'
+      - 'tools/enterprise/e6_studio/next-studio/review_local_raf_evidence.mjs'
+      - 'tools/enterprise/e6_studio/next-studio/test_review_local_raf_evidence.mjs'
+      - 'docs/runtime/E6_LOCAL_RAF_COHORT_REVIEW_20261031.md'
+permissions:
+  contents: read
+concurrency:
+  group: e6-local-raf-review-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-evidence-regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact draft PR HEAD without token persistence
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Node 22 LTS
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Validate exact HEAD and purely synthetic evidence policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          node --check tools/enterprise/e6_studio/next-studio/review_local_raf_evidence.mjs
+          node --check tools/enterprise/e6_studio/next-studio/test_review_local_raf_evidence.mjs
+          node --test tools/enterprise/e6_studio/next-studio/test_review_local_raf_evidence.mjs
+          echo "E6_LOCAL_COHORT_SYNTHETIC_ONLY_NO_HARDWARE_CERTIFICATION"
