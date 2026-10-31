@@ -53,6 +53,10 @@ export default function LocalBrowserRafCapture(){
   if(!story||!canvas||story.dataset.engine!=="r3f-loaded"){
    setMessage("Load the visible 3D scene first; this is not a static fallback benchmark.");return;
   }
+  if(story.dataset.e6ClsPin!=="default"){
+   setMessage("Experimental CLS pin comparison active; performance capture is disabled. Return to the default URL for valid timing evidence.");
+   return;
+  }
   if(document.visibilityState!=="visible"){
    setMessage("Keep this browser tab visible and in the foreground.");return;
   }
