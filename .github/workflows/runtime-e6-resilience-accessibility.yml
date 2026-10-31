@@ -1,0 +1,157 @@
+name: Enterprise E6 WebGL Resilience and A11y Research Proof
+on:
+  pull_request:
+    branches:
+      - feat/e6-detail-rich-blender-module-20261031
+    paths:
+      - '.github/workflows/runtime-e6-resilience-accessibility.yml'
+      - 'tools/enterprise/e6_studio/next-studio/**'
+      - 'tools/enterprise/e6_studio/test_e6_premium_preview_policy.py'
+      - 'docs/runtime/E6_RESILIENCE_ACCESSIBILITY_20261031.md'
+permissions:
+  contents: read
+concurrency:
+  group: e6-resilience-a11y-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  blender-concept-preview-research:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: SHA-pinned checkout without stored credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Fixed Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Fixed Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Source and negative-policy tests before Blender execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          python3 -m unittest discover -s tools/enterprise/e6_studio -p 'test_next_studio_policy.py' -v
+          python3 -m unittest discover -s tools/enterprise/e6_studio -p 'test_e6_blender_source.py' -v
+          python3 -m unittest discover -s tools/enterprise/e6_studio -p 'test_e6_glb_optimize.py' -v
+          python3 -m unittest discover -s tools/enterprise/e6_studio -p 'test_e6_premium_preview_policy.py' -v
+          node --check tools/enterprise/e6_studio/next-studio/browser_blender_preview.mjs
+          node --check tools/enterprise/e6_studio/next-studio/browser_resilience_accessibility.mjs
+          python3 -m unittest discover -s tools/enterprise/e6_studio -p 'test_e6_resilience_policy.py' -v
+      - name: Install signed Ubuntu Noble Blender 4.0 and system NumPy
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y 'blender=4.0.2+dfsg-1ubuntu8' python3-numpy
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python-expr 'import numpy; print("E6_BLENDER_PREVIEW_SOURCE_DEPENDENCY", numpy.__version__)'
+      - name: Produce real Blender source and geometry-equivalent no-UV GLB
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/author_command_module.py
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/export_no_uv_candidate.py
+          python3 tools/enterprise/e6_studio/next-studio/blender/compare_glb_variants.py
+          python3 tools/enterprise/e6_studio/next-studio/blender/verify_detailed_module.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('target/e6-studio/blender-proof/enhanced-module-detail.json')
+          d=json.loads(p.read_text())
+          assert d['kind']=='E6_OWNED_DETAILED_CONCEPT_GEOMETRY'
+          assert d['meshCount']==12 and d['materialCount']==6
+          assert 756 < d['triangleCount'] <= 5500
+          assert 1512 < d['vertexCount'] <= 8000
+          assert d['provenanceVerified'] is True
+          assert d['equalTrianglePositionsNormals'] is True
+          assert d['rawBytesSavedByOmittingUnusedUV'] > 0
+          assert d['visualApproval'] is False and d['stage45Go'] is False
+          print('E6_DETAIL_MESH_AND_PBR_BUDGET_PASS')
+          PY
+      - name: Build original website and build-flagged research preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          python3 scripts/validate_dependency_lock.py
+          npm ci --ignore-scripts --no-audit --no-fund
+          python3 scripts/build_research_glb.py
+          python3 scripts/stage_blender_preview.py
+          npm run typecheck
+          NEXT_PUBLIC_E6_BLENDER_PREVIEW=1 npm run build
+          test -f out/index.html
+          test -f out/research-panel.glb
+          test -f out/e6-blender-preview.glb
+          test -f out/blender-preview/index.html
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          data=json.loads(Path('target/e6-studio/blender-preview-stage.json').read_text()) if False else json.loads((Path.cwd().parents[3]/'target/e6-studio/blender-preview-stage.json').read_text())
+          assert data['normalRootAssetUntouched'] is True
+          assert data['stage45Go'] is False and data['productionDeployed'] is False
+          raw=Path('out/e6-blender-preview.glb').read_bytes()
+          assert hashlib.sha256(raw).hexdigest()==data['previewGlbSha256']
+          print('E6_BLENDER_OPT_IN_BUILD_PROVENANCE_PASS')
+          PY
+      - name: Fixed-version Chromium browser and OS requirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix tools/enterprise/e6_studio --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0 axe-core@4.10.3
+          tools/enterprise/e6_studio/node_modules/.bin/playwright install --with-deps chromium
+      - name: Browser test isolated Blender preview and unchanged original site
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/enterprise/e6_studio/next-studio/browser_proof.mjs
+          node tools/enterprise/e6_studio/next-studio/browser_blender_preview.mjs
+          node tools/enterprise/e6_studio/next-studio/browser_resilience_accessibility.mjs
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('target/e6-studio/resilience-accessibility/report.json')
+          report=json.loads(p.read_text())
+          assert report['kind']=='E6_RESILIENCE_ACCESSIBILITY_BROWSER_RESEARCH'
+          assert report['stage45Go'] is False and report['realDeviceGpuMeasured'] is False
+          assert report['productionDeployed'] is False and report['independentAccessibilityApproved'] is False
+          assert report['failures']==[] and len(report['cases'])==5
+          assert all(x['contextLossPrevented'] and x['canvasReleased'] and x['manualRetryRecovered'] and x['accessibleRetry'] for x in report['cases'][:4])
+          assert all(x['rulesPassed']>0 and x['violations']==0 and x['noOverflow'] for x in report['cases'][:4])
+          assert report['cases'][4]['reducedMotion'] and report['cases'][4]['noCanvas'] and report['cases'][4]['noAssetFetch']
+          assert len(list(p.parent.glob('*.png')))==8
+          print('E6_A11Y_AND_CONTEXT_LOSS_SWIFTSHADER_RESEARCH_PASS')
+          PY
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('target/e6-studio/blender-visual-preview/report.json')
+          data=json.loads(p.read_text())
+          assert data['kind']=='E6_BLENDER_CONCEPT_CINEMATIC_BROWSER_RESEARCH'
+          assert data['browserRenderer']=='CHROMIUM_SWIFTSHADER_SOFTWARE_NOT_OWNER_GPU'
+          assert data['productionDeployed'] is False and data['stage45Go'] is False
+          assert data['visualApproval'] is False and data['deviceGpuVerified'] is False
+          assert data['failures']==[] and len(data['cases'])==4
+          assert all(c.get('actualBlenderGLBLoaded') for c in data['cases'][:2])
+          assert data['cases'][2]['noWebglCanvas'] and data['cases'][2]['noGLBRequest']
+          assert data['cases'][3]['originalFixtureLoaded']
+          assert len(list(p.parent.glob('*.png')))==9
+          print('E6_BLENDER_PREVIEW_SWIFTSHADER_BROWSER_RESEARCH_ONLY_PASS')
+          PY
+      - name: Upload short-lived research-only source, previews and reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e6-resilience-a11y-research-not-release
+          path: |
+            target/e6-studio/blender-proof/
+            target/e6-studio/blender-visual-preview/
+            target/e6-studio/blender-preview-stage.json
+            target/e6-studio/next-r3f-evidence/
+            target/e6-studio/resilience-accessibility/
+          if-no-files-found: warn
+          retention-days: 7

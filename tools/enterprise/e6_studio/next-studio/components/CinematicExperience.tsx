@@ -1,5 +1,6 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { motion } from "motion/react";
 import { gsap } from "gsap";
@@ -12,6 +13,12 @@ const descriptions=[
   ["03","Precision","Detail","A closer angle gives the edge treatment a deliberate place."]
 ] as const;
 function StaticGeometry(){return <div className="static-geometry" aria-hidden="true"><div className="static-geometry__panel"><span/><span/></div></div>;}
+class SceneErrorBoundary extends Component<{children:ReactNode;onUnavailable:()=>void},{failed:boolean}>{
+  state={failed:false};
+  static getDerivedStateFromError(){return {failed:true};}
+  componentDidCatch(){this.props.onUnavailable();}
+  render(){return this.state.failed?null:this.props.children;}
+}
 export default function CinematicExperience({assetVariant="fixture"}:{assetVariant?:"fixture"|"blender"}){
   const blenderPreview=assetVariant==="blender";
   const story=useRef<HTMLElement>(null);
@@ -20,7 +27,17 @@ export default function CinematicExperience({assetVariant="fixture"}:{assetVaria
   const [ready,setReady]=useState(false);
   const [smooth,setSmooth]=useState(false);
   const [engine,setEngine]=useState("static");
+  const [unavailable,setUnavailable]=useState(false);
+  const [sceneRevision,setSceneRevision]=useState(0);
   const sceneReady=useCallback(()=>{setReady(true);setEngine("r3f-loaded");},[]);
+  const sceneUnavailable=useCallback(()=>{
+    setReady(false);setUnavailable(true);setSmooth(false);
+    setEngine("webgl-unavailable");
+  },[]);
+  const retryScene=()=>{
+    setReady(false);setEngine("static");
+    setSceneRevision(n=>n+1);setUnavailable(false);
+  };
   useEffect(()=>{
     const query=window.matchMedia("(prefers-reduced-motion: reduce)");
     const update=()=>{
@@ -80,6 +97,8 @@ export default function CinematicExperience({assetVariant="fixture"}:{assetVaria
     </section>
     <section ref={story} id="studio-story" className={blenderPreview?"studio-story studio-story--blender":"studio-story"}
       aria-label="Scroll-directed architectural product composition"
+      tabIndex={-1}
+      data-recovery={unavailable?"needed":"none"}
       data-asset-variant={assetVariant}
       data-engine={engine} data-shot={descriptions[shot][1].toLowerCase()}
       data-progress={progress.toFixed(3)} data-camera-shot={camera.shot}
@@ -88,13 +107,18 @@ export default function CinematicExperience({assetVariant="fixture"}:{assetVaria
       data-camera-z={camera.position[2].toFixed(4)}
       data-camera-fov={camera.fov.toFixed(3)}>
       <div className="visual-panel" aria-hidden="true">
-        {!reduced&&<Scene3D progress={progress} onReady={sceneReady} assetVariant={assetVariant}/>} 
-        {(!ready||reduced)&&<StaticGeometry/>}
+        {!reduced&&!unavailable&&
+          <SceneErrorBoundary key={sceneRevision} onUnavailable={sceneUnavailable}>
+            <Scene3D progress={progress} onReady={sceneReady} onUnavailable={sceneUnavailable} assetVariant={assetVariant}/>
+          </SceneErrorBoundary>}
+
+        {(!ready||reduced||unavailable)&&<StaticGeometry/>}
       </div>
       <div className="studio-text">
         <span className="eyebrow">{descriptions[shot][0]} / 03 — ORIGINAL RESEARCH STUDY</span>
         <h2>{descriptions[shot][1]}.</h2><p>{descriptions[shot][3]}</p>
-        <p className="tech-state" role="status">{reduced?"Static presentation · reduced motion":ready?"WebGL scene · demand rendering":"Static presentation · loading or unavailable"}</p>
+        <p className="tech-state" role="status">{reduced?"Static presentation · reduced motion":unavailable?"WebGL unavailable · static presentation":ready?"WebGL scene · demand rendering":"Static presentation · loading"}</p>
+        {unavailable&&!reduced&&<button className="scene-retry" type="button" onClick={retryScene}>Retry 3D view</button>}
       </div>
       <div className="progress-indicator" aria-hidden="true"><span style={{width:String(Math.round(progress*100))+"%"}}/></div>
       <p className="story-caption">SCROLL TO DIRECT THE CAMERA — {descriptions[shot][0]} / 03</p>

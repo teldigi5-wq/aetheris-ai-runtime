@@ -4,8 +4,8 @@ import { Canvas, useFrame, useLoader, useThree } from "@react-three/fiber";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { ACESFilmicToneMapping, PerspectiveCamera } from "three";
 import { sampleCamera } from "./cameraTimeline";
-type SceneProps={progress:number;onReady:()=>void;assetVariant?:"fixture"|"blender"};
-function AuthoredPanel({progress,onReady,assetVariant="fixture"}:SceneProps){
+type SceneProps={progress:number;onReady:()=>void;onUnavailable:()=>void;assetVariant?:"fixture"|"blender"};
+function AuthoredPanel({progress,onReady,assetVariant="fixture"}:Omit<SceneProps,"onUnavailable">){
   // Review-gated literal paths only. No user-supplied URLs or arbitrary loader endpoints.
   const blenderPreview=assetVariant==="blender";
   const asset=useLoader(GLTFLoader,blenderPreview?"/e6-blender-preview.glb":"/research-panel.glb");
@@ -38,7 +38,19 @@ function AuthoredPanel({progress,onReady,assetVariant="fixture"}:SceneProps){
     </group>
   </>;
 }
-export default function Scene3D({progress,onReady,assetVariant="fixture"}:SceneProps){
+function WebGLContextGuard({onUnavailable}:{onUnavailable:()=>void}){
+  const element=useThree(state=>state.gl.domElement);
+  useEffect(()=>{
+    // Do not leave a stalled Canvas mounted after browser/device context loss.
+    // preventDefault allows restoration by the browser; we explicitly remount
+    // only after a user-initiated retry, without an automatic retry loop.
+    const onLost=(event:Event)=>{event.preventDefault();onUnavailable();};
+    element.addEventListener("webglcontextlost",onLost);
+    return ()=>element.removeEventListener("webglcontextlost",onLost);
+  },[element,onUnavailable]);
+  return null;
+}
+export default function Scene3D({progress,onReady,onUnavailable,assetVariant="fixture"}:SceneProps){
   return <Canvas frameloop="demand" dpr={[1,1.5]} shadows={false}
     gl={{powerPreference:"low-power",antialias:true,alpha:false}}
     camera={{position:[0,0.5,4.5],fov:38,near:0.1,far:25}}
@@ -48,6 +60,7 @@ export default function Scene3D({progress,onReady,assetVariant="fixture"}:SceneP
       gl.toneMappingExposure=1.0;
     }}
     aria-label="Decorative WebGL product study">
+    <WebGLContextGuard onUnavailable={onUnavailable}/>
     <AuthoredPanel progress={progress} onReady={onReady} assetVariant={assetVariant}/>
   </Canvas>;
 }
