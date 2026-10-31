@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "kind": "E6_INDEPENDENT_ACCEPTANCE_INVENTORY_V1",
+  "repository": "teldigi5-wq/aetheris-ai-runtime",
+  "exactCommit": null,
+  "glbSha256": null,
+  "assembledAt": null,
+  "authorAlias": null,
+  "stage45Go": false,
+  "releaseGo": false,
+  "task8Completed": false,
+  "domains": [
+    {
+      "id": "source_and_build_provenance",
+      "state": "missing",
+      "files": [],
+      "reviewer": null
+    },
+    {
+      "id": "dependency_and_licensing_review",
+      "state": "missing",
+      "files": [],
+      "reviewer": null
+    },
+    {
+      "id": "physical_desktop_gpu_frame_time",
+      "state": "missing",
+      "files": [],
+      "reviewer": null
+    },
+    {
+      "id": "physical_mobile_device_profile",
+      "state": "missing",
+      "files": [],
+      "reviewer": null
+    },
+    {
+      "id": "sustained_memory_thermals_power",
+      "state": "missing",
+      "files": [],
+      "reviewer": null
+    },
+    {
+      "id": "manual_accessibility_and_assistive_tech",
+      "state": "missing",
+      "files": [],
+      "reviewer": null
+    },
+    {
+      "id": "real_driver_context_loss_and_browser_matrix",
+      "state": "missing",
+      "files": [],
+      "reviewer": null
+    },
+    {
+      "id": "human_visual_art_direction",
+      "state": "missing",
+      "files": [],
+      "reviewer": null
+    },
+    {
+      "id": "independent_security_threat_review",
+      "state": "missing",
+      "files": [],
+      "reviewer": null
+    }
+  ]
+}
