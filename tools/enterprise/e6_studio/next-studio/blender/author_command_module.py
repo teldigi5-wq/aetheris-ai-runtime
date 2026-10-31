@@ -110,7 +110,12 @@ def main() -> None:
          (1.35, 0.023, 0.01), bronze, 0.003)
 
     assert len([obj for obj in bpy.context.scene.objects if obj.type == "MESH"]) == 12
-    assert len(bpy.data.materials) == 6
+    assigned_materials = {
+        slot.material.name
+        for obj in bpy.context.scene.objects if obj.type == "MESH"
+        for slot in obj.material_slots if slot.material is not None
+    }
+    assert len(assigned_materials) == 6
 
 
     bpy.context.scene.render.resolution_x = 1280
