@@ -105,9 +105,13 @@ export async function collectDevicePreflight(){
    manifestValid=proof.kind==='E6_BLENDER_OPT_IN_RESEARCH_PREVIEW_ONLY'&&
      proof.stage45Go===false&&HEX64.test(proof.previewGlbSha256||'');
    if(manifestValid){
-    const binary=await fs.readFile(glbPath);
-    glbDigestMatch=binary.length>10000&&
-      createHash('sha256').update(binary).digest('hex')===proof.previewGlbSha256;
+    const glbInfo=await fs.stat(glbPath);
+    // A preflight must not allocate an unbounded user-supplied GLB.
+    if(glbInfo.isFile()&&glbInfo.size>10000&&glbInfo.size<=5*1024*1024){
+     const binary=await fs.readFile(glbPath);
+     glbDigestMatch=binary.length===glbInfo.size&&
+       createHash('sha256').update(binary).digest('hex')===proof.previewGlbSha256;
+    }
    }
   }
  }catch{}
