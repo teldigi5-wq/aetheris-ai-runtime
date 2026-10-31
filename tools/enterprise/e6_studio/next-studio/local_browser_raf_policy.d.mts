@@ -1,9 +1,15 @@
-export const KIND: "E6_LOCAL_BROWSER_RAF_DIAGNOSTIC_V1";
+export const KIND: "E6_LOCAL_BROWSER_RAF_DIAGNOSTIC_V2";
 export const EXPECTED_RUNS: number;
 export interface LocalRafRun {
  frameIntervalsMs: number[];
  progressMinimum: number;
  progressMaximum: number;
+ progressStart: number;
+ progressMidpoint: number;
+ progressEnd: number;
+ observedScrollMinPx: number;
+ observedScrollMaxPx: number;
+ scrollRangePx: number;
  reverseObserved: boolean;
  longTaskObserverSupported: boolean;
  longTaskCount: number;
@@ -11,7 +17,7 @@ export interface LocalRafRun {
 }
 export interface LocalRafReport {
  kind: typeof KIND;
- schemaVersion: 1;
+ schemaVersion: 2;
  captureMode: "user-click-visible-loopback-browser";
  localhost: boolean;
  capturedAt: string;
