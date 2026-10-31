@@ -10,7 +10,7 @@ import {execFileSync} from 'node:child_process';
 import {createServer} from 'node:http';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
-import {chromium} from 'playwright';
+// Playwright is intentionally imported only AFTER local consent and CI guard.
 import {KIND,evaluateHardwareEvidence} from './owner_gpu_policy.mjs';
 
 if(process.argv.slice(2).join(' ')!=='--confirm-local-hardware'){
@@ -19,6 +19,7 @@ if(process.argv.slice(2).join(' ')!=='--confirm-local-hardware'){
 if(process.env.CI||process.env.GITHUB_ACTIONS){
  throw Error('E6_OWNER_HARDWARE_EVIDENCE_CANNOT_RUN_IN_CI');
 }
+const {chromium}=await import('playwright');
 const app=path.dirname(fileURLToPath(import.meta.url));
 const root=path.resolve(app,'../../../../');
 const reportDir=path.join(root,'target/e6-studio/owner-gpu-local');
