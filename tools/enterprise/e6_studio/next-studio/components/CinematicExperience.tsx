@@ -6,6 +6,8 @@ import { motion } from "motion/react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { sampleCamera } from "./cameraTimeline";
+import { resolveLocalPinExperiment } from "../cls_pin_experiment.mjs";
+import type { LocalPinMode } from "../cls_pin_experiment.mjs";
 const Scene3D=dynamic(()=>import("./Scene3D"),{ssr:false});
 const descriptions=[
   ["01","Arrival","Proportion","The silhouette establishes scale and a measured point of view."],
@@ -23,6 +25,8 @@ export default function CinematicExperience({assetVariant="fixture"}:{assetVaria
   const blenderPreview=assetVariant==="blender";
   const story=useRef<HTMLElement>(null);
   const [reduced,setReduced]=useState(true);
+  const [pinMode,setPinMode]=useState<LocalPinMode>("default");
+  const [pinModeResolved,setPinModeResolved]=useState(false);
   const [progress,setProgress]=useState(0);
   const [ready,setReady]=useState(false);
   const [smooth,setSmooth]=useState(false);
@@ -48,15 +52,22 @@ export default function CinematicExperience({assetVariant="fixture"}:{assetVaria
     return ()=>query.removeEventListener("change",update);
   },[]);
   useEffect(()=>{
-    if(reduced||!story.current)return;
+    // Local-only, query-opted A/B. Default research and all remote routes unchanged.
+    setPinMode(resolveLocalPinExperiment(window.location.hostname,assetVariant,window.location.search));
+    setPinModeResolved(true);
+  },[assetVariant]);
+  useEffect(()=>{
+    if(reduced||!pinModeResolved||!story.current)return;
     gsap.registerPlugin(ScrollTrigger);
     const ctx=gsap.context(()=>{
       ScrollTrigger.create({trigger:story.current,start:"top top",end:"+=220%",
-        pin:true,scrub:true,anticipatePin:1,invalidateOnRefresh:true,
+        pin:pinMode!=="off",
+        ...(pinMode==="transform"?{pinType:"transform" as const}:{}),
+        scrub:true,anticipatePin:1,invalidateOnRefresh:true,
         onUpdate:self=>setProgress(Math.max(0,Math.min(1,self.progress)))});
     },story);
     return ()=>ctx.revert();
-  },[reduced]);
+  },[reduced,pinMode,pinModeResolved]);
   useEffect(()=>{
     if(!smooth||reduced)return;
     let stopped=false;
@@ -100,6 +111,7 @@ export default function CinematicExperience({assetVariant="fixture"}:{assetVaria
       tabIndex={-1}
       data-recovery={unavailable?"needed":"none"}
       data-asset-variant={assetVariant}
+      data-e6-cls-pin={pinModeResolved?pinMode:"resolving"}
       data-engine={engine} data-shot={descriptions[shot][1].toLowerCase()}
       data-progress={progress.toFixed(3)} data-camera-shot={camera.shot}
       data-camera-x={camera.position[0].toFixed(4)}
