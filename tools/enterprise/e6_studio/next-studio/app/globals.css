@@ -74,3 +74,14 @@ footer{padding:34px clamp(22px,7vw,115px);font-size:.68rem;letter-spacing:.1em}
  *,*::before,*::after{animation:none!important;transition:none!important}
  .studio-story{min-height:80svh}.story-caption{display:none}
 }
+
+/* The owner-only local capture control exists solely on the opt-in Blender route. */
+.e6-local-raf{padding:clamp(44px,6vw,80px) clamp(22px,7vw,115px);background:#11191d;border-top:1px solid #4c5555;color:#f4f1e9}
+.e6-local-raf h2{font:normal clamp(2rem,4vw,3.3rem)/1.15 Georgia,serif;letter-spacing:-.035em;margin:14px 0}
+.e6-local-raf>p{max-width:76ch;line-height:1.7}
+.e6-raf-actions{display:flex;flex-wrap:wrap;gap:12px;margin:23px 0}
+.e6-raf-actions button{min-height:44px;padding:12px 16px;border:1px solid #d2b996;background:#202c31;color:#f9f3e8;font:inherit;cursor:pointer}
+.e6-raf-actions button:disabled{opacity:.46;cursor:not-allowed}
+.e6-raf-result{border-left:3px solid #d8ba8e;padding:8px 18px;background:#1b2529}
+.e6-raf-result p{margin:8px 0;line-height:1.5}
+.e6-raf-boundary{font-size:.86rem;color:#c6d0ca}
