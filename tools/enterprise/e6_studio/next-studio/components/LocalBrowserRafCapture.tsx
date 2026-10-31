@@ -6,6 +6,11 @@ import {KIND,evaluateLocalBrowserRaf} from "../local_browser_raf_policy.mjs";
 import type {LocalRafRun,LocalRafReport,LocalRafAssessment} from "../local_browser_raf_policy.mjs";
 
 const loopback=()=>["localhost","127.0.0.1","[::1]"].includes(window.location.hostname);
+const traceMark=(run:number,phase:"START"|"APEX"|"END"|"VERIFIED")=>{
+ // A small number of fixed labels in Chrome's User Timings track.
+ // No origin, URL, GPU identity or arbitrary data in the marker name.
+ performance.mark(`E6_TRACE_V1_RUN_${run}_${phase}`);
+};
 function nextFrame(signal:AbortSignal):Promise<number>{
  return new Promise((resolve,reject)=>{
   if(signal.aborted){reject(Error("Capture cancelled"));return;}
@@ -113,6 +118,9 @@ export default function LocalBrowserRafCapture(){
     try{
      for(let i=0;i<=360;i++){
       const now=await nextFrame(controller.signal);
+      if(i===0)traceMark(repeat+1,"START");
+      if(i===180)traceMark(repeat+1,"APEX");
+      if(i===360)traceMark(repeat+1,"END");
       if(previous!==null)intervals.push(now-previous);
       previous=now;
       const pos=Number(story.dataset.progress);
@@ -145,6 +153,7 @@ export default function LocalBrowserRafCapture(){
      throw Error("GSAP scroll workload did not travel start → end → start; invalid trace was discarded.");
     }
     runs.push(run);
+    traceMark(repeat+1,"VERIFIED");
     setMessage("Completed local pass "+(repeat+1)+" of 3. Continue keeping Chrome visible.");
    }
    const result:LocalRafReport={
@@ -190,7 +199,9 @@ export default function LocalBrowserRafCapture(){
   <h2>Measure the scroll, not a claim.</h2>
   <p>Explicitly opt in to three local forward/reverse scroll runs. This uses browser animation-frame
      timestamps, <strong>not GPU render time, VRAM, temperature or power</strong>.
-     No benchmark starts automatically and nothing is uploaded.</p>
+     No benchmark starts automatically and nothing is uploaded. When Chrome DevTools
+     is recording, four fixed User Timing markers per verified run allow a separate local
+     trace review without exporting source maps or script contents.</p>
   <div className="e6-raf-actions">
    <button type="button" disabled={working} onClick={run}>Start three-pass local trace</button>
    <button type="button" disabled={!working} onClick={()=>active.current?.abort()}>Cancel capture</button>
