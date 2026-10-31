@@ -52,10 +52,14 @@ export function evaluateHardwareEvidence(report){
         maxLongTaskMs:run.maxLongTaskMs??null});
     });
   }
+  if(report.repository!=="teldigi5-wq/aetheris-ai-runtime"||report.cleanSourceCheckout!==true){
+    reasons.push("E6_UNVERIFIED_REPOSITORY_OR_DIRTY_SOURCE");
+  }
   if(!report.glbSha256||!(/^[0-9a-f]{64}$/.test(report.glbSha256)))reasons.push("E6_GLB_DIGEST_MISSING");
   if(!report.exactGitCommit||!(/^[0-9a-f]{40}$/.test(report.exactGitCommit)))reasons.push("E6_SOURCE_COMMIT_MISSING");
-  if(!Number.isFinite(Date.parse(report.capturedAt))||
-      Date.parse(report.capturedAt)>Date.now()+300000)reasons.push("E6_CAPTURE_TIME_INVALID");
+  const captured=Date.parse(report.capturedAt);
+  if(!Number.isFinite(captured)||captured>Date.now()+300000||
+      captured<Date.now()-30*24*60*60*1000)reasons.push("E6_CAPTURE_TIME_INVALID");
   if(report.externalRequests!==0||report.browserErrors!==0||report.webglLosses!==0)reasons.push("E6_BROWSER_ERROR_OR_OUTSIDE_RESOURCE");
   // These are not obtainable as trustworthy cross-platform browser APIs.
   // A passing trace cannot certify thermals, true GPU frame time, GPU VRAM,
