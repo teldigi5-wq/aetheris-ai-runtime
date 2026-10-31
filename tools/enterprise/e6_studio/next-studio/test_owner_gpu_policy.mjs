@@ -14,7 +14,8 @@ const base=()=>({
            unmaskedRenderer:'ANGLE (NVIDIA GeForce RTX 4050, D3D11)'},
  browserVersion:'Chrome/156.0.7777.99',viewport:{width:1440,height:900,dpr:1},
  runs:[sample(),sample(),sample()],
- exactGitCommit:commit,glbSha256:sha,capturedAt:new Date().toISOString(),
+ exactGitCommit:commit,repository:'teldigi5-wq/aetheris-ai-runtime',
+ cleanSourceCheckout:true,glbSha256:sha,capturedAt:new Date().toISOString(),
  externalRequests:0,browserErrors:0,webglLosses:0
 });
 test('valid local renderer, sampled scroll and provenance permit RESEARCH ONLY',()=>{
@@ -74,6 +75,13 @@ test('reject unproven source, non-Chrome version, network, browser errors',()=>{
   ['browserErrors',1],['webglLosses',1],['webgl2',false]]){
   const p=base();p[key]=value;
   assert.equal(evaluateHardwareEvidence(p).acceptedForResearch,false,key);
+ }
+});
+test('reject incorrect repositories, dirty checkouts and stale evidence',()=>{
+ for(const [key,value] of [['repository','teldigi5-wq/aetheris-platform'],
+   ['cleanSourceCheckout',false],['capturedAt','2020-01-01T00:00:00.000Z']]){
+   const p=base();p[key]=value;
+   assert.equal(evaluateHardwareEvidence(p).acceptedForResearch,false,key);
  }
 });
 test('reject malformed viewport and impossible frames',()=>{
