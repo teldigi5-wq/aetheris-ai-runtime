@@ -1,0 +1,48 @@
+name: Enterprise E6 CLS Pin A-B — Synthetic Only
+on:
+  pull_request:
+    branches:
+      - feat/e6-chrome-devtools-trace-review-20261031
+    paths:
+      - '.github/workflows/runtime-e6-cls-pin-ab.yml'
+      - 'docs/runtime/E6_CLS_PIN_AB_DIAGNOSTIC_20261031.md'
+      - 'tools/enterprise/e6_studio/next-studio/components/CinematicExperience.tsx'
+      - 'tools/enterprise/e6_studio/next-studio/components/LocalBrowserRafCapture.tsx'
+      - 'tools/enterprise/e6_studio/next-studio/cls_pin_experiment.mjs'
+      - 'tools/enterprise/e6_studio/next-studio/cls_pin_experiment.d.mts'
+      - 'tools/enterprise/e6_studio/next-studio/test_cls_pin_experiment.mjs'
+permissions:
+  contents: read
+jobs:
+  synthetic-comparison-guard-and-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact PR HEAD without token persistence
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Synthetic checks (not live Chrome acceptance)
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          node --test tools/enterprise/e6_studio/next-studio/test_cls_pin_experiment.mjs
+          node --test tools/enterprise/e6_studio/next-studio/test_review_local_chrome_trace.mjs
+          node --test tools/enterprise/e6_studio/next-studio/test_review_local_raf_evidence.mjs
+          node --test tools/enterprise/e6_studio/next-studio/test_local_browser_raf_policy.mjs
+      - name: Build the local-only research variant (static checks only)
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          python3 scripts/validate_dependency_lock.py
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+          NEXT_PUBLIC_E6_BLENDER_PREVIEW=1 npm run build
+          test -f out/blender-preview/index.html
+          grep -Rq 'e6_cls_pin' out/_next/static/chunks
+          echo E6_LOCAL_CLS_AB_SYNTHETIC_ONLY_NO_RELEASE_PROMOTION
