@@ -1,0 +1,51 @@
+name: Enterprise E6 Chrome Performance Trace — Synthetic Review Only
+on:
+  pull_request:
+    branches:
+      - feat/e6-local-raf-cohort-review-20261031
+    paths:
+      - '.github/workflows/runtime-e6-chrome-trace-review.yml'
+      - 'docs/runtime/E6_CHROME_PERFORMANCE_TRACE_REVIEW_20261031.md'
+      - 'tools/enterprise/e6_studio/next-studio/components/LocalBrowserRafCapture.tsx'
+      - 'tools/enterprise/e6_studio/next-studio/review_local_chrome_trace.mjs'
+      - 'tools/enterprise/e6_studio/next-studio/test_review_local_chrome_trace.mjs'
+permissions:
+  contents: read
+concurrency:
+  group: e6-chrome-trace-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  source-policy-and-static-research-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact draft HEAD without persistent credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Run pure synthetic trace and rAF regression suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          node --check tools/enterprise/e6_studio/next-studio/review_local_chrome_trace.mjs
+          node --test tools/enterprise/e6_studio/next-studio/test_review_local_chrome_trace.mjs
+          node --test tools/enterprise/e6_studio/next-studio/test_review_local_raf_evidence.mjs
+          node --test tools/enterprise/e6_studio/next-studio/test_local_browser_raf_policy.mjs
+      - name: Compile type-safe isolated research preview (not hardware)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          python3 scripts/validate_dependency_lock.py
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+          NEXT_PUBLIC_E6_BLENDER_PREVIEW=1 npm run build
+          test -f out/blender-preview/index.html
+          grep -Rq 'E6_TRACE_V1_RUN_' out/_next/static/chunks
+          echo E6_CHROME_TRACE_REVIEW_SYNTHETIC_CI_ONLY_NO_STAGE45_GO
