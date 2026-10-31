@@ -40,6 +40,42 @@ def sample(with_uv=True, pbr=None, vertices=3, name="Module"):
             + struct.pack("<I4s", len(blob), b"BIN\x00") + blob)
 
 
+def seam_split_triangle(*, with_uv: bool, vertex_count: int) -> bytes:
+    """Two layouts, same decoded indexed triangle, but UV creates extra vertices."""
+    pos = b"\x00" * (vertex_count * 12)
+    normal = b"\x00" * (vertex_count * 12)
+    indices = struct.pack("<3H", 0, 1, 2) + b"\x00\x00"
+    uv = b"\x00" * (vertex_count * 8) if with_uv else b""
+    chunks = [pos, normal, indices] + ([uv] if with_uv else [])
+    views = []
+    offset = 0
+    for data in chunks:
+        views.append({"buffer": 0, "byteOffset": offset, "byteLength": len(data)})
+        offset += len(data)
+    accessors = [
+        {"bufferView": 0, "count": vertex_count, "type": "VEC3",
+         "componentType": 5126, "min": [0, 0, 0], "max": [0, 0, 0]},
+        {"bufferView": 1, "count": vertex_count, "type": "VEC3", "componentType": 5126},
+        {"bufferView": 2, "count": 3, "type": "SCALAR", "componentType": 5123},
+    ]
+    attributes = {"POSITION": 0, "NORMAL": 1}
+    if with_uv:
+        attributes["TEXCOORD_0"] = 3
+        accessors.append({"bufferView": 3, "count": vertex_count,
+                          "type": "VEC2", "componentType": 5126})
+    doc = {"asset": {"version": "2.0"}, "buffers": [{"byteLength": offset}],
+           "bufferViews": views, "accessors": accessors,
+           "materials": [{"name": "Alloy", "pbrMetallicRoughness": {"metallicFactor": 0.7}}],
+           "meshes": [{"primitives": [{"attributes": attributes, "indices": 2, "material": 0}]}],
+           "nodes": [{"mesh": 0, "name": "Part"}]}
+    js = json.dumps(doc, separators=(",", ":")).encode()
+    js += b" " * (-len(js) % 4)
+    blob = b"".join(chunks)
+    return (struct.pack("<4sII", b"glTF", 2, 12 + 8 + len(js) + 8 + len(blob))
+            + struct.pack("<I4s", len(js), b"JSON") + js
+            + struct.pack("<I4s", len(blob), b"BIN\x00") + blob)
+
+
 class GLBOptimizationPolicyTests(unittest.TestCase):
     def test_remove_only_unused_uv_and_measurable_byte_savings(self):
         result = compare(sample(), sample(with_uv=False))
@@ -52,6 +88,17 @@ class GLBOptimizationPolicyTests(unittest.TestCase):
         self.assertFalse(result["realGpuBenchmarked"])
         self.assertFalse(result["visualParityVerified"])
         self.assertFalse(result["stage45Go"])
+
+    def test_accepts_only_actual_uv_seam_vertex_dedup_when_triangle_data_is_equal(self):
+        original = seam_split_triangle(with_uv=True, vertex_count=4)
+        candidate = seam_split_triangle(with_uv=False, vertex_count=3)
+        proof = compare(original, candidate)
+        self.assertEqual(proof["vertexCount"], 4)
+        self.assertEqual(proof["candidateVertexCount"], 3)
+        self.assertEqual(proof["uvSeamVerticesEliminated"], 1)
+        self.assertFalse(proof["vertexStreamLayoutEqual"])
+        self.assertTrue(proof["trianglePositionNormalDataEqual"])
+        self.assertTrue(proof["semanticPrimitiveContractsEqual"])
 
     def test_refuse_modified_material(self):
         with self.assertRaisesRegex(ValueError, "MATERIAL_CHANGED"):

@@ -57,6 +57,8 @@ class OptInBlenderPreviewPolicyTests(unittest.TestCase):
             "candidateSha256": digest(self.optimized),
             "trianglePositionNormalDataEqual": True,
             "geometryAndMaterialMetadataEqual": True,
+            "semanticPrimitiveContractsEqual": True,
+            "candidateVertexCount": 3,
             "candidateUVAttributeSets": 0,
             "meshCount": 1,
             "materialCount": 1,

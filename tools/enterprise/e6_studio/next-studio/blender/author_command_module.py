@@ -50,6 +50,9 @@ def main() -> None:
     graphite = material("Graphite inset", (0.025, 0.033, 0.038, 1), 0.4, 0.48)
     silver = material("Machined connectors", (0.64, 0.67, 0.66, 1), 0.78, 0.22)
     amber = material("Governance indicator", (0.56, 0.29, 0.12, 1), 0.35, 0.35)
+    # Additional owned PBR palette; no procedural texture nodes or outside media.
+    ceramic = material("Smoked ceramic core", (0.045, 0.09, 0.11, 1), 0.18, 0.26)
+    bronze = material("Machined warm bronze", (0.58, 0.39, 0.22, 1), 0.81, 0.28)
 
     def part(name: str, position: tuple, dimensions: tuple, mat, bevel: float):
         bpy.ops.mesh.primitive_cube_add(size=1, location=position)
@@ -71,6 +74,49 @@ def main() -> None:
     part("Status rail — isolated", (0.66, -0.3, 0.138), (0.28, 0.045, 0.013), silver, 0.004)
     part("Inset connector left", (-1.0, 0.23, 0.143), (0.04, 0.24, 0.014), silver, 0.003)
     part("Inset connector right", (1.0, 0.23, 0.143), (0.04, 0.24, 0.014), silver, 0.003)
+    # E6 concept art pass: one non-functional governance dial with tactile machined
+    # bezel, ceramic insert, two retainer spines, and a lower bus. 12 meshes max.
+    # These are visual metaphors, NOT actual device features or agent indicators.
+    bpy.ops.mesh.primitive_torus_add(
+        major_segments=32, minor_segments=8,
+        location=(0.0, 0.11, 0.165),
+        major_radius=0.235, minor_radius=0.017,
+    )
+    bezel = bpy.context.object
+    bezel.name = "Governance bezel — warm anodized ring"
+    bezel.data.materials.append(bronze)
+    for polygon in bezel.data.polygons:
+        polygon.use_smooth = True
+
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=40, radius=0.167, depth=0.028,
+        location=(0.0, 0.11, 0.144),
+    )
+    core = bpy.context.object
+    core.name = "Runtime core — smoked ceramic"
+    core.data.materials.append(ceramic)
+    core_bevel = core.modifiers.new(name="Ceramic lip rounding", type="BEVEL")
+    core_bevel.width = 0.008
+    core_bevel.segments = 2
+    bpy.ops.object.modifier_apply(modifier=core_bevel.name)
+    for polygon in core.data.polygons:
+        polygon.use_smooth = polygon.area < 0.015
+
+    part("Side spine — left", (-0.87, 0.0, 0.148),
+         (0.026, 0.64, 0.013), silver, 0.003)
+    part("Side spine — right", (0.87, 0.0, 0.148),
+         (0.026, 0.64, 0.013), silver, 0.003)
+    part("Lower signature bus — nonfunctional", (0.0, -0.45, 0.145),
+         (1.35, 0.023, 0.01), bronze, 0.003)
+
+    assert len([obj for obj in bpy.context.scene.objects if obj.type == "MESH"]) == 12
+    assigned_materials = {
+        slot.material.name
+        for obj in bpy.context.scene.objects if obj.type == "MESH"
+        for slot in obj.material_slots if slot.material is not None
+    }
+    assert len(assigned_materials) == 6
+
 
     bpy.context.scene.render.resolution_x = 1280
     bpy.context.scene.render.resolution_y = 720
