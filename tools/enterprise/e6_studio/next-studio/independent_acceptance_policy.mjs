@@ -2,7 +2,8 @@
  * Browser/CI inputs cannot certify human identity, device provenance or Stage45.
  * The evaluator does no network I/O, uploads nothing and mutates no inputs.
  */
-import {readFile, lstat, realpath} from 'node:fs/promises';
+import {open, lstat, realpath} from 'node:fs/promises';
+import {constants} from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 
@@ -24,29 +25,75 @@ const MAX_BYTES=20*1024*1024;
 const EXTENSIONS=new Set(['.json','.txt','.md','.csv','.png','.jpg','.jpeg','.webp','.pdf']);
 const isObject=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const safeAlias=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{2,47}$/.test(s);
-const safePath=s=>typeof s==='string'&&s.length<240&&!s.includes('%')&&
- !s.includes('\\')&&!s.includes('\0')&&s.startsWith('evidence/')&&
- !s.startsWith('/')&&s.split('/').every(x=>x!=='.'&&x!=='..'&&x.length>0)&&
+const safePath=s=>typeof s==='string'&&s.length<240&&s.startsWith('evidence/')&&
+ s.split('/').every(x=>/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(x)&&
+    x!=='.'&&x!=='..'&&!/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(x))&&
  EXTENSIONS.has(path.posix.extname(s).toLowerCase());
+
+/**
+ * Read from a single opened descriptor after fstat, with a strict byte cap.
+ * O_NOFOLLOW prevents final-component symlink following where supported.
+ * These checks mitigate accidental replacement/replay, NOT an adversary who
+ * can concurrently mutate parent directories; keep case directories private.
+ */
+export async function readBoundedRegularFile(filename,maxBytes) {
+ if(!Number.isInteger(maxBytes)||maxBytes<1||maxBytes>MAX_BYTES)throw Error('E6_FILE_LIMIT_INVALID');
+ const flags=constants.O_RDONLY|(constants.O_NOFOLLOW||0)|(constants.O_NONBLOCK||0);
+ const handle=await open(filename,flags);
+ try{
+  const stat=await handle.stat();
+  if(!stat.isFile()||stat.size<1||stat.size>maxBytes||stat.nlink!==1){
+   throw Error('E6_EVIDENCE_NOT_BOUNDED_FILE');
+  }
+  const data=Buffer.alloc(stat.size);
+  let offset=0;
+  while(offset<data.length){
+   const {bytesRead}=await handle.read(data,offset,data.length-offset,offset);
+   if(bytesRead===0)throw Error('E6_EVIDENCE_SHORT_READ');
+   offset+=bytesRead;
+  }
+  const single=Buffer.alloc(1);
+  if((await handle.read(single,0,1,data.length)).bytesRead!==0)throw Error('E6_EVIDENCE_GREW_DURING_READ');
+  const after=await handle.stat();
+  if(!after.isFile()||after.dev!==stat.dev||after.ino!==stat.ino||
+     after.size!==stat.size||after.mtimeMs!==stat.mtimeMs||after.nlink!==1){
+   throw Error('E6_EVIDENCE_MUTATED_DURING_READ');
+  }
+  return {data,dev:stat.dev,ino:stat.ino,size:stat.size};
+ }finally{await handle.close();}
+}
 
 async function verifyLocalFile(base,filename,expectedSha) {
  if(!safePath(filename)||!HEX64.test(expectedSha))throw Error('E6_UNSAFE_EVIDENCE_REFERENCE');
  const baseReal=await realpath(base);
- // Check every path component: a symlink must not redirect verification outside
- // this case folder, even where final file resolves inside by coincidence.
  const parts=filename.split('/');
  let cursor=baseReal;
- for(const part of parts){
-  cursor=path.join(cursor,part);
+ for(let i=0;i<parts.length;i++){
+  cursor=path.join(cursor,parts[i]);
   const stat=await lstat(cursor);
   if(stat.isSymbolicLink())throw Error('E6_EVIDENCE_SYMLINK_DENIED');
+  if(i<parts.length-1&&!stat.isDirectory())throw Error('E6_EVIDENCE_PARENT_NOT_DIRECTORY');
  }
- const stat=await lstat(cursor);
- if(!stat.isFile()||stat.size===0||stat.size>MAX_BYTES)throw Error('E6_EVIDENCE_NOT_BOUNDED_FILE');
- const bytes=await readFile(cursor);
- if(createHash('sha256').update(bytes).digest('hex')!==expectedSha)throw Error('E6_EVIDENCE_DIGEST_MISMATCH');
- return {path:filename,sha256:expectedSha,bytes:bytes.length};
+ const canonical=await realpath(cursor);
+ if(canonical!==cursor)throw Error('E6_EVIDENCE_PATH_CHANGED_OR_LINKED');
+ const before=await lstat(cursor);
+ if(!before.isFile()||before.nlink!==1||before.size<1||before.size>MAX_BYTES){
+  throw Error('E6_EVIDENCE_NOT_BOUNDED_FILE');
+ }
+ const opened=await readBoundedRegularFile(cursor,MAX_BYTES);
+ const after=await lstat(cursor);
+ if(after.isSymbolicLink()||!after.isFile()||before.dev!==opened.dev||
+    before.ino!==opened.ino||after.dev!==opened.dev||after.ino!==opened.ino||
+    after.size!==opened.size||after.nlink!==1||
+    await realpath(cursor)!==cursor){
+  throw Error('E6_EVIDENCE_PATH_CHANGED_DURING_READ');
+ }
+ if(createHash('sha256').update(opened.data).digest('hex')!==expectedSha){
+  throw Error('E6_EVIDENCE_DIGEST_MISMATCH');
+ }
+ return {path:filename,sha256:expectedSha,bytes:opened.data.length};
 }
+
 export async function evaluateAcceptanceInventory(manifest,caseDir,{now=Date.now()}={}){
  const problems=[],details=[],seenPaths=new Set(),seenDigests=new Set();
  const result=()=>{

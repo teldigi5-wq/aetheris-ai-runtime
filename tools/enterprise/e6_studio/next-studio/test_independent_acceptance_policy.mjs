@@ -5,6 +5,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {DOMAIN_IDS,KIND,evaluateAcceptanceInventory} from './independent_acceptance_policy.mjs';
 
 const hash=x=>createHash('sha256').update(x).digest('hex');
@@ -141,4 +143,60 @@ test('reject copied evidence and unbounded file sizes',async t=>{
  await fs.writeFile(path.join(root,'evidence/synthetic-0.txt'),Buffer.alloc(20*1024*1024+1));
  res=await evaluateAcceptanceInventory(manifest,root);
  assert(res.problems.some(x=>x.includes('E6_EVIDENCE_NOT_BOUNDED_FILE')));
+});
+
+
+test('hardlinked evidence bytes are not accepted as independently sourced files',async t=>{
+ const {root,manifest}=await fixture(t);
+ const source=path.join(root,'evidence/synthetic-0.txt');
+ const hardlink=path.join(root,'evidence/alternate.txt');
+ await fs.link(source,hardlink);
+ manifest.domains[0].files[0].path='evidence/alternate.txt';
+ const result=await evaluateAcceptanceInventory(manifest,root);
+ assert.equal(result.readyForIndependentHumanReview,false);
+ assert(result.problems.some(x=>x.includes('E6_EVIDENCE_NOT_BOUNDED_FILE')));
+});
+test('Windows device names and unsafe characters cannot pass evidence path checks',async t=>{
+ const {root,manifest}=await fixture(t);
+ for(const name of ['evidence/CON.txt','evidence/NUL.json','evidence/COM1.csv',
+  'evidence/LPT9.png','evidence/name:stream.txt','evidence/space file.txt',
+  'evidence/control\tfile.txt']){
+  manifest.domains[0].files[0].path=name;
+  const result=await evaluateAcceptanceInventory(manifest,root);
+  assert(result.problems.some(x=>x.includes('E6_UNSAFE_EVIDENCE_REFERENCE')),name);
+ }
+});
+test('CLI refuses symlinked manifest, without processing its outside target',async t=>{
+ const {root,manifest}=await fixture(t);
+ const out=path.join(root,'elsewhere.json');
+ await fs.writeFile(out,JSON.stringify(manifest));
+ await fs.symlink(out,path.join(root,'manifest.json'));
+ const cli=fileURLToPath(new URL('./independent_acceptance_cli.mjs',import.meta.url));
+ const r=spawnSync(process.execPath,[cli,'--case-dir',root],{encoding:'utf8',timeout:10000});
+ assert.equal(r.status,2);
+ const result=JSON.parse(r.stdout);
+ assert.equal(result.readyForIndependentHumanReview,false);
+ assert(result.problems.includes('E6_LOCAL_MANIFEST_READ_DENIED'));
+ assert.equal(result.stage45Go,false);
+});
+test('CLI caps manifest file BEFORE allocating full input and blocks malformed JSON',async t=>{
+ const {root}=await fixture(t);
+ const cli=fileURLToPath(new URL('./independent_acceptance_cli.mjs',import.meta.url));
+ await fs.writeFile(path.join(root,'manifest.json'),Buffer.alloc(256*1024+1,'x'));
+ let run=spawnSync(process.execPath,[cli,'--case-dir',root],{encoding:'utf8',timeout:10000});
+ assert.equal(run.status,2);
+ assert(JSON.parse(run.stdout).problems.includes('E6_LOCAL_MANIFEST_READ_DENIED'));
+ await fs.writeFile(path.join(root,'manifest.json'),'{invalid-json');
+ run=spawnSync(process.execPath,[cli,'--case-dir',root],{encoding:'utf8',timeout:10000});
+ assert.equal(run.status,2);
+ assert(JSON.parse(run.stdout).problems.includes('E6_LOCAL_MANIFEST_READ_DENIED'));
+});
+test('CLI no-manifest scenario remains a predictable blocked status',async t=>{
+ const {root}=await fixture(t);
+ const cli=fileURLToPath(new URL('./independent_acceptance_cli.mjs',import.meta.url));
+ const r=spawnSync(process.execPath,[cli,'--case-dir',root],{encoding:'utf8',timeout:10000});
+ assert.equal(r.status,2);
+ const result=JSON.parse(r.stdout);
+ assert(result.problems.includes('E6_LOCAL_MANIFEST_NOT_PROVIDED'));
+ assert.equal(result.task8Completed,false);
 });
