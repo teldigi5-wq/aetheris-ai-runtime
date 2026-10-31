@@ -1,0 +1,71 @@
+name: Enterprise E6 Owner GPU Evidence Policy — Non-Hardware CI
+on:
+  pull_request:
+    branches:
+      - feat/e6-browser-resilience-accessibility-20261031
+    paths:
+      - '.github/workflows/runtime-e6-owner-gpu-evidence.yml'
+      - 'tools/enterprise/e6_studio/next-studio/owner_gpu_*.mjs'
+      - 'tools/enterprise/e6_studio/next-studio/test_owner_gpu_policy.mjs'
+      - 'docs/runtime/E6_OWNER_GPU_BENCHMARK_20261031.md'
+permissions:
+  contents: read
+concurrency:
+  group: e6-owner-evidence-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  policy-only-never-fake-hardware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: SHA-pinned checkout, no write credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Node.js 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Enforce exact PR HEAD and static JS syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          node --check tools/enterprise/e6_studio/next-studio/owner_gpu_policy.mjs
+          node --check tools/enterprise/e6_studio/next-studio/owner_gpu_benchmark.mjs
+          node --check tools/enterprise/e6_studio/next-studio/test_owner_gpu_policy.mjs
+      - name: Adversarial offline real-GPU claim rejection tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tools/enterprise/e6_studio/next-studio/test_owner_gpu_policy.mjs
+      - name: Prove owner hardware CLI cannot be executed in GitHub Actions
+        shell: bash
+        run: |
+          set -euo pipefail
+          if CI=true GITHUB_ACTIONS=true node tools/enterprise/e6_studio/next-studio/owner_gpu_benchmark.mjs --confirm-local-hardware > /tmp/e6-owner-guard.log 2>&1; then
+            echo 'E6_CRITICAL_OWNER_GPU_CI_GUARD_BYPASSED' >&2
+            exit 1
+          fi
+          grep -q 'E6_OWNER_HARDWARE_EVIDENCE_CANNOT_RUN_IN_CI' /tmp/e6-owner-guard.log
+          if node tools/enterprise/e6_studio/next-studio/owner_gpu_benchmark.mjs > /tmp/e6-owner-consent.log 2>&1; then
+            echo 'E6_OWNER_CONSENT_GUARD_BYPASSED' >&2
+            exit 1
+          fi
+          grep -q 'E6_OWNER_EXPLICIT_LOCAL_OPT_IN_REQUIRED' /tmp/e6-owner-consent.log
+          echo 'E6_LOCAL_HARDWARE_CANNOT_BE_FORGED_IN_CI_PASS'
+      - name: Upload truth-boundary research policy note
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/e6-studio/owner-gpu-policy-validation
+          printf '%s\n' '{"kind":"E6_OWNER_GPU_POLICY_CI_ONLY","hardwareMeasured":false,"ownerDeviceMeasured":false,"stage45Go":false,"releaseGo":false,"task7Complete":false}' > target/e6-studio/owner-gpu-policy-validation/report.json
+      - name: Keep only policy evidence, never fake GPU traces
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e6-owner-gpu-policy-only-not-hardware-proof
+          path: target/e6-studio/owner-gpu-policy-validation/report.json
+          if-no-files-found: warn
+          retention-days: 7
