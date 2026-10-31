@@ -1,0 +1,63 @@
+name: Enterprise E6 Native Windows Browser rAF Research — No Hardware Certification
+on:
+  pull_request:
+    branches:
+      - feat/e6-owner-device-preflight-20261031
+    paths:
+      - '.github/workflows/runtime-e6-native-browser-raf.yml'
+      - 'tools/enterprise/e6_studio/next-studio/local_browser_raf_policy.*'
+      - 'tools/enterprise/e6_studio/next-studio/test_local_browser_raf_policy.mjs'
+      - 'tools/enterprise/e6_studio/next-studio/components/LocalBrowserRafCapture.tsx'
+      - 'tools/enterprise/e6_studio/next-studio/app/blender-preview/page.tsx'
+      - 'tools/enterprise/e6_studio/next-studio/app/globals.css'
+      - 'docs/runtime/E6_NATIVE_CHROME_RAF_CAPTURE_20261031.md'
+permissions:
+  contents: read
+concurrency:
+  group: e6-native-raf-research-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  synthetic-policy-not-hardware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact draft PR HEAD without persisted token
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Set up Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Verify exact HEAD and synthetic no-go controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          node --check tools/enterprise/e6_studio/next-studio/local_browser_raf_policy.mjs
+          node --check tools/enterprise/e6_studio/next-studio/test_local_browser_raf_policy.mjs
+          node --test tools/enterprise/e6_studio/next-studio/test_local_browser_raf_policy.mjs
+      - name: Locked offline-capable Next.js checks (NOT real hardware)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          python3 scripts/validate_dependency_lock.py
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+          NEXT_PUBLIC_E6_BLENDER_PREVIEW=1 npm run build
+          test -f out/blender-preview/index.html
+          test -f out/index.html
+          echo 'E6_STATIC_PREVIEW_RESEARCH_BUILD_ONLY'
+      - name: Assert no browser claims of real hardware certification
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'JS'
+          import {KIND,evaluateLocalBrowserRaf} from './tools/enterprise/e6_studio/next-studio/local_browser_raf_policy.mjs';
+          const result=evaluateLocalBrowserRaf({kind:KIND,schemaVersion:1,runs:[]});
+          for(const field of ['physicalHardwareCertified','task7Completed','task8Completed','stage45Go','releaseGo'])
+            if(result[field]!==false)process.exit(1);
+          console.log('E6_NATIVE_BROWSER_RAF_NO_GO_INVARIANT_PASS');
+          JS

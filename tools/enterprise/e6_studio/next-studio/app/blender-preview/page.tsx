@@ -1,4 +1,5 @@
 import CinematicExperience from "../../components/CinematicExperience";
+import LocalBrowserRafCapture from "../../components/LocalBrowserRafCapture";
 
 /**
  * Build-time opt-in: production/default static exports do not attempt to load
@@ -20,5 +21,5 @@ export default function BlenderResearchPreview() {
       </main>
     );
   }
-  return <main id="e6-blender-concept-preview"><CinematicExperience assetVariant="blender"/></main>;
+  return <main id="e6-blender-concept-preview"><CinematicExperience assetVariant="blender"/><LocalBrowserRafCapture/></main>;
 }
