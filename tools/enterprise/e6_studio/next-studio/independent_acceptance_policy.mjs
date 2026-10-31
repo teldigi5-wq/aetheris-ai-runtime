@@ -27,7 +27,7 @@ const isObject=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const safeAlias=s=>typeof s==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{2,47}$/.test(s);
 const safePath=s=>typeof s==='string'&&s.length<240&&s.startsWith('evidence/')&&
  s.split('/').every(x=>/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(x)&&
-    x!=='.'&&x!=='..'&&!/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\.|$)/i.test(x))&&
+    x!=='.'&&x!=='..'&&!/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(x))&&
  EXTENSIONS.has(path.posix.extname(s).toLowerCase());
 
 /**
