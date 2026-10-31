@@ -11,7 +11,7 @@ export const percentile=(values,fraction)=>{
   return a[Math.max(0,Math.ceil(a.length*fraction)-1)];
 };
 const finitePositive=(x)=>typeof x==="number"&&Number.isFinite(x)&&x>0;
-const hasGPU=(v)=>typeof v==="string"&&v.length>=5&&v.length<=512&&!SOFTWARE.test(v);
+const hasGPU=(v)=>typeof v==="string"&&v.length>=3&&v.length<=512&&!SOFTWARE.test(v);
 export function evaluateHardwareEvidence(report){
   const reasons=[],runs=[];
   if(!report||typeof report!=="object"||Array.isArray(report))return {acceptedForResearch:false,reasons:["missing report"],releaseGo:false,hardwareCertified:false};
