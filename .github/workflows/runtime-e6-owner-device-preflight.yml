@@ -1,0 +1,67 @@
+name: Enterprise E6 Owner Device Preflight — Policy Only
+on:
+  pull_request:
+    branches:
+      - feat/e6-evidence-integrity-replay-20261031
+    paths:
+      - '.github/workflows/runtime-e6-owner-device-preflight.yml'
+      - 'tools/enterprise/e6_studio/next-studio/owner_device_preflight.mjs'
+      - 'tools/enterprise/e6_studio/next-studio/test_owner_device_preflight.mjs'
+      - 'docs/runtime/E6_OWNER_DEVICE_PREFLIGHT_20261031.md'
+permissions:
+  contents: read
+concurrency:
+  group: e6-device-preflight-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  preflight-policy-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Exact source checkout with no stored credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Node.js 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Confirm source and syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          node --check tools/enterprise/e6_studio/next-studio/owner_device_preflight.mjs
+          node --check tools/enterprise/e6_studio/next-studio/test_owner_device_preflight.mjs
+      - name: Verify synthetic preflight positive controls and local CI denial
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tools/enterprise/e6_studio/next-studio/test_owner_device_preflight.mjs
+      - name: Actual missing-hardware runner preflight MUST fail readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/e6-studio/preflight-policy-only
+          set +e
+          node tools/enterprise/e6_studio/next-studio/owner_device_preflight.mjs --json > target/e6-studio/preflight-policy-only/result.json
+          result=$?
+          set -e
+          test "$result" -eq 2
+          node - <<'JS'
+          const fs=require('node:fs');
+          const d=JSON.parse(fs.readFileSync('target/e6-studio/preflight-policy-only/result.json','utf8'));
+          if(d.readyForLocalBenchmarkAttempt!==false || d.actualGpuBenchmarkPerformed!==false ||
+            d.physicalHardwareCertified!==false || d.stage45Go!==false || d.releaseGo!==false ||
+            !d.blockers.includes('E6_CI_CANNOT_BE_OWNER_HARDWARE'))process.exit(1);
+          console.log('E6_OWNER_DEVICE_PREFLIGHT_CI_IS_NOT_HARDWARE_PASS');
+          JS
+      - name: Retain no-go preflight report, no owner device records
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e6-owner-device-preflight-only-not-hardware-proof
+          path: target/e6-studio/preflight-policy-only/result.json
+          if-no-files-found: warn
+          retention-days: 7
