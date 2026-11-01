@@ -57,7 +57,6 @@ async function main(){
     .replace('Browser 3D rendering and camera animation belong to W4.',
       'This isolated W4 optional scene is research-only; no production approval is implied.')
     .replace('</body>','<script type="module" src="/assets/signal-fold-scene.mjs"></script></body>');
-  await mkdir(target,{recursive:false});
   await cp(source,target,{recursive:true,force:false,errorOnExist:true});
   await writeFile(join(target,story),modified);
   await writeFile(join(target,'assets/signal-fold-scene.css'),css,{flag:'wx'});
