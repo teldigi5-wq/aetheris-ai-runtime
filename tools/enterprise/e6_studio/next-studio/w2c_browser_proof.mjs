@@ -45,7 +45,7 @@ async function inspect(config) {
       assert.equal(await page.locator('h1').count(),1);
       assert.equal(await page.locator('.story-toc a').count(),3);
       assert.equal(await page.locator('section.story-chapter').count(),3);
-      assert.equal(await page.locator('nav[aria-label="Primary navigation"] a[aria-current="page"]').innerText(),'Studies');
+      assert.equal((await page.locator('nav[aria-label="Primary navigation"] a[aria-current="page"]').textContent()).trim(),'Studies');
       assert.equal(await page.locator('canvas').count(),0);
       const layout=await page.evaluate(()=>({
         over:document.documentElement.scrollWidth-innerWidth,
