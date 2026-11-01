@@ -141,7 +141,7 @@ def asset_lab_page(proof: dict) -> str:
 <meta name="robots" content="noindex,nofollow">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; base-uri 'none'; form-action 'none'">
 <title>Asset provenance laboratory — Aetheris E6</title>
-<link rel="stylesheet" href="/assets/studio.css"></head>
+<link rel="stylesheet" href="/assets/studio.css"><link rel="stylesheet" href="/assets/asset-lab.css"></head>
 <body><a class="skip" href="#main">Skip to content</a>
 <header class="site-header"><a href="/">Arcloom preview</a><nav aria-label="Asset navigation"><a href="/studies/">Concept index</a></nav></header>
 <main id="main" class="section"><p class="eyebrow">AETHERIS / ASSET RESEARCH</p>
@@ -151,7 +151,7 @@ not a model of any Arcloom product. Its Blender source and optimized geometry
 were checked against source- and content-addressed evidence. No GPU scene is
 rendered on this page; cinematic integration belongs to W4.</p>
 <section aria-labelledby="asset-status"><h2 id="asset-status">Research-only verification</h2>
-<p>Optimized GLB SHA-256: <code>""" + hashtext + """</code></p>
+<p class="asset-digest-line">Optimized GLB SHA-256: <code class="asset-digest">""" + hashtext + """</code></p>
 <p>The asset contains 12 meshes and 6 authored PBR materials.
 This check does not certify third-party rights, brand quality, device performance,
 model authorship or release approval.</p>
@@ -191,6 +191,11 @@ def stage() -> dict:
     shutil.copytree(W2C_PREVIEW, W3_PREVIEW, symlinks=False)
     assets = W3_PREVIEW / "assets"
     (assets / CANDIDATE).write_bytes(candidate)
+    (assets / "asset-lab.css").write_text(
+        ".asset-digest-line{min-width:0;max-width:100%}"
+        ".asset-digest{overflow-wrap:anywhere;word-break:break-word;white-space:normal}"
+        "@media(max-width:480px){#main{min-width:0}#main>*{max-width:100%}}\n",
+        encoding="utf-8")
     (assets / "w3a-provenance.json").write_text(
         json.dumps(proof, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     lab = W3_PREVIEW / "asset-lab"
