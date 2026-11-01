@@ -55,6 +55,14 @@ if(root){
     model.rotation.y=pose.angle;
     camera.updateProjectionMatrix();
     renderer.render(scene,camera);
+    // Research-only visual evidence: read the framebuffer synchronously after
+    // its draw. Never activate for ordinary visitors, remote hosts or deployment.
+    // Element screenshots are unsuitable because Playwright may scroll to
+    // the canvas and thus change GSAP progress before capturing the frame.
+    if(location.hostname==='127.0.0.1' &&
+      new URLSearchParams(location.search).get('w4b-visual-proof')==='1'){
+      window.__w4bVisualProof=renderer.domElement.toDataURL('image/png');
+    }
     root.dataset.progress=t.toFixed(3);
     root.dataset.cameraPhase=t<.333?'arrival':t<.667?'material':'detail';
     root.dataset.w4bCameraX=camera.position.x.toFixed(3);
