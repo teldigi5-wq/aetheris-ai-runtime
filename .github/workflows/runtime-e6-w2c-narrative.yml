@@ -1,0 +1,68 @@
+name: Enterprise E6 W2-C Narrative Website - Review Only
+on:
+  pull_request:
+    branches:
+      - feat/e6-w2b-curated-multibrief-20261101
+    paths:
+      - '.github/workflows/runtime-e6-w2c-narrative.yml'
+      - 'tools/enterprise/e6_studio/next-studio/w2c_*'
+      - 'tools/enterprise/e6_studio/next-studio/test_w2c_*'
+      - 'docs/runtime/E6_W2C_NARRATIVE_PAGES_20261101.md'
+permissions:
+  contents: read
+jobs:
+  real-narrative-routes-and-browser-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Exact head checkout, no credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Inherited W1 W2-A W2-B plus W2-C tests and write-once preview
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          cd tools/enterprise/e6_studio/next-studio
+          node --check w2c_narrative_compiler.mjs
+          node --check w2c_generate_preview.mjs
+          node --check w2c_browser_proof.mjs
+          node --test test_experience_contract.mjs test_w2_compiler.mjs test_w2b_curated_compiler.mjs test_w2c_narrative_compiler.mjs
+          node w2c_generate_preview.mjs
+          test -f target/e6-w2c-arcloom/index.html
+          test -f target/e6-w2c-arcloom/studies/index.html
+          test -f target/e6-w2c-arcloom/studies/signal-fold/index.html
+          test -f target/e6-w2c-arcloom/studies/readable-measure/index.html
+          test -f target/e6-w2c-arcloom/studies/sundial-desk/index.html
+          test -f target/e6-w2c-arcloom/build-evidence.json
+          if node w2c_generate_preview.mjs; then
+            echo "UNSAFE: generator overwrote the first preview"
+            exit 1
+          fi
+          echo E6_W2C_GENERATION_AND_NO_OVERWRITE_PASS
+      - name: Inherited Next.js locked research static build
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          python3 scripts/validate_dependency_lock.py
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+          NEXT_PUBLIC_E6_BLENDER_PREVIEW=1 npm run build
+          test -f out/blender-preview/index.html
+      - name: Install pinned test-only Chromium harness
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Generated case-study browser journeys and no-JS fallback
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          node w2c_browser_proof.mjs
+          echo E6_W2C_REAL_BROWSER_NO_PRODUCTION_AUTHORIZATION
