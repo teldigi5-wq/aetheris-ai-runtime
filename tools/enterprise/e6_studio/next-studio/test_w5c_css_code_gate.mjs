@@ -58,7 +58,7 @@ test('reject duplicate rule, sparse/minimal code, excessive code and wrong sourc
     EXAMPLE_CODES[0]+'\n.hero h1 { font-style: italic; }']){
     assert.throws(()=>compileRestrictedCss(x),/E6_W5C_/);
   }
-  const tooFew='.hero h1 { max-width: 40ch; } .section__text { max-width: 42ch; }';
+  const tooFew='.hero h1 { max-width: 40ch; letter-spacing: -0.04em; } .section__text { max-width: 42ch; text-align: left; }';
   assert.throws(()=>compileRestrictedCss(tooFew),/E6_W5C_TOO_FEW_RULES/);
 });
 test('reject malformed model code envelope and mismatched brief slug',()=>{
