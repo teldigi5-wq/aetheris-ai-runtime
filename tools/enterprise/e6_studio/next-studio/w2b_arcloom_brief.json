@@ -1,0 +1,255 @@
+{
+  "brief": {
+    "version": 1,
+    "projectSlug": "arcloom-design-demonstration",
+    "siteProfile": "product",
+    "pages": [
+      {
+        "path": "/",
+        "sections": [
+          {
+            "id": "opening",
+            "kind": "hero",
+            "motion": "none",
+            "fallback": "none",
+            "assetSource": "none"
+          },
+          {
+            "id": "thinking",
+            "kind": "editorial",
+            "motion": "none",
+            "fallback": "none",
+            "assetSource": "none"
+          }
+        ]
+      },
+      {
+        "path": "/studies",
+        "sections": [
+          {
+            "id": "work-opening",
+            "kind": "hero",
+            "motion": "none",
+            "fallback": "none",
+            "assetSource": "none"
+          },
+          {
+            "id": "object-studies",
+            "kind": "gallery",
+            "motion": "none",
+            "fallback": "none",
+            "assetSource": "none"
+          }
+        ]
+      },
+      {
+        "path": "/approach",
+        "sections": [
+          {
+            "id": "approach-opening",
+            "kind": "hero",
+            "motion": "none",
+            "fallback": "none",
+            "assetSource": "none"
+          },
+          {
+            "id": "practice",
+            "kind": "process",
+            "motion": "none",
+            "fallback": "none",
+            "assetSource": "none"
+          },
+          {
+            "id": "principles",
+            "kind": "editorial",
+            "motion": "none",
+            "fallback": "none",
+            "assetSource": "none"
+          }
+        ]
+      },
+      {
+        "path": "/contact",
+        "sections": [
+          {
+            "id": "contact-opening",
+            "kind": "hero",
+            "motion": "none",
+            "fallback": "none",
+            "assetSource": "none"
+          },
+          {
+            "id": "conversation",
+            "kind": "contact",
+            "motion": "none",
+            "fallback": "none",
+            "assetSource": "none"
+          }
+        ]
+      }
+    ]
+  },
+  "content": {
+    "siteName": "Arcloom Objects",
+    "siteDescription": "Fictional design practice exploring considered objects, spaces and digital systems for a multi-page compiler demonstration.",
+    "contactEmail": "hello@example.com",
+    "pages": [
+      {
+        "path": "/",
+        "navLabel": "Index",
+        "sections": [
+          {
+            "id": "opening",
+            "eyebrow": "Speculative objects and spaces",
+            "title": "Objects with a point of view.",
+            "body": "An imaginary independent studio exploring how physical form, interface behavior and spatial systems can share the same thoughtful language.",
+            "items": [],
+            "ctaLabel": "Explore six concepts",
+            "ctaPath": "/studies"
+          },
+          {
+            "id": "thinking",
+            "eyebrow": "A working belief",
+            "title": "Useful can still be remarkable.",
+            "body": "Good design is not a competition for spectacle. We focus on honest materials, a strong sense of proportion and details that reward attention.",
+            "items": [],
+            "ctaLabel": "Understand the process",
+            "ctaPath": "/approach"
+          }
+        ]
+      },
+      {
+        "path": "/studies",
+        "navLabel": "Studies",
+        "sections": [
+          {
+            "id": "work-opening",
+            "eyebrow": "An index of experiments",
+            "title": "Made for the imagined everyday.",
+            "body": "These six invented studies demonstrate how a product-focused brand could organize and filter its work. None are commercial projects or existing products.",
+            "items": [],
+            "ctaLabel": "How we work",
+            "ctaPath": "/approach"
+          },
+          {
+            "id": "object-studies",
+            "eyebrow": "Concept archive",
+            "title": "Research in three dimensions.",
+            "body": "Every card is a hypothetical concept with CSS-generated abstract artwork; there are no licensed product photographs or customer endorsements.",
+            "items": [
+              {
+                "title": "Signal Fold",
+                "body": "A modular desk-object family built around folded aluminum and quiet tactile feedback.",
+                "category": "spatial"
+              },
+              {
+                "title": "Readable Measure",
+                "body": "A daylight-friendly instrument dashboard exploring visible hierarchy and touch.",
+                "category": "digital"
+              },
+              {
+                "title": "Mica Mark",
+                "body": "A symbol and labeling study for a small-batch fictional maker.",
+                "category": "identity"
+              },
+              {
+                "title": "Sundial Desk",
+                "body": "A hypothetical material system for everyday tabletop accessories.",
+                "category": "spatial"
+              },
+              {
+                "title": "Open Trace",
+                "body": "A lightweight speculative control panel for environmental readings.",
+                "category": "digital"
+              },
+              {
+                "title": "Soft Geometry",
+                "body": "An identity exercise built from rhythmic forms and restrained typography.",
+                "category": "identity"
+              }
+            ],
+            "ctaLabel": "Start a discussion",
+            "ctaPath": "/contact"
+          }
+        ]
+      },
+      {
+        "path": "/approach",
+        "navLabel": "Approach",
+        "sections": [
+          {
+            "id": "approach-opening",
+            "eyebrow": "Material and intent",
+            "title": "Start with a better question.",
+            "body": "Our imagined process explores requirements, physical constraints and digital behavior before reaching for an effect or a signature look.",
+            "items": [],
+            "ctaLabel": "View studies",
+            "ctaPath": "/studies"
+          },
+          {
+            "id": "practice",
+            "eyebrow": "Three connected perspectives",
+            "title": "Observe. Design. Verify.",
+            "body": "These are illustrative working principles for the sample studio, not claims about real commercial operations.",
+            "items": [
+              {
+                "title": "Observe context",
+                "body": "Write down the users, constraints and real task before sketching an interface.",
+                "category": "identity"
+              },
+              {
+                "title": "Shape experience",
+                "body": "Keep the physical and visual relationships coherent across touchpoints.",
+                "category": "spatial"
+              },
+              {
+                "title": "Verify behavior",
+                "body": "Exercise interaction and accessibility requirements on real devices.",
+                "category": "digital"
+              }
+            ],
+            "ctaLabel": "Send a concept brief",
+            "ctaPath": "/contact"
+          },
+          {
+            "id": "principles",
+            "eyebrow": "A practical principle",
+            "title": "Leave room for the human.",
+            "body": "A visual language should support comprehension, not hide it. Motion and texture belong only where they explain something worthwhile.",
+            "items": [],
+            "ctaLabel": "",
+            "ctaPath": ""
+          }
+        ]
+      },
+      {
+        "path": "/contact",
+        "navLabel": "Contact",
+        "sections": [
+          {
+            "id": "contact-opening",
+            "eyebrow": "Concept enquiries",
+            "title": "A conversation, not a conversion trap.",
+            "body": "This fictional contact page demonstrates accessible HTML input states and a user-controlled email draft without collecting data on a server.",
+            "items": [],
+            "ctaLabel": "Back to studies",
+            "ctaPath": "/studies"
+          },
+          {
+            "id": "conversation",
+            "eyebrow": "Say hello",
+            "title": "Describe the challenge.",
+            "body": "Completing the form prepares a local email draft only. No message is stored, transmitted or automatically sent by this website.",
+            "items": [],
+            "ctaLabel": "",
+            "ctaPath": ""
+          }
+        ]
+      }
+    ]
+  },
+  "direction": {
+    "version": 1,
+    "preset": "ink-monograph"
+  }
+}

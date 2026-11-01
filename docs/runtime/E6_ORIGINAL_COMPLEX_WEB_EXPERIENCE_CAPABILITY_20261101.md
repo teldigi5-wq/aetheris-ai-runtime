@@ -88,3 +88,17 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory target/e6-w2-multipage-
 The preview target is intentionally write-once. Preserve any earlier locally generated output instead of blindly deleting it. No public URL or production deployment is authorized.
 
 **Remaining W2 slices:** expand from this bounded reference to independently reviewed original briefs and suitable rights-tracked local assets, full content and interaction configurations, multi-brief site-generation integration, browser/assistive-technology QA and independent human design review. This narrow slice alone is **W2-A implemented candidate, W2 overall incomplete**. W3–W6, E3–E5 genuine-model generalization, E6 Task 7/8 and all Stage45/physical/security gates remain open.
+
+
+## 1 November 2026 — W2-B controlled multi-brief branch (unmerged; W2 still incomplete)
+
+Child of W2-A PR #256; implementation document: [E6_W2B_CURATED_MULTIBRIEF_20261101.md](E6_W2B_CURATED_MULTIBRIEF_20261101.md).
+
+- Independently distinct fictional 3-page creative-studio and 4-page product-design briefs.
+- Two fixed, human-authored art directions selected only by an exact bounded `version:1/preset` object; unknown presets, getters, prototype inheritance and extra authorization fields fail closed.
+- Actual route files, responsive local styling, keyboard-compatible filters, client-only email draft and reproducible content hashes; no media/3D, external requests or backend form collection.
+- W2-A source and local preview unchanged. W2-B has its own write-once generated output directories, own exact-HEAD CI and six real Chromium design/viewport combinations.
+- **Review truth:** Until the exact-head Actions run completes, W2-B is coded, *not verified*. Even when CI passes, this is not genuine model generation, independent visual quality approval, WCAG certification or release.
+- **Next stage:** W2-C external owner-reviewed brief ingestion with strict local provenance and richer semantic content/section kinds; do not jump to W3/W5 or upgrade W2 to production complete.
+
+Security S0 and the separate Runtime/Platform API issues, physical PC, E6 Task 7/8 and Stage 45 remain unresolved. **No merge, deployment or unlock.**

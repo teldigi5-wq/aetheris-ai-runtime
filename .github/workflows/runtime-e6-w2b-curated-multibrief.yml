@@ -1,0 +1,71 @@
+name: Enterprise E6 W2-B Curated Multi-Brief Website - Review Only
+on:
+  pull_request:
+    branches:
+      - feat/e6-w2-deterministic-multipage-compiler-20261101
+    paths:
+      - '.github/workflows/runtime-e6-w2b-curated-multibrief.yml'
+      - 'tools/enterprise/e6_studio/next-studio/w2*'
+      - 'docs/runtime/E6_ORIGINAL_COMPLEX_WEB_EXPERIENCE_CAPABILITY_20261101.md'
+      - 'docs/runtime/E6_W2B_CURATED_MULTIBRIEF_20261101.md'
+permissions:
+  contents: read
+jobs:
+  multi-brief-static-and-browser-validation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact PR head without credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Use Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Run inherited W1 W2-A plus W2-B source, safety and reproducibility tests
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          cd tools/enterprise/e6_studio/next-studio
+          node --check w2b_curated_compiler.mjs
+          node --check w2b_generate_previews.mjs
+          node --check w2b_browser_proof.mjs
+          node --test test_experience_contract.mjs test_w2_compiler.mjs test_w2b_curated_compiler.mjs
+          node w2b_generate_previews.mjs --site=morrowline
+          node w2b_generate_previews.mjs --site=arcloom
+          test -f target/e6-w2b-morrowline/work/index.html
+          test -f target/e6-w2b-arcloom/studies/index.html
+          test -f target/e6-w2b-arcloom/approach/index.html
+          test -f target/e6-w2b-arcloom/build-evidence.json
+          if node w2b_generate_previews.mjs --site=arcloom; then
+            echo 'UNSAFE: second build overwrote generated site'
+            exit 1
+          fi
+          if node w2b_generate_previews.mjs --site=../../etc; then
+            echo 'UNSAFE: arbitrary site path accepted'
+            exit 1
+          fi
+          echo E6_W2B_GENERATOR_POLICY_PASS_NO_DEPLOY
+      - name: Preserve inherited Next research build and typecheck
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          python3 scripts/validate_dependency_lock.py
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+          NEXT_PUBLIC_E6_BLENDER_PREVIEW=1 npm run build
+          test -f out/blender-preview/index.html
+      - name: Pinned test-only Chromium harness
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Exercise both generated sites on desktop mobile and reduced-motion Chromium
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          node w2b_browser_proof.mjs
+          echo E6_W2B_BROWSER_PASS_IS_NOT_HARDWARE_OR_HUMAN_ACCEPTANCE
