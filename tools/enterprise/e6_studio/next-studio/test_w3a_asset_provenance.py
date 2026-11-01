@@ -24,7 +24,7 @@ class W3AssetGateTests(unittest.TestCase):
         self.assertNotIn("https://",html)
         self.assertNotIn("<script",html)
 
-    def test_file_reader_denies_symlink_and oversized_file(self):
+    def test_file_reader_denies_symlink_and_oversized_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
             (root/"safe.bin").write_bytes(b"asset")
