@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
+import {once} from 'node:events';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright';
@@ -91,7 +92,10 @@ async function checkSite(site,config) {
     }));
   }finally{
     if(ctx)await ctx.close();
-    server.kill('SIGTERM');
+    if(server.exitCode===null && server.signalCode===null){
+      server.kill('SIGTERM');
+      await once(server,'exit');
+    }
   }
 }
 try {
