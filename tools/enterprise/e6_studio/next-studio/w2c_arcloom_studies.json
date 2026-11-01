@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "sourceRoute": "/studies",
+  "sourceSection": "object-studies",
+  "studies": [
+    {
+      "slug": "signal-fold",
+      "sourceTitle": "Signal Fold",
+      "eyebrow": "Object research / 001",
+      "headline": "Finding form in the everyday.",
+      "challenge": "How might an ordinary desktop accessory make its function clear without becoming another attention-demanding object? This is an invented research question, not a brief from a commercial client.",
+      "concept": "The hypothetical direction studies a family of folded-metal forms with repeatable proportions and a restrained palette. The present CSS diagram is a placeholder for later rights-cleared model and photography work.",
+      "reviewPlan": "Create a physical mock-up, test reach and stability with participants, evaluate material tolerances and manufacturing assumptions, and document measured findings before describing any outcome as validated."
+    },
+    {
+      "slug": "readable-measure",
+      "sourceTitle": "Readable Measure",
+      "eyebrow": "Interface research / 002",
+      "headline": "Legibility is a feature.",
+      "challenge": "Can a dense measurement interface prioritize the information an operator needs without hiding its limits? The system depicted here is fictional and does not display live industrial telemetry.",
+      "concept": "The proposed concept uses large readings, a clear hierarchy of units, explicit states and deliberate contrast. The design remains an editorial exercise until a representative implementation and real data contract exist.",
+      "reviewPlan": "Build an instrumented interface prototype, test keyboard and touch interaction across device sizes, run accessibility checks with assistive technology, and report genuine task-completion observations."
+    },
+    {
+      "slug": "sundial-desk",
+      "sourceTitle": "Sundial Desk",
+      "eyebrow": "Material study / 003",
+      "headline": "A study in small rituals.",
+      "challenge": "What happens when proportion, tactility and quiet organization take priority over decorative novelty? This is a speculative desktop object exercise without a physical product or retail availability.",
+      "concept": "A modular family of forms explores warm surfaces, deliberate edges and a flexible arrangement. Future work could use original Blender assets and controlled lighting to illustrate the object truthfully.",
+      "reviewPlan": "Prototype joints and materials, document component mass and dimensions, perform handling studies and only then prepare an evidence-based visual case study or claim of real-world performance."
+    }
+  ]
+}
