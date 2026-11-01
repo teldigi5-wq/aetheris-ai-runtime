@@ -6,17 +6,39 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
+import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.*;
 
 @SpringBootTest(properties={
-        "aetheris.memory.master-key-b64=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
         "aetheris.memory.retention-sweep-ms=3600000"
 })
 class Phase9MemoryProductionIntegrationTest {
+    // One 256-bit secret per test JVM, stable across Spring property lookups,
+    // never checked into source, logs, or reusable across separate runs.
+    private static final String EPHEMERAL_MASTER_KEY_B64 = newEphemeralMasterKey();
+
+    private static String newEphemeralMasterKey() {
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        return Base64.getEncoder().encodeToString(bytes);
+    }
+
+    @DynamicPropertySource
+    static void registerMemoryEncryptionKey(DynamicPropertyRegistry properties) {
+        properties.add("aetheris.memory.master-key-b64", () -> EPHEMERAL_MASTER_KEY_B64);
+    }
+
+    @Test
+    void testEncryptionKeyIsConfiguredWith256BitsOfEphemeralMaterial() {
+        assertThat(Base64.getDecoder().decode(EPHEMERAL_MASTER_KEY_B64)).hasSize(32);
+    }
+
     @Autowired DurableMemoryService memory;
     @Autowired MemoryRecordRepository repository;
 
