@@ -1,0 +1,67 @@
+name: Enterprise E6 W2 Deterministic Multipage Website - Review Only
+on:
+  pull_request:
+    branches:
+      - feat/e6-original-complex-web-experience-contract-20261101
+    paths:
+      - '.github/workflows/runtime-e6-w2-multipage.yml'
+      - 'docs/runtime/E6_ORIGINAL_COMPLEX_WEB_EXPERIENCE_CAPABILITY_20261101.md'
+      - 'tools/enterprise/e6_studio/next-studio/w2_*'
+      - 'tools/enterprise/e6_studio/next-studio/experience_contract.mjs'
+permissions:
+  contents: read
+jobs:
+  actual-generated-site-browser-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact proposed head with no persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: W1 + W2 strict source tests
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          cd tools/enterprise/e6_studio/next-studio
+          node --check w2_compiler.mjs
+          node --check w2_site_assets.mjs
+          node --check w2_generate_demo.mjs
+          node --check w2_browser_proof.mjs
+          node --test test_experience_contract.mjs test_w2_compiler.mjs
+          node w2_generate_demo.mjs
+          test -f target/e6-w2-multipage-site/index.html
+          test -f target/e6-w2-multipage-site/work/index.html
+          test -f target/e6-w2-multipage-site/contact/index.html
+          test -f target/e6-w2-multipage-site/build-evidence.json
+          if node w2_generate_demo.mjs; then
+            echo "UNSAFE: W2 generator unexpectedly overwrote output"
+            exit 1
+          fi
+          echo E6_W2_LOCAL_COMPILER_NO_PRODUCTION_AUTHORIZATION
+      - name: Locked inherited Next research typecheck and static export
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          python3 scripts/validate_dependency_lock.py
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+          NEXT_PUBLIC_E6_BLENDER_PREVIEW=1 npm run build
+          test -f out/blender-preview/index.html
+      - name: Install pinned test-only browser harness
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Real Chromium generated multi-page desktop mobile and reduced motion
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          node w2_browser_proof.mjs
+          echo E6_W2_CHROMIUM_PREVIEW_ONLY_STAGE45_NO_GO

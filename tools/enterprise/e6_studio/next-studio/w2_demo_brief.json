@@ -1,0 +1,208 @@
+{
+  "brief": {
+    "version": 1,
+    "projectSlug": "morrowline-studio-demo",
+    "siteProfile": "creative-studio",
+    "pages": [
+      {
+        "path": "/",
+        "sections": [
+          {
+            "id": "introduction",
+            "kind": "hero",
+            "motion": "micro",
+            "fallback": "static",
+            "assetSource": "none"
+          },
+          {
+            "id": "philosophy",
+            "kind": "editorial",
+            "motion": "none",
+            "fallback": "none",
+            "assetSource": "none"
+          },
+          {
+            "id": "disciplines",
+            "kind": "services",
+            "motion": "none",
+            "fallback": "none",
+            "assetSource": "none"
+          }
+        ]
+      },
+      {
+        "path": "/work",
+        "sections": [
+          {
+            "id": "work-intro",
+            "kind": "hero",
+            "motion": "none",
+            "fallback": "none",
+            "assetSource": "none"
+          },
+          {
+            "id": "selected-studies",
+            "kind": "gallery",
+            "motion": "none",
+            "fallback": "none",
+            "assetSource": "none"
+          }
+        ]
+      },
+      {
+        "path": "/contact",
+        "sections": [
+          {
+            "id": "hello",
+            "kind": "hero",
+            "motion": "none",
+            "fallback": "none",
+            "assetSource": "none"
+          },
+          {
+            "id": "inquiry",
+            "kind": "contact",
+            "motion": "none",
+            "fallback": "none",
+            "assetSource": "none"
+          }
+        ]
+      }
+    ]
+  },
+  "content": {
+    "siteName": "Morrowline Studio",
+    "siteDescription": "A fictional independent design studio demonstration, built to test original multi-page website delivery.",
+    "contactEmail": "studio@example.com",
+    "pages": [
+      {
+        "path": "/",
+        "navLabel": "Home",
+        "sections": [
+          {
+            "id": "introduction",
+            "eyebrow": "Independent design practice",
+            "title": "Made to mean something.",
+            "body": "We shape identities and digital experiences around the things people genuinely need, with a measured blend of imagination and intent.",
+            "items": [],
+            "ctaLabel": "View selected work",
+            "ctaPath": "/work"
+          },
+          {
+            "id": "philosophy",
+            "eyebrow": "The point of view",
+            "title": "Clarity is a creative act.",
+            "body": "The best ideas do not compete for attention. They make complexity feel intuitive, give each detail a purpose, and leave room for the audience.",
+            "items": [],
+            "ctaLabel": "Start a conversation",
+            "ctaPath": "/contact"
+          },
+          {
+            "id": "disciplines",
+            "eyebrow": "What we explore",
+            "title": "Thoughtful work across disciplines.",
+            "body": "Every project starts with a question worth answering. Our approach joins strategy, visual language and technical care.",
+            "items": [
+              {
+                "title": "Visual identity",
+                "body": "Distinctive systems built from a clear story and a considered visual point of view.",
+                "category": "identity"
+              },
+              {
+                "title": "Digital presence",
+                "body": "Responsive, accessible experiences that make exploration simple and meaningful.",
+                "category": "digital"
+              },
+              {
+                "title": "Space and narrative",
+                "body": "Physical and spatial narratives shaped through material, light and interaction.",
+                "category": "spatial"
+              }
+            ],
+            "ctaLabel": "Discuss a project",
+            "ctaPath": "/contact"
+          }
+        ]
+      },
+      {
+        "path": "/work",
+        "navLabel": "Work",
+        "sections": [
+          {
+            "id": "work-intro",
+            "eyebrow": "Selected explorations",
+            "title": "Different questions. Distinct answers.",
+            "body": "These fictional concept studies demonstrate content structure, categorization and interactive browsing. They are not client commissions.",
+            "items": [],
+            "ctaLabel": "Get in touch",
+            "ctaPath": "/contact"
+          },
+          {
+            "id": "selected-studies",
+            "eyebrow": "Concept index",
+            "title": "Studies in form and function.",
+            "body": "Use the category controls to explore six original hypothetical project directions. All studies are illustrative and make no client claims.",
+            "items": [
+              {
+                "title": "Quiet Signals",
+                "body": "A quieter visual system for complex industrial information.",
+                "category": "identity"
+              },
+              {
+                "title": "Open Ledger",
+                "body": "A legible interface exploration for transparent reporting.",
+                "category": "digital"
+              },
+              {
+                "title": "Stone and Air",
+                "body": "Material-led spatial wayfinding for a shared cultural venue.",
+                "category": "spatial"
+              },
+              {
+                "title": "Common Ground",
+                "body": "An identity language for community-oriented learning.",
+                "category": "identity"
+              },
+              {
+                "title": "Fieldwork Atlas",
+                "body": "A mobile-first information hierarchy for outdoor education.",
+                "category": "digital"
+              },
+              {
+                "title": "Between Rooms",
+                "body": "A speculative exhibition narrative using rhythm and scale.",
+                "category": "spatial"
+              }
+            ],
+            "ctaLabel": "Talk about a brief",
+            "ctaPath": "/contact"
+          }
+        ]
+      },
+      {
+        "path": "/contact",
+        "navLabel": "Contact",
+        "sections": [
+          {
+            "id": "hello",
+            "eyebrow": "New conversations",
+            "title": "Something worthwhile starts here.",
+            "body": "Share an idea, a challenge, or the beginning of a question. This page is a self-contained technical demonstration, not a live agency.",
+            "items": [],
+            "ctaLabel": "Explore work",
+            "ctaPath": "/work"
+          },
+          {
+            "id": "inquiry",
+            "eyebrow": "An introduction",
+            "title": "Tell us what you have in mind.",
+            "body": "The form checks your inputs and prepares an email in your local mail application. It never sends or stores messages on this website.",
+            "items": [],
+            "ctaLabel": "",
+            "ctaPath": ""
+          }
+        ]
+      }
+    ]
+  }
+}
