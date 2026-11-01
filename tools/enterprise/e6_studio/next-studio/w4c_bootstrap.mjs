@@ -40,7 +40,7 @@ if(root){
       state.textContent='Optional 3D unavailable. Static Blender render remains accessible.';
     }
   };
-  activate.addEventListener('click',use3D,{once:true});
+  activate.addEventListener('click',use3D);
   reduce.addEventListener('change',ready);
   ready();
 }
