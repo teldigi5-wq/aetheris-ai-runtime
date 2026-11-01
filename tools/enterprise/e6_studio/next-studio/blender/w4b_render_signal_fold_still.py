@@ -93,6 +93,11 @@ def main():
     scene.render.engine="CYCLES"
     scene.cycles.device="CPU"
     scene.cycles.samples=16
+    # Ubuntu Noble Blender 4.0.2 has no OpenImageDenoiser; CPU output is
+    # intentionally raw-sampled and never claims photographic certification.
+    for view_layer in scene.view_layers:
+        if hasattr(view_layer, "cycles"):
+            view_layer.cycles.use_denoising=False
     scene.render.resolution_x=800
     scene.render.resolution_y=900
     scene.render.resolution_percentage=100
