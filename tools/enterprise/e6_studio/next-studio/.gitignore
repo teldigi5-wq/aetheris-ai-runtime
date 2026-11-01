@@ -6,3 +6,4 @@ public/research-panel.glb
 public/research-panel-manifest.json
 *.log
 public/e6-blender-preview.glb
+target/
