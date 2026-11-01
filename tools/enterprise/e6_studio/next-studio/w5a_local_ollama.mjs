@@ -10,7 +10,9 @@ import {validateOwnerBrief,compileModelProposedSite} from './w5a_model_design_co
 const here=dirname(fileURLToPath(import.meta.url));
 const sha=x=>createHash('sha256').update(x,'utf8').digest('hex');
 const fail=x=>{throw Error('E6_W5A_'+x);};
-const MODEL_PATTERN=/^[a-z0-9][a-z0-9._:/-]{0,79}$/;
+// Ollama names use at most one namespace / segment and optional :tag;
+ // a URL-shaped string with :// is never a valid model identifier.
+const MODEL_PATTERN=/^(?=.{1,80}$)[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)?(?::[a-z0-9][a-z0-9._-]*)?$/;
 export function buildPrompt(brief){
   validateOwnerBrief(brief);
   return [
