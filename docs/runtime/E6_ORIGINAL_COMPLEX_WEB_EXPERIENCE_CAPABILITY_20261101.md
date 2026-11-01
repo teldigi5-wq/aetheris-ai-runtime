@@ -61,3 +61,30 @@ On PR #251, native Chrome owner tests showed severe layout shifts during automat
 - Preview only until explicit user review, production permission and all external Stage45 gates.
 
 **Release state: Task7 unfinished · Task8 unfinished · Stage45 NO_GO. No protected-main merge or deployment.**
+
+## 1 November 2026 — W2-A implementation branch (separate draft; NOT W2 completion)
+
+Branch: `feat/e6-w2-deterministic-multipage-compiler-20261101`, stacked on Runtime PR #255's exact W1 contract commit `42ba023e217f98bebbba57983d458b18cf3017e2`.
+
+This first W2 delivery slice builds an **actual standalone static, multi-page demonstration site** from the **validated W1 plan** and a separate explicit, local-only copy manifest. It does **not** turn text prompts into generated original code; the fictional Morrowline Studio copy and visual language are deliberately human-authored reference material. Its honest category is `E6_W2_DETERMINISTIC_STATIC_SITE_V1`, not autonomous AI or production website generation.
+
+- Pure zero-dependency Node 22 compiler: `tools/enterprise/e6_studio/next-studio/w2_compiler.mjs`.
+- Fixed, explicitly reviewed sample: `w2_demo_brief.json` with Home, Work and Contact routes; `w2_generate_demo.mjs` outputs nested index HTML files and local CSS/JS without overwriting an existing directory.
+- Real semantic HTML, responsive original CSS, locally working route links and keyboard-operable project filters; contact form validates locally and **only opens a mailto draft** after user action. No outbound form submission, server or customer-data ingestion.
+- W1 route/shape limits inherited. Additional strict text, structure, CTA, email, item and category validation; user content escaped before HTML; no arbitrary scripts/assets/remote URLs, path traversal, directory overwrite or background command execution.
+- **Media/3D fail closed:** any requested media requiring provenance, licensed assets or scene3d is rejected at W2-A. Later W3/W4 must deliver the proven media/scene pipeline; the current output uses locally authored CSS artwork with no remote images or WebGL.
+- Deterministic output and SHA-256 manifest contain explicit `genuineModelAuthorshipProven=false`, `realBrowserVerified=false` (in the compiler output), `ownerApproved=false`, `deploymentAuthorized=false`, `stage45Go=false`, `releaseGo=false`.
+- Unit, negative and security tests plus actual headless Chromium desktop/mobile/reduced-motion navigation, filtering and form-state checks are required in `.github/workflows/runtime-e6-w2-multipage.yml`. Status must be read from actual exact-HEAD CI; no preemptive test success claims.
+
+Local preview (on a trusted isolated clone of the W2 branch, Node 22 and Python 3):
+```bash
+cd tools/enterprise/e6_studio/next-studio
+node --test test_experience_contract.mjs test_w2_compiler.mjs
+node w2_generate_demo.mjs
+python3 -m http.server 8765 --bind 127.0.0.1 --directory target/e6-w2-multipage-site
+# Open http://127.0.0.1:8765/ (and /work/, /contact/)
+```
+
+The preview target is intentionally write-once. Preserve any earlier locally generated output instead of blindly deleting it. No public URL or production deployment is authorized.
+
+**Remaining W2 slices:** expand from this bounded reference to independently reviewed original briefs and suitable rights-tracked local assets, full content and interaction configurations, multi-brief site-generation integration, browser/assistive-technology QA and independent human design review. This narrow slice alone is **W2-A implemented candidate, W2 overall incomplete**. W3–W6, E3–E5 genuine-model generalization, E6 Task 7/8 and all Stage45/physical/security gates remain open.
