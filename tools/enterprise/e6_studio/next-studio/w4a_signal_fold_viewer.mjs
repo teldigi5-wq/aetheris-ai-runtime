@@ -30,6 +30,7 @@ if(root){
     const width=Math.max(1,viewport.clientWidth),height=Math.max(1,viewport.clientHeight);
     renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));
     renderer.setSize(width,height,false);
+    camera.aspect=width/height;
     const t=progress;
     const angle=-.55+t*1.65;
     camera.position.set(Math.sin(angle)*3.7,1.9-t*.7,Math.cos(angle)*3.7);
@@ -135,7 +136,7 @@ if(root){
       cleanup();fallback.hidden=false;viewport.hidden=true;
       activate.hidden=true;pause.hidden=true;
       setState('reduced-static','Reduced-motion static presentation. No GPU scene required.');
-    }else if(root.dataset.engine==='reduced-static'){
+    }else if(root.dataset.engine==='reduced-static'||root.dataset.engine==='static-ready'){
       activate.hidden=false;pause.hidden=false;
       setState('static-ready','Static presentation. Optional 3D can be activated.');
     }
