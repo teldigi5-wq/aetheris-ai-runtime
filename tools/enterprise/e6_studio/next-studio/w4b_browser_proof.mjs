@@ -65,7 +65,7 @@ async function inspect(config){
   assert.equal(modelRequests.length,0,'Model must not preload');
   const back=page.locator('[data-w4a-fallback]');
   assert.equal(await back.count(),1);
-  assert.equal(await back.evaluate(el=>getComputedStyle(el).backgroundImage.includes(stillPath)),true,
+  assert.equal(await back.evaluate(el=>getComputedStyle(el).backgroundImage.includes('signal-fold-reference.png')),true,
     'Static fallback must use actual local Blender studio still');
   const reference=await page.request.get(origin+stillPath);
   assert.equal(reference.status(),200);
