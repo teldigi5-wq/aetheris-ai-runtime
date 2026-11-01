@@ -1,0 +1,111 @@
+name: Enterprise E6 W3-A Source Bound Blender Asset - Review Only
+on:
+  pull_request:
+    branches:
+      - feat/e6-w2c-storytelling-case-study-pages-20261101
+    paths:
+      - '.github/workflows/runtime-e6-w3a-provenance.yml'
+      - 'tools/enterprise/e6_studio/next-studio/w3a_*'
+      - 'tools/enterprise/e6_studio/next-studio/test_w3a_*'
+      - 'docs/runtime/E6_W3A_PROVENANCE_BRIDGE_20261101.md'
+permissions:
+  contents: read
+jobs:
+  blender-source-proof-and-isolated-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - name: Read-only exact PR head checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Pin system Python for source policy
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Verify exact proposed commit and inherited source checks
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          python3 -m unittest discover -s tools/enterprise/e6_studio -p 'test_e6_blender_source.py' -v
+          python3 -m unittest discover -s tools/enterprise/e6_studio -p 'test_e6_glb_optimize.py' -v
+          cd tools/enterprise/e6_studio/next-studio
+          python3 -m py_compile w3a_stage_provenance.py test_w3a_asset_provenance.py
+          node --check w3a_browser_proof.mjs
+          node --test test_experience_contract.mjs test_w2_compiler.mjs test_w2b_curated_compiler.mjs test_w2c_narrative_compiler.mjs
+          node w2c_generate_preview.mjs
+          test -f target/e6-w2c-arcloom/studies/signal-fold/index.html
+      - name: Signed Ubuntu Noble Blender 4.0.2 plus system NumPy
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y 'blender=4.0.2+dfsg-1ubuntu8' python3-numpy
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python-expr 'import numpy; print("E6_W3A_ORIGINAL_BLENDER_REVIEWED_VERSION", numpy.__version__)'
+      - name: Generate original Blender source and geometry-equivalent optimized GLB
+        run: |
+          set -euo pipefail
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/author_command_module.py
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/export_no_uv_candidate.py
+          python3 tools/enterprise/e6_studio/next-studio/blender/compare_glb_variants.py
+          python3 tools/enterprise/e6_studio/next-studio/blender/verify_detailed_module.py
+          test -f target/e6-studio/blender-proof/aetheris-command-module.blend
+          test -f target/e6-studio/blender-proof/enhanced-module-detail.json
+      - name: Reject tampering, forged permissions, unsafe paths and repeat stages
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          python3 -m unittest -v test_w3a_asset_provenance
+          python3 w3a_stage_provenance.py
+          test -f target/e6-w3a-arcloom/assets/aetheris-command-module-no-uv.glb
+          test -f target/e6-w3a-arcloom/asset-lab/index.html
+          test -f target/e6-w3a-arcloom/studies/signal-fold/index.html
+          if python3 w3a_stage_provenance.py; then
+            echo 'UNSAFE: W3-A overwrote staged GLB or preview'
+            exit 1
+          fi
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          base=Path("target/e6-w3a-arcloom")
+          p=json.loads((base/"assets/w3a-provenance.json").read_text())
+          assert hashlib.sha256((base/"assets/aetheris-command-module-no-uv.glb").read_bytes()).hexdigest()==p["stagedGlbSha256"]
+          assert p["releaseGo"] is False and p["renderedInW2Pages"] is False
+          assert p["stage45Go"] is False and p["physicalGpuMeasured"] is False
+          print("E6_W3A_SOURCE_AND_ASSET_BOUND_STAGE_PASS")
+          PY
+      - name: Preserve inherited Next.js locked research typecheck and build
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          python3 scripts/validate_dependency_lock.py
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+          NEXT_PUBLIC_E6_BLENDER_PREVIEW=1 npm run build
+          test -f out/blender-preview/index.html
+      - name: Install pinned test-only Chromium
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Verify actual local asset-lab, bytes and mobile/desktop without WebGL claims
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          node w3a_browser_proof.mjs
+          echo E6_W3A_NO_DEPLOY_NO_PRODUCTION_ASSET_CLAIM
+      - name: Retain only temporary local research evidence for audit
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e6-w3a-original-blender-asset-research-not-release
+          path: |
+            target/e6-studio/blender-proof/
+            tools/enterprise/e6_studio/next-studio/target/e6-w3a-arcloom/assets/
+          if-no-files-found: warn
+          retention-days: 7
