@@ -48,7 +48,11 @@ public final class RuntimeUncertifiedApiHttpFilter extends OncePerRequestFilter 
         String context = request.getContextPath();
         String relative = raw != null && context != null
             && raw.startsWith(context) ? raw.substring(context.length()) : raw;
+        // In alternate servlet mappings the decoded application route may
+        // be carried by pathInfo while servletPath is empty or a mount prefix.
+        // Neither percent-encoded raw URIs nor proxy rewrites may hide it.
         if (quarantinedPath(request.getServletPath())
+                || quarantinedPath(request.getPathInfo())
                 || quarantinedPath(relative)) {
             response.setHeader("Cache-Control", "no-store");
             response.setHeader("X-Content-Type-Options", "nosniff");
