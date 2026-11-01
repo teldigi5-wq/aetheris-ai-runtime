@@ -38,6 +38,7 @@ jobs:
           node --check w4b_cinematic_viewer.mjs
           node --check w4b_stage_cinematic.mjs
           node --check w4b_browser_proof.mjs
+          node --check test_w4b_art_direction.mjs
           node --test test_experience_contract.mjs test_w2_compiler.mjs test_w2b_curated_compiler.mjs test_w2c_narrative_compiler.mjs
           node w2c_generate_preview.mjs
       - name: Install reviewed Blender and local NumPy
