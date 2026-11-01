@@ -1,0 +1,33 @@
+/* E6 W4-A original concept viewer; this CSS exists only in isolated W4-A preview. */
+.signal-stage{background:#151c23;color:#f8f6f0;padding:clamp(2rem,6vw,7rem) max(1.25rem,calc((100vw - 1320px)/2));overflow:clip;position:relative;min-height:95svh}
+.signal-stage__intro{display:flex;align-items:start;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:clamp(1.75rem,4vw,5rem)}
+.signal-stage__intro .eyebrow{color:#f09c82}
+.signal-stage__intro h2{color:#f8f6f0;max-width:16ch;font-size:clamp(3rem,6vw,6.8rem)}
+.signal-stage__eyebrow{font-size:.71rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#e3a99c}
+.signal-stage__edition{font:700 .75rem/1.6 system-ui,sans-serif;color:#d5d6d0;letter-spacing:.15em}
+.signal-stage__grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(15rem,.65fr);gap:clamp(1.5rem,4vw,5rem);align-items:center}
+.signal-stage__canvas-shell{aspect-ratio:1.12;min-height:18rem;max-height:75svh;position:relative;overflow:hidden;background:#202b32;border:1px solid #52636a;isolation:isolate}
+.signal-stage__canvas-shell:before{content:"";position:absolute;inset:7%;border:1px solid #586772;pointer-events:none;z-index:2}
+.signal-stage__canvas{width:100%;height:100%;position:absolute;inset:0}
+.signal-stage__canvas canvas{display:block;width:100%;height:100%;object-fit:contain}
+.signal-stage__silhouette{position:absolute;inset:0;display:grid;place-items:center;background:radial-gradient(ellipse at 58% 35%,#485057,#253139 68%,#1c242b);overflow:hidden}
+.signal-stage__silhouette:before{content:"";width:50%;height:28%;background:#a7adae;transform:skewY(-15deg) rotate(-18deg);box-shadow:1.2rem 1.2rem 0 #101d25;border-radius:1rem}
+.signal-stage__silhouette:after{content:"CONCEPT STUDY · STATIC REFERENCE";position:absolute;bottom:1.5rem;left:1.3rem;letter-spacing:.18em;font-size:.65rem;color:#f4f2ed}
+.signal-stage__details{max-width:35ch;min-width:0}
+.signal-stage__details p{font-size:clamp(1rem,1.4vw,1.22rem);line-height:1.8;color:#d3d6d4}
+.signal-stage__details h3{font-size:clamp(2rem,3.2vw,3.4rem);color:#fff}
+.signal-stage__details .eyebrow{color:#ec9f8c}
+.signal-stage__actions{display:flex;flex-wrap:wrap;gap:.85rem;margin:1.5rem 0}
+.signal-stage__actions button{font:700 .75rem/1.3 system-ui,sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#fff;background:transparent;border:1px solid #e3aea1;padding:.95rem 1.2rem;cursor:pointer}
+.signal-stage__actions button:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.signal-stage__actions button:disabled{opacity:.55;cursor:default}
+.signal-stage__actions button[hidden]{display:none}
+.signal-stage__proof{font-size:.76rem!important;color:#aebcbf!important}
+.signal-stage__state{min-height:3rem;color:#efc3b7!important;font-size:.85rem!important}
+.signal-stage__canvas[hidden],.signal-stage__silhouette[hidden]{display:none!important}
+.signal-stage__notes{border-top:1px solid #5a6870;margin-top:clamp(2.5rem,6vw,5rem);padding-top:1.5rem;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}
+.signal-stage__notes div{max-width:24rem}.signal-stage__notes strong{display:block;font:400 clamp(1.25rem,2vw,2.2rem)/1.2 Georgia,serif;color:#fff}
+.signal-stage__notes p{font-size:.86rem;color:#d3d6d4}
+@media(max-width:900px){.signal-stage__grid{grid-template-columns:1fr}.signal-stage__canvas-shell{max-height:65svh}.signal-stage__details{max-width:55ch}}
+@media(max-width:680px){.signal-stage{padding:3.5rem 1.25rem}.signal-stage__canvas-shell{min-height:15rem;aspect-ratio:1}.signal-stage__notes{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.signal-stage *{animation:none!important;transition:none!important}}
