@@ -45,7 +45,8 @@ def build():
     preflight()
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete(use_global=False)
-    bpy.data.materials.clear()
+    # Existing unused factory materials are harmless; do not call a Blender
+    # collection.clear() API that is absent on the reviewed 4.0.2 build.
 
     def material(name, rgba, metallic, roughness):
         m = bpy.data.materials.new(name=name)
