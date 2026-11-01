@@ -39,8 +39,8 @@ jobs:
           from pathlib import Path
           import re
           text = Path("aetheris-quant/requirements.lock.txt").read_text()
-          expected = re.findall(r"(?m)^certifi==2026\\.10\\.23(?: \\\\)?$", text)
-          if len(expected) != 1:
+          expected = [line for line in text.splitlines() if line.startswith("certifi==")]
+          if len(expected) != 1 or not expected[0].startswith("certifi==2026.10.23 "):
               raise SystemExit("Expected exactly one patched certifi lock entry")
           packages = re.findall(r"(?m)^([A-Za-z0-9_.-]+)==([A-Za-z0-9_.+-]+)", text)
           print(f"Hashed lock regenerated: total_packages={len(packages)}")
