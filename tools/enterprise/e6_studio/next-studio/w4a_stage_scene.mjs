@@ -64,7 +64,7 @@ async function main(){
   const outfile=join(target,'assets/signal-fold-scene.mjs');
   await esbuild.build({entryPoints:[join(here,'w4a_signal_fold_viewer.mjs')],
     outfile,bundle:true,format:'esm',platform:'browser',target:['es2022'],
-    minify:true,sourcemap:false,metafile:true,legalComments:'none',logLevel:'warning'});
+    minify:true,sourcemap:false,metafile:true,legalComments:'inline',logLevel:'warning'});
   const bundle=await readFile(outfile);
   if(bundle.length>1_000_000)die('BUNDLE_TOO_LARGE');
   const result={
