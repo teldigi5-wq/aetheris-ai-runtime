@@ -1,0 +1,48 @@
+{
+  "kind": "E6_W5B_HELDOUT_FICTIONAL_BRIEFS_V1",
+  "author": "HUMAN_DEFINED_EVAL_ONLY",
+  "briefs": [
+    {
+      "version": 1,
+      "projectSlug": "quiet-heat-ceramic-library",
+      "siteProfile": "product",
+      "audience": "Fictional architectural librarians and material students interested in speculative ceramic surfaces and thermal tactility.",
+      "purpose": "Present a conceptual collection of handcrafted-looking ceramic reading objects that helps visitors understand imaginary material choices without claiming commercial products or tests.",
+      "fictional": true,
+      "constraints": [
+        "Invent original product-study language without asserting actual manufactured objects, customers or performance measurements.",
+        "Make legible editorial pages with thoughtful restrained art direction, responsive navigation and no remote images.",
+        "Differentiate this fictional material library from both Arcloom objects and the coastal listening sample.",
+        "No live forms, payments, external references or fabricated professional endorsements."
+      ]
+    },
+    {
+      "version": 1,
+      "projectSlug": "afterlight-mapping-atelier",
+      "siteProfile": "agency",
+      "audience": "Imaginary night-walk curators, civic spatial-design students and public-realm storytellers seeking careful mapping narratives.",
+      "purpose": "Design an independent fictional atelier identity about observing nighttime routes and making speculative public-space mapping stories without implying physical installations.",
+      "fictional": true,
+      "constraints": [
+        "Do not claim real maps, deployed sensors, clients, awards, publications, or actual civic commissions.",
+        "Prioritize accessible hierarchy and memorable original verbal identity instead of stock tech graphics.",
+        "Allow a coherent high-contrast color system appropriate for nocturnal subject matter.",
+        "Do not request location data, tracking, signup information or external network services."
+      ]
+    },
+    {
+      "version": 1,
+      "projectSlug": "paper-migration-journal",
+      "siteProfile": "portfolio",
+      "audience": "Imaginary bookbinding graduates, printmaking educators and creative editors exploring experimental paper-folding storytelling.",
+      "purpose": "Create a fictional research portfolio of conceptual folded-paper narratives, with compelling editorial language and an original visual direction that can be understood without images.",
+      "fictional": true,
+      "constraints": [
+        "All authors, artworks and artifacts are hypothetical research and must never be portrayed as commercial achievements.",
+        "Keep the visual voice typographic and distinct from the other two held-out brands.",
+        "Maintain good text contrast, meaningful page titles and mobile-friendly static navigation.",
+        "Use no user-data collection, external links, arbitrary code, script execution or client testimonials."
+      ]
+    }
+  ]
+}
