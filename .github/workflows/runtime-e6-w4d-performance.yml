@@ -1,0 +1,154 @@
+name: Enterprise E6 W4-D Software Performance Evidence - Review Only
+on:
+  pull_request:
+    branches:
+      - feat/e6-w4c-progressive-cinematic-budget-20261101
+    paths:
+      - '.github/workflows/runtime-e6-w4d-performance.yml'
+      - 'tools/enterprise/e6_studio/next-studio/w4d_*'
+      - 'tools/enterprise/e6_studio/next-studio/test_w4d_*'
+      - 'docs/runtime/E6_W4D_PERFORMANCE_ACCEPTANCE_20261101.md'
+      - 'docs/runtime/E6_W4D_OWNER_DEVICE_REVIEW_TEMPLATE.md'
+permissions:
+  contents: read
+jobs:
+  verified-cycles-still-camera-snapshots-and-fallbacks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 85
+    steps:
+      - name: Read-only checkout of exact W4-D HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Source checks and inherited deterministic web contracts
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          cd tools/enterprise/e6_studio/next-studio
+          python3 -m py_compile blender/w4b_render_signal_fold_still.py
+          node --check w4b_cinematic_viewer.mjs
+          node --check w4b_stage_cinematic.mjs
+          node --check w4b_browser_proof.mjs
+          node --check test_w4b_art_direction.mjs
+          node --check w4c_bootstrap.mjs
+          node --check w4c_demand_viewer.mjs
+          node --check w4c_stage_progressive.mjs
+          node --check w4c_browser_proof.mjs
+          node --check test_w4c_progressive.mjs
+          node --check w4d_evidence_contract.mjs
+          node --check w4d_run_browser_audit.mjs
+          node --check test_w4d_evidence_contract.mjs
+          node --test test_w4d_evidence_contract.mjs
+          python3 -m py_compile blender/w4c_render_signal_fold_still.py
+          node --test test_experience_contract.mjs test_w2_compiler.mjs test_w2b_curated_compiler.mjs test_w2c_narrative_compiler.mjs
+          node w2c_generate_preview.mjs
+      - name: Install reviewed Blender and local NumPy
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y 'blender=4.0.2+dfsg-1ubuntu8' python3-numpy
+      - name: Regenerate original W3-A and W3-B provenance chain
+        run: |
+          set -euo pipefail
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/author_command_module.py
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/export_no_uv_candidate.py
+          python3 tools/enterprise/e6_studio/next-studio/blender/compare_glb_variants.py
+          python3 tools/enterprise/e6_studio/next-studio/blender/verify_detailed_module.py
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/w3b_author_signal_fold.py
+          cd tools/enterprise/e6_studio/next-studio
+          python3 w3a_stage_provenance.py
+          python3 -m unittest -v test_w3a_asset_provenance test_w3b_signal_fold
+          python3 w3b_verify_signal_fold.py
+          python3 w3b_stage_signal_fold.py
+      - name: Generate true original-product Blender Cycles CPU photographic study
+        run: |
+          set -euo pipefail
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/w4b_render_signal_fold_still.py
+          test -s target/e6-studio/w4b-signal-fold/signal-fold-still.png
+          test -s target/e6-studio/w4b-signal-fold/signal-fold-still.provenance.json
+          echo E6_W4B_ACTUAL_BLENDER_CPU_STILL_RENDERED
+      - name: Re-render original W3-B source at 48 CPU Cycles samples
+        run: |
+          set -euo pipefail
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/w4c_render_signal_fold_still.py
+          test -s target/e6-studio/w4c-signal-fold/signal-fold-still.png
+          test -s target/e6-studio/w4c-signal-fold/signal-fold-still.provenance.json
+          echo E6_W4C_REAL_48_SAMPLE_STILL_RENDERED
+      - name: Locked Next.js build and pinned local preview bundler
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          python3 scripts/validate_dependency_lock.py
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+          NEXT_PUBLIC_E6_BLENDER_PREVIEW=1 npm run build
+          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund esbuild@0.25.12
+      - name: Stage W4-A first, then new isolated W4-B and enforce integrity
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          node w4a_stage_scene.mjs
+          node --test test_w4a_scene.mjs
+          node w4b_stage_cinematic.mjs
+          node --test test_w4b_art_direction.mjs
+          if node w4b_stage_cinematic.mjs; then
+            echo 'UNSAFE W4-B REPEATED WRITE'
+            exit 1
+          fi
+          test -s target/e6-w4b-arcloom/assets/signal-fold-reference.png
+          test -s target/e6-w4a-arcloom/studies/signal-fold/index.html
+          echo E6_W4B_STAGED_WITH_NO_OVERWRITE
+      - name: Stage isolated progressive W4-C and enforce initial payload bounds
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          node w4c_stage_progressive.mjs
+          node --test test_w4c_progressive.mjs
+          if node w4c_stage_progressive.mjs; then
+            echo 'UNSAFE: W4-C overwrote its earlier preview'
+            exit 1
+          fi
+          test -s target/e6-w4c-arcloom/assets/signal-fold-bootstrap.mjs
+          test -s target/e6-w4c-arcloom/assets/signal-fold-engine.mjs
+          test -s target/e6-w4c-arcloom/assets/signal-fold-refined.png
+          echo E6_W4C_LAZY_MODULE_BUDGET_AND_NO_OVERWRITE_PASS
+      - name: Pin local Chromium browser harness
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Real software WebGL frames, tamper rejection and static fallbacks
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          node w4a_browser_proof.mjs
+          node w4b_browser_proof.mjs
+          node w4c_browser_proof.mjs
+          node w4d_run_browser_audit.mjs
+          test -s ../../../../target/e6-studio/w4d-browser-evidence/w4d-software-browser-evidence.json
+          echo E6_W4D_SWIFTSHADER_IS_NOT_PHYSICAL_GPU_OR_FIELD_CWV
+      - name: Retain only short-lived research stills, screenshots and evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e6-w4d-sw-browser-acceptance-not-owner-certified
+          path: |
+            target/e6-studio/w4b-signal-fold/
+            target/e6-studio/w4b-visual-evidence/
+            target/e6-studio/w4c-signal-fold/
+            target/e6-studio/w4c-visual-evidence/
+            target/e6-studio/w4d-browser-evidence/
+            tools/enterprise/e6_studio/next-studio/target/e6-w4b-arcloom/assets/w4b-art-direction-evidence.json
+            tools/enterprise/e6_studio/next-studio/target/e6-w4c-arcloom/assets/w4c-performance-evidence.json
+          retention-days: 7
+          if-no-files-found: warn
