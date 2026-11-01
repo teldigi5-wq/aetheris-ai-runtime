@@ -1,0 +1,107 @@
+name: Enterprise E6 W3-B Brand-specific Blender Asset - Review Only
+on:
+  pull_request:
+    branches:
+      - feat/e6-w3a-provenance-gated-blender-asset-20261101
+    paths:
+      - '.github/workflows/runtime-e6-w3b-signal-fold.yml'
+      - 'tools/enterprise/e6_studio/next-studio/blender/w3b_*'
+      - 'tools/enterprise/e6_studio/next-studio/w3b_*'
+      - 'tools/enterprise/e6_studio/next-studio/test_w3b_*'
+      - 'docs/runtime/E6_W3B_SIGNAL_FOLD_20261101.md'
+permissions:
+  contents: read
+jobs:
+  original-signal-fold-source-and-local-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact W3-B head, no persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Pin Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Pin Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Exact-head source and inherited website compiler tests
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          cd tools/enterprise/e6_studio/next-studio
+          python3 -m py_compile blender/w3b_author_signal_fold.py w3b_verify_signal_fold.py w3b_stage_signal_fold.py test_w3b_signal_fold.py
+          node --check w3b_browser_proof.mjs
+          node --test test_experience_contract.mjs test_w2_compiler.mjs test_w2b_curated_compiler.mjs test_w2c_narrative_compiler.mjs
+          node w2c_generate_preview.mjs
+      - name: Install reviewed Ubuntu Blender 4.0.2 and system NumPy
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y 'blender=4.0.2+dfsg-1ubuntu8' python3-numpy
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python-expr 'import numpy; print("E6_W3B_REVIEWED_BLENDER_NUMPY", numpy.__version__)'
+      - name: Rebuild preexisting W3-A Blender source and optimized GLB evidence
+        run: |
+          set -euo pipefail
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/author_command_module.py
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/export_no_uv_candidate.py
+          python3 tools/enterprise/e6_studio/next-studio/blender/compare_glb_variants.py
+          python3 tools/enterprise/e6_studio/next-studio/blender/verify_detailed_module.py
+          python3 tools/enterprise/e6_studio/next-studio/w3a_stage_provenance.py
+      - name: Generate actual original Arcloom Signal Fold Blender source and GLB
+        run: |
+          set -euo pipefail
+          PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/w3b_author_signal_fold.py
+          python3 tools/enterprise/e6_studio/next-studio/w3b_verify_signal_fold.py
+          test -f target/e6-studio/w3b-signal-fold/arcloom-signal-fold.blend
+          test -f target/e6-studio/w3b-signal-fold/arcloom-signal-fold.glb
+      - name: Reject forgery and stage W3-B separately without touching W3-A
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          python3 -m unittest -v test_w3a_asset_provenance
+          python3 -m unittest -v test_w3b_signal_fold
+          python3 w3b_stage_signal_fold.py
+          test -f target/e6-w3b-arcloom/studies/signal-fold/index.html
+          test -f target/e6-w3b-arcloom/assets/arcloom-signal-fold.glb
+          if python3 w3b_stage_signal_fold.py; then
+            echo "UNSAFE: W3-B was able to overwrite the generated preview"
+            exit 1
+          fi
+          echo E6_W3B_ISOLATED_NO_OVERWRITE_PASS
+      - name: Preserve inherited locked Next.js build
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          python3 scripts/validate_dependency_lock.py
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+          NEXT_PUBLIC_E6_BLENDER_PREVIEW=1 npm run build
+          test -f out/blender-preview/index.html
+      - name: Install pinned Playwright software Chromium
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Verify prior asset and new brand GLB SHA in real desktop/mobile Chromium
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          node w3a_browser_proof.mjs
+          node w3b_browser_proof.mjs
+          echo E6_W3B_REVIEW_ONLY_NO_DEPLOY_NO_MODEL_CLAIMS
+      - name: Retain short lived first-party Blender source and evidence for review
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e6-w3b-brand-specific-blender-not-release
+          path: |
+            target/e6-studio/w3b-signal-fold/
+            tools/enterprise/e6_studio/next-studio/target/e6-w3b-arcloom/assets/
+          retention-days: 7
+          if-no-files-found: warn
