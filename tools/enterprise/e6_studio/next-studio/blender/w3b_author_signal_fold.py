@@ -136,6 +136,8 @@ def build():
     print("E6_W3B_BRAND_SPECIFIC_BLENDER_RESEARCH_PASS "+json.dumps(evidence,sort_keys=True))
 
 if __name__ == "__main__":
-    if len(sys.argv) != 1:
+    # Blender includes its own reviewed startup flags in sys.argv. A separate
+    # -- sentinel denotes untrusted script arguments and is always rejected.
+    if "--" in sys.argv:
         raise SystemExit("E6_W3B_NO_ARBITRARY_INPUT_ALLOWED")
     build()
