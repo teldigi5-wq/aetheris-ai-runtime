@@ -77,8 +77,8 @@ def build():
         mod.width = bevel
         mod.segments = 3
         bpy.ops.object.modifier_apply(modifier=mod.name)
-        normal = obj.modifiers.new("Weighted face normals", type="WEIGHTED_NORMAL")
-        bpy.ops.object.modifier_apply(modifier=normal.name)
+        # Bevelled face normals remain explicit; weighted-normal requires
+        # Blender Auto Smooth and is unnecessary for this bounded concept.
         return obj
 
     # A seven-part invented tabletop fold. Each component is mechanically
@@ -96,7 +96,10 @@ def build():
           rubber,.011)
 
     meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
-    names = sorted(m.name for m in bpy.data.materials if m.users)
+    names = sorted({slot.material.name for obj in meshes
+                    for slot in obj.material_slots if slot.material is not None})
+    print("E6_W3B_COMPOSITION_COUNTS "+json.dumps(
+        {"meshCount":len(meshes),"assignedMaterialNames":names},sort_keys=True))
     if len(meshes) != 7 or len(names) != 5:
         raise ValueError("E6_W3B_DESIGN_COMPOSITION_INVALID")
     for o in meshes:
