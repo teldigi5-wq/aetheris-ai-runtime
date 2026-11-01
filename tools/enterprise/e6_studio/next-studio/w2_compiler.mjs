@@ -85,7 +85,7 @@ function card(item, index, filterable) {
     '<div class="card-copy"><p class="meta">' + esc(item.category) + '</p><h3>' + esc(item.title) +
     '</h3><p>' + esc(item.body) + '</p></div></article>';
 }
-function sectionHtml(kind, sec, index) {
+function sectionHtml(kind, sec, index, CONTACT_EMAIL) {
   const id=esc(sec.id), eyebrow=esc(sec.eyebrow), heading=esc(sec.title);
   const intro='<div class="section-heading"><p class="eyebrow">' + eyebrow +
     '</p><h2>' + heading + '</h2><p class="lead">' + esc(sec.body) + '</p></div>';
@@ -96,7 +96,7 @@ function sectionHtml(kind, sec, index) {
     '</p><h1>' + heading + '</h1><p class="hero-lead">' + esc(sec.body) +
     '</p>' + cta + '</div><div class="hero-art" aria-hidden="true"><div class="hero-arc"></div><div class="hero-disc"></div><span class="hero-art-label">FORM / FUNCTION</span></div></section>';
   if (kind === 'contact') return '<section class="section contact-section" id="' + id +
-    '">' + intro + '<form class="contact-form" data-email-compose><label>Name<input name="name" autocomplete="name" required minlength="2" maxlength="80"></label>' +
+    '">' + intro + '<form class="contact-form" data-email-compose data-contact-email="' + esc(CONTACT_EMAIL) + '"><label>Name<input name="name" autocomplete="name" required minlength="2" maxlength="80"></label>' +
     '<label>Email<input name="email" type="email" autocomplete="email" required maxlength="180"></label>' +
     '<label>Message<textarea name="message" required minlength="10" maxlength="1500" rows="5"></textarea></label>' +
     '<button class="button" type="submit">Open email draft <span aria-hidden="true">↗</span></button>' +
@@ -107,7 +107,7 @@ function sectionHtml(kind, sec, index) {
     '<div class="filters" role="group" aria-label="Filter projects">' +
     ['all','identity','digital','spatial'].map(v=>'<button type="button" data-filter="' + v +
     '" aria-pressed="' + (v === 'all' ? 'true' : 'false') + '">' +
-    v.charAt(0).toUpperCase() + v.slice(1) + '</button>').join('') + '</div>' : '';
+    v.charAt(0).toUpperCase() + v.slice(1) + '</button>').join('') + '<p class="visually-hidden" role="status" aria-live="polite" data-filter-status></p></div>' : '';
   const cards = hasCards ? '<div class="' + (buttons ? 'card-grid filter-grid' : 'card-grid') + '">' +
     sec.items.map((item,i)=>card(item,i,Boolean(buttons))).join('') + '</div>' : '';
   return '<section class="section section-' + esc(kind) + '" id="' + id + '">' +
@@ -116,7 +116,7 @@ function sectionHtml(kind, sec, index) {
 }
 function makePage(plan, page, content, nav) {
   const title=page.path === '/' ? content.siteName : nav.get(page.path).navLabel + ' — ' + content.siteName;
-  const sections=plan.sections.map((s,i)=>sectionHtml(s.kind,page.sections[i],i)).join('\n');
+  const sections=plan.sections.map((s,i)=>sectionHtml(s.kind,page.sections[i],i,content.contactEmail)).join('\n');
   const links=Array.from(nav,(entry)=>'<a href="' + routeHref(entry[0]) + '"' +
     (entry[0] === page.path ? ' aria-current="page"' : '') + '>' + esc(entry[1].navLabel) + '</a>').join('');
   return '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">' +
@@ -124,6 +124,7 @@ function makePage(plan, page, content, nav) {
     '<meta name="description" content="' + esc(content.siteDescription) + '">' +
     '<meta name="robots" content="noindex,nofollow">' +
     '<meta name="color-scheme" content="light">' +
+    '<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; style-src &#39;self&#39;; script-src &#39;self&#39;; img-src &#39;self&#39; data:; base-uri &#39;none&#39;; form-action &#39;none&#39;">' +
     '<title>' + esc(title) + '</title><link rel="stylesheet" href="/assets/studio.css">' +
     '<script src="/assets/studio.js" defer></script></head><body>' +
     '<a class="skip" href="#main">Skip to content</a>' +
