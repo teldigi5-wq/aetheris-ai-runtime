@@ -58,7 +58,7 @@ async function inspect(config){
    }
    return route.continue();
   });
-  assert.equal((await page.goto(url,{waitUntil:'load'}))?.status(),200);
+  assert.equal((await page.goto(url+'?w4b-visual-proof=1',{waitUntil:'load'}))?.status(),200);
   assert.equal(await page.locator('[data-w4a-scene]').count(),1);
   assert.equal(await page.locator('section.story-chapter').count(),3);
   assert.equal(await page.locator('[data-w4a-viewport] canvas').count(),0);
@@ -102,7 +102,11 @@ async function inspect(config){
      }));
      assert(Number.isFinite(data.x)&&Number.isFinite(data.fov));
      assert(data.count>0);
-     const picture=await page.locator('[data-w4a-viewport] canvas').screenshot({animations:'disabled'});
+     // Synchronous in-render evidence avoids locator.screenshot auto-scroll,
+     // which otherwise changes ScrollTrigger and invalidates the camera shot.
+     const encoded=await page.evaluate(()=>window.__w4bVisualProof||'');
+     assert(encoded.startsWith('data:image/png;base64,'),'No local post-render WebGL capture');
+     const picture=Buffer.from(encoded.slice('data:image/png;base64,'.length),'base64');
      assert(picture.length>3000);
      const name=config.name+'-shot-'+frames.length+'.png';
      await writeFile(join(output,name),picture);
