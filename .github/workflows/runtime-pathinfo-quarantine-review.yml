@@ -1,0 +1,59 @@
+name: Runtime decoded pathInfo quarantine regression (review only)
+on:
+  push:
+    branches: [security/runtime-quarantine-pathinfo-boundary-20261101]
+    paths:
+      - '.github/workflows/runtime-pathinfo-quarantine-review.yml'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeUncertifiedApiHttpFilter.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeQuarantinePathInfoBoundaryTest.java'
+permissions:
+  contents: read
+jobs:
+  decoded-servlet-pathinfo-fail-closed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    env:
+      AETHERIS_DISPATCHER_ENABLED: 'false'
+      AETHERIS_SYNTRA_OWNER_RUNTIME_ENABLED: 'false'
+      AETHERIS_CLOUD_PROVIDER_ENABLED: 'false'
+      AETHERIS_EXECUTION_WORKSPACE_WRITE_ENABLED: 'false'
+    steps:
+      - name: Checkout isolated candidate, no credentials persisted
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Install Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Confirm exact head and production filters stay quarantine-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path("orchestrator-service/src/main/java/io/aetheris/orchestrator")
+          for p,order in [
+              (root/"api/OwnerlessTaskMissionHttpFilter.java", "@Order(Ordered.HIGHEST_PRECEDENCE)"),
+              (root/"security/RuntimeUncertifiedApiHttpFilter.java", "@Order(Ordered.HIGHEST_PRECEDENCE + 1)")
+          ]:
+              s=p.read_text()
+              assert order in s and "SC_NOT_FOUND" in s and "@Component" in s
+          assert "enum Verdict { QUARANTINED }" in (root/"security/RuntimeRouteAdmissionPolicy.java").read_text()
+          print("RUNTIME_QUARANTINE_PRODUCTION_FILTERS_UNCHANGED_IN_ORDER")
+          PY
+      - name: Execute adversarial pathInfo plus existing full HTTP quarantine suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml \
+            -Dtest=RuntimeQuarantinePathInfoBoundaryTest,RuntimeRealDirectPortDenialRegressionTest,RuntimeProductionApiQuarantineTest,OwnerlessTaskMissionHttpFilterTest test
+          echo 'RUNTIME_PATHINFO_FULL_HTTP_QUARANTINE_REVIEW_PASS'
+      - name: No API admission, deployment or publication
+        shell: bash
+        run: |
+          echo 'RUNTIME_TASK_SSE_UNCERTIFIED_NO_GO_NO_XERJ'
