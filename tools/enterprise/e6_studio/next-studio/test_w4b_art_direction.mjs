@@ -35,7 +35,7 @@ test('new JS and CSS are fixed verified bundles with real source image',()=>{
   assert(html.includes('connect-src &#39;self&#39;'));
   assert(html.includes('noindex,nofollow'));
 });
-test('W4-A source assets and original site's studied narrative remain unchanged',async()=>{
+test("W4-A source assets and original site's studied narrative remain unchanged",async()=>{
   for(const name of ['assets/arcloom-signal-fold.glb',
     'assets/w4a-scene-evidence.json','studies/readable-measure/index.html',
     'studies/sundial-desk/index.html','approach/index.html']){
