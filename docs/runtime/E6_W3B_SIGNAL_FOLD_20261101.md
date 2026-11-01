@@ -36,7 +36,7 @@ python3 tools/enterprise/e6_studio/next-studio/blender/verify_detailed_module.py
 cd tools/enterprise/e6_studio/next-studio
 node w2c_generate_preview.mjs
 python3 w3a_stage_provenance.py
-cd ../../../../..
+cd ../../../..
 PYTHONPATH=/usr/lib/python3/dist-packages blender --background --factory-startup --python-use-system-env --python-exit-code 17 --python tools/enterprise/e6_studio/next-studio/blender/w3b_author_signal_fold.py
 python3 tools/enterprise/e6_studio/next-studio/w3b_verify_signal_fold.py
 python3 tools/enterprise/e6_studio/next-studio/w3b_stage_signal_fold.py
