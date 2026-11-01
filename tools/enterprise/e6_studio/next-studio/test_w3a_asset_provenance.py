@@ -29,7 +29,7 @@ class W3AssetGateTests(unittest.TestCase):
             root=Path(tmp)
             (root/"safe.bin").write_bytes(b"asset")
             (root/"alias.bin").symlink_to(root/"safe.bin")
-            self.assertEqual(w3a.read_regular(root,"safe.bin",limit=4),b"asset")
+            self.assertEqual(w3a.read_regular(root,"safe.bin",limit=5),b"asset")
             with self.assertRaisesRegex(ValueError,"UNTRUSTED"):
                 w3a.read_regular(root,"alias.bin")
             with self.assertRaisesRegex(ValueError,"FILE_BUDGET"):
