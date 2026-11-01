@@ -56,6 +56,10 @@ try{
           return route.continue();
         });
         assert.equal((await page.goto(origin+'/',{waitUntil:'load'}))?.status(),200);
+        const stylesheet=await page.request.get(origin+'/assets/site.css');
+        assert.equal(stylesheet.status(),200,'Fixed first-party stylesheet must load at site root');
+        assert((await stylesheet.text()).includes('.hero'),'Expected CSS art-direction rules');
+        assert.equal(await page.evaluate(()=>getComputedStyle(document.body).margin),'0px');
         assert.equal(await page.locator('h1').count(),1);
         assert.equal(await page.locator('main').count(),1);
         assert.equal(await page.locator('section.section').count(),2);
