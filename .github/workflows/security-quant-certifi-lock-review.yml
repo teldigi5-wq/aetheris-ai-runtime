@@ -1,0 +1,61 @@
+name: Quant certifi hash-lock regeneration (review only)
+on:
+  push:
+    branches:
+      - security/runtime-quant-certifi-emsign-20261101
+    paths:
+      - 'aetheris-quant/requirements.in'
+      - 'aetheris-quant/requirements.txt'
+      - '.github/workflows/security-quant-certifi-lock-review.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate-pinned-lock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact source without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Set up pinned Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13.15'
+          check-latest: false
+      - name: Compile hashed requirements against Python package registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pip-tools==7.6.1
+          python -m piptools compile \
+            --generate-hashes --resolver=backtracking --strip-extras \
+            --output-file=aetheris-quant/requirements.lock.txt \
+            aetheris-quant/requirements.in
+          git diff --check
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path("aetheris-quant/requirements.lock.txt").read_text()
+          expected = re.findall(r"(?m)^certifi==2026\\.10\\.23(?: \\\\)?$", text)
+          if len(expected) != 1:
+              raise SystemExit("Expected exactly one patched certifi lock entry")
+          packages = re.findall(r"(?m)^([A-Za-z0-9_.-]+)==([A-Za-z0-9_.+-]+)", text)
+          print(f"Hashed lock regenerated: total_packages={len(packages)}")
+          block = text.split("certifi==2026.10.23", 1)[1].split("    # via", 1)[0]
+          hashes = re.findall(r"--hash=sha256:([0-9a-f]{64})", block)
+          if len(hashes) < 2:
+              raise SystemExit("Expected both source and wheel hashes")
+          print("Certified certifi==2026.10.23 hashes:")
+          for h in hashes:
+              print("PUBLIC_PACKAGE_SHA256=" + h)
+          PY
+      - name: Upload exact generated lock for review (no secrets)
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: patched-certifi-python313-hashlock
+          path: aetheris-quant/requirements.lock.txt
+          if-no-files-found: error
+          retention-days: 7
