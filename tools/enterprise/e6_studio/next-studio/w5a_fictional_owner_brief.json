@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "projectSlug": "tidal-listening-atlas",
+  "siteProfile": "creative-studio",
+  "audience": "Curious coastal researchers, public-space designers and local science volunteers exploring hypothetical shoreline instrumentation.",
+  "purpose": "Create a fictional editorial website for a speculative coastal listening studio, explaining how sounds of tides might inspire slower design decisions.",
+  "fictional": true,
+  "constraints": [
+    "Use evocative but technically modest language without inventing field deployments or scientific findings.",
+    "Offer strong accessible reading hierarchy, a distinct warm editorial palette and comprehensible navigation.",
+    "Treat every concept as fictional and do not imply a live monitoring service, products, clients, sponsors or endorsements.",
+    "Create a differentiated visual direction without reusing any existing Arcloom page copy or decorative spheres."
+  ]
+}
