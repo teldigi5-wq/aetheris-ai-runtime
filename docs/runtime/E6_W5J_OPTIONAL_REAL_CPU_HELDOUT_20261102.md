@@ -342,3 +342,34 @@ compatible GitHub runner it is explicitly skipped. It does not apply a
 real approval label, download a model, prove cloud-run feasibility,
 authorize billable compute, merge or deploy. The owner-controlled
 launch remains a separate explicit decision.
+
+## Post-trial W5-J CPU research result (run 41447764457)
+
+The first explicitly approved cloud CPU run completed **FAILURE**, after
+successfully verifying owner authorization, exact-head preflight CI,
+the pinned Ollama binary and the downloaded Qwen2.5 0.5B model. Its
+sanitized report recorded three design-phase rejections and **zero**
+accepted candidates, with no CSS phase or 18-route human review:
+
+- `quiet-heat-ceramic-library` — `E6_W5A_MODEL_GENERATION_NOT_NORMALLY_FINISHED`.
+- `afterlight-mapping-atelier` — `E6_W5H_VALIDATION_REJECTED_AFTER_ONE_SAFE_RETRY`.
+- `paper-migration-journal` — `E6_W5A_MODEL_RESPONSE_BUDGET`.
+
+The trial's model self-reported loopback, but the report does not
+cryptographically attest its weights or establish independent authorship.
+The saved sanitized artifact is GitHub Actions artifact 13143715922;
+the checked-candidate artifact was correctly skipped.
+
+**Offline follow-up:** The design prompt now requests shorter,
+fully original page copy, exactly two sections on each required page,
+and one complete compact JSON object. It offers three optional
+contrast-checked palettes rather than weakening the existing four
+4.5:1 contrast checks. All seven top-level design fields, required
+page routes, source validation, the one-retry limit, 3,000-token design
+budget, response-size limit, CPU-only request settings, no-external-assets
+rules, and human-review gates remain enforced. This prompt is a
+hypothesis for reducing model truncation and schema failures, **not**
+evidence of improved real-model pass rate, better artistry or W6
+acceptance. The consumed GitHub approval label was removed following
+the failed run. Do not reapply it or trigger more inference without
+a fresh, exact-head scope approval.
