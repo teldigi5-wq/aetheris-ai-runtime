@@ -420,3 +420,24 @@ performance or premium design quality.
 Staging requires three calls versus one initial design request, which
 could increase cost and failure rates. Real-model activation requires a
 separate, exact-head authorization and evidence review.
+
+
+### W5-K validated brand handoff and early partial validation
+
+The original offline prototype requested each page independently from
+the identity it had just received. This could produce incoherent branding
+and delay rejection of an invalid identity or home page. The original
+W5-A identity/contrast and single-page content rules are now shared
+pure validation functions used by the unchanged full-proposal policy.
+W5-K rejects invalid identity before checking the home JSON envelope
+and invalid home content before checking the approach JSON envelope.
+Follow-up prompts contain strictly validated model-proposed brand
+identity as **untrusted context**, with the approach prompt receiving
+only validated home heading and navigation label for continuity.
+Cross-page distinct heading, two-page completeness, content and all four
+4.5:1 contrast checks remain mandatory at final assembly.
+
+This models a safer architectural handoff, not proof that Qwen2.5 0.5B
+can generate coherent, original websites. Offline CI still makes zero
+model calls. No real inference, rollout, merge, owner label or
+production authority is introduced.

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {buildStagedDesignPrompt,assembleStagedDesign,evaluateStagedDesignOffline} from './w5k_staged_design_research.mjs';
-import {validateModelProposal} from './w5a_model_design_compiler.mjs';
+import {validateModelIdentity,validateModelPage,validateModelProposal} from './w5a_model_design_compiler.mjs';
 import {MODEL,syntheticDesign} from './w5b_simulated_provider.mjs';
 const batch=JSON.parse(await readFile(new URL('w5b_heldout_briefs.json',import.meta.url),'utf8'));
 const parts=(brief,index)=>{
@@ -30,7 +30,9 @@ test('pure offline W5-K assembly retains all final W5-A rules on three synthetic
   assert.equal(response.receipt.realModelAuthorshipAttested,false);
   assert.equal(response.receipt.releaseGo,false);
   for(const [idx,phase] of ['identity','home','approach'].entries()){
-   const prompt=buildStagedDesignPrompt(brief,phase);
+   const prompt=buildStagedDesignPrompt(brief,phase,{
+    identity:idx?identity:undefined,home:idx===2?home:undefined
+   });
    assert(prompt.length<8000);
    assert(prompt.includes(JSON.stringify(brief)));
    assert.equal(response.receipt.phases[idx].phase,phase);
@@ -96,4 +98,50 @@ test('offline research source excludes requestLocalOllama, fetch calls and side-
  assert(!source.includes("createWriteStream"));
  assert(source.includes("parseProviderEnvelope(fixture,model"));
  assert(source.includes("modelRequestsMade:0"));
+});
+
+test('staged prompts hand off validated brand identity and only home continuity labels',()=>{
+ const brief=batch.briefs[0],{identity,home,approach}=parts(brief,0);
+ assert.equal(validateModelIdentity(brief,identity),identity);
+ assert.equal(validateModelPage(home.page),home.page);
+ const first=buildStagedDesignPrompt(brief,'identity');
+ const second=buildStagedDesignPrompt(brief,'home',{identity});
+ const third=buildStagedDesignPrompt(brief,'approach',{identity,home});
+ assert(!first.includes('VALIDATED IDENTITY DATA JSON:'));
+ assert(second.includes(JSON.stringify(identity)));
+ assert(!second.includes('VALIDATED HOME LABELS JSON:'));
+ assert(third.includes(JSON.stringify(identity)));
+ assert(third.includes(JSON.stringify({heading:home.page.heading,navLabel:home.page.navLabel})));
+ assert(!third.includes(JSON.stringify(home.page.sections)));
+ assert(third.length<8000);
+ assert.throws(()=>buildStagedDesignPrompt(brief,'home'),/INVALID_IDENTITY/);
+ assert.throws(()=>buildStagedDesignPrompt(brief,'approach',{identity}),/INVALID_PAGE/);
+ assert.throws(()=>buildStagedDesignPrompt(brief,'identity',{identity}),/UNEXPECTED_IDENTITY_HANDOFF/);
+ const bad=structuredClone(identity);bad.art.accent=bad.art.surface;
+ assert.throws(()=>buildStagedDesignPrompt(brief,'home',{identity:bad}),/MODEL_SCHEMA_OR_CONTRAST_REJECTED/);
+ const fakeHome=structuredClone(home);fakeHome.page.sections[0].body='<script>run()</script>';
+ assert.throws(()=>buildStagedDesignPrompt(brief,'approach',{identity,home:fakeHome}),/UNTRUSTED_PAGE_CONTENT/);
+ assert.equal(assembleStagedDesign(brief,identity,home,approach).pages.length,2);
+});
+test('invalid early identity or home fails before later malformed staged envelope is accessed',()=>{
+ const brief=batch.briefs[0],{identity,home,approach}=parts(brief,0);
+ const badIdentity=fixtures(identity,home,approach);
+ badIdentity[0].response=JSON.stringify({...identity,art:{...identity.art,accent:identity.art.surface}});
+ badIdentity[1].response='{malformed later response';
+ assert.throws(()=>evaluate(brief,badIdentity),/MODEL_SCHEMA_OR_CONTRAST_REJECTED/);
+ const badHome=fixtures(identity,home,approach);
+ badHome[1].response=JSON.stringify({...home,page:{...home.page,sections:[]}});
+ badHome[2].response='{malformed later response';
+ assert.throws(()=>evaluate(brief,badHome),/INVALID_PAGE_ARCHITECTURE/);
+});
+test('shared W5-A partial validators preserve full two-page contrast, content and identity checks',()=>{
+ const brief=batch.briefs[0],{full,identity,home,approach}=parts(brief,0);
+ assert.equal(validateModelIdentity(brief,identity),identity);
+ assert.equal(validateModelPage(home.page),home.page);
+ assert.equal(validateModelPage(approach.page),approach.page);
+ assert.equal(validateModelProposal(brief,full).size,2);
+ const dup=structuredClone(full);dup.pages[0].path='/approach';
+ assert.throws(()=>validateModelProposal(brief,dup),/INVALID_PAGE_ARCHITECTURE/);
+ const badContrast=structuredClone(full);badContrast.art.accent=badContrast.art.surface;
+ assert.throws(()=>validateModelProposal(brief,badContrast),/MODEL_SCHEMA_OR_CONTRAST_REJECTED/);
 });
