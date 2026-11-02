@@ -13,6 +13,8 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright';
+import AxeBuilder from '@axe-core/playwright';
+import {auditedRuleTags,checkAxeResult} from './w5f_accessibility_policy.mjs';
 import {inspectTrial} from './w5d_trial_integrity.mjs';
 const here=dirname(fileURLToPath(import.meta.url));
 const parent=join(here,'target');
@@ -71,6 +73,49 @@ async function verifyKeyboardFocus(page,expectedRoute){
     focusReleased:true,authorJavascriptEnabled:false,
     assistiveTechnologySpeechVerified:false,wcagCertified:false};
 }
+async function auditCandidateRoutes(origin,width,height){
+  // The production candidate stays JS-disabled in the primary reviewer.
+  // axe injects TEST-RUNNER JavaScript into separate isolated pages; the
+  // generated HTML must contain zero author scripts before injection.
+  const ctx=await browser.newContext({
+    viewport:{width,height},javaScriptEnabled:true,
+    reducedMotion:'reduce',serviceWorkers:'block',deviceScaleFactor:1
+  });
+  const page=await ctx.newPage(),outside=[],exceptions=[];
+  try{
+    await page.route('**/*',route=>{
+      const url=route.request().url();
+      if(!url.startsWith(origin+'/')){outside.push(url);return route.abort();}
+      return route.continue();
+    });
+    page.on('pageerror',e=>exceptions.push(String(e)));
+    const evidence={};
+    for(const [route,field] of [['/','home'],['/approach/','approach']]){
+      const response=await page.goto(origin+route,{waitUntil:'load',timeout:30_000});
+      if(response?.status()!==200||await page.locator('script').count()!==0)
+        refuse('GENERATED_ACCESSIBILITY_SOURCE_CONTRACT_FAILED');
+      let data;
+      try{
+        data=checkAxeResult(await new AxeBuilder({page})
+          .withTags(auditedRuleTags()).analyze());
+      }catch{
+        refuse('GENERATED_ACCESSIBILITY_AXE_CHECK_FAILED');
+      }
+      evidence[field]={
+        automatedRuleScanPassed:true,
+        violations:data.violations,
+        passedRules:data.passedRules,
+        needsManualReview:data.needsManualReview,
+        independentWcagCertified:false,
+        screenReaderVerified:false,
+        generatedAuthorJavaScript:false
+      };
+    }
+    if(outside.length||exceptions.length)
+      refuse('GENERATED_ACCESSIBILITY_OUTSIDE_NETWORK_OR_ERROR');
+    return evidence;
+  }finally{await ctx.close();}
+}
 async function visit(origin,slug,width,height){
   const ctx=await browser.newContext({
     viewport:{width,height},javaScriptEnabled:false,serviceWorkers:'block',
@@ -106,6 +151,7 @@ async function visit(origin,slug,width,height){
     }));
     if(ui.overflow>2||!ui.h1)refuse('MOBILE_OVERFLOW_OR_EMPTY_HEADING');
     const homeKeyboard=await verifyKeyboardFocus(page,'/');
+    const automatedAccessibility=await auditCandidateRoutes(origin,width,height);
     // Each website has TWO routes. Do not accept nine home screenshots as
     // evidence of all 18 generated route/viewport compositions.
     await Promise.all([
@@ -140,6 +186,9 @@ async function visit(origin,slug,width,height){
       computedFontFamily:ui.font,homeHeading:ui.h1,
       approachHeading:approachState.heading,approachNavigationPassed:true,
       homeKeyboard,approachKeyboard,
+      homeAutomatedAccessibility:automatedAccessibility.home,
+      approachAutomatedAccessibility:automatedAccessibility.approach,
+      bothRoutesAutomatedAccessibilityPassed:true,
       bothRoutesKeyboardFocusVerified:true,
       bothFullPageScreenshotsForHumanReview:true,
       physicalGpuFrameTimingMeasured:false,coreWebVitalsCertified:false};
@@ -173,6 +222,16 @@ async function main(){
     bothRoutesCapturedForAllNineProfiles:views.length===9&&
       views.every(x=>x.approachScreenshot&&x.approachScreenshotSha256),
     fullPageScreenshotCount:views.length*2,
+    automatedAccessibilityRouteScanCount:views.length*2,
+    bothRoutesAutomatedAccessibilityPassed:views.length===9&&
+      views.every(v=>v.bothRoutesAutomatedAccessibilityPassed===true&&
+        v.homeAutomatedAccessibility.automatedRuleScanPassed===true&&
+        v.approachAutomatedAccessibility.automatedRuleScanPassed===true&&
+        v.homeAutomatedAccessibility.violations===0&&
+        v.approachAutomatedAccessibility.violations===0),
+    automatedAccessibilityManualReviewItems:views.reduce((sum,v)=>
+      sum+v.homeAutomatedAccessibility.needsManualReview+
+      v.approachAutomatedAccessibility.needsManualReview,0),
     bothRoutesKeyboardFocusVerified:views.length===9&&
       views.every(v=>v.bothRoutesKeyboardFocusVerified===true&&
         v.homeKeyboard.mainFocused===true&&
