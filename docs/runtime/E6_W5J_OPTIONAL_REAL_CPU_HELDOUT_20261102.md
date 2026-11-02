@@ -499,3 +499,18 @@ The offline summary continues to treat all reported measurements as
 and never grants release permission. These controls are prerequisites
 for a future approved experiment, not evidence of real inference,
 performance, originality or production readiness.
+
+
+### W5-L source-brief content pin (case-name substitution prevented)
+
+The comparison now pins a canonical SHA-256 digest of the **entire
+three-brief JSON payload**, including audience, purpose and every
+constraint, not just the three project slugs. Both manifest creation
+and receipt summarization require this constant digest. Modifying a
+brief while keeping its slug and recomputing the unkeyed manifest
+checksum fails closed. This is a fixed scientific input control; the
+SHA-256 value itself is not a signature of actual inference or its
+origin, and any later legitimate brief edit requires explicit protocol
+review and versioning. Resource durations remain self-reported;
+aggregate per-case generation time is not a substitute for an
+independent full-job wall-clock timeout.

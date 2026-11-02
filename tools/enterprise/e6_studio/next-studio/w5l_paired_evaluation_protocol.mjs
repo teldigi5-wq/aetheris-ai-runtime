@@ -18,6 +18,9 @@ const modes=Object.freeze([
  Object.freeze({id:'single_compact',designCallsMax:2,designTokenCeilingPerCall:3000}),
  Object.freeze({id:'three_stage',designCallsMax:3,designTokenCeilingPerCall:3000})
 ]);
+// SHA-256 over JSON.stringify(briefs) from the unchanged W5-B held-out fixture.
+// A case name alone is insufficient: audience, purpose and constraints matter.
+const CANONICAL_BRIEF_SET_SHA256='6bc82186f0cca8ff21d8bf8c370bfa8fa8b9563f17a9358caad45316362edd88';
 const slugs=[
  'quiet-heat-ceramic-library',
  'afterlight-mapping-atelier',
@@ -38,6 +41,8 @@ function pairs(briefs){
    validateOwnerBrief(briefs[i]);
    if(briefs[i].projectSlug!==slugs[i])fail('BRIEF_MATRIX_CHANGED');
  }
+ if(sha(JSON.stringify(briefs))!==CANONICAL_BRIEF_SET_SHA256)
+   fail('BRIEF_CONTENT_CHANGED');
  return slugs.flatMap(projectSlug=>modes.map(mode=>Object.freeze({
    projectSlug,mode:mode.id,
    designCallsMax:mode.designCallsMax,
@@ -76,7 +81,8 @@ function checkFixedProtocol(p){
    'modelWeightsCryptographicallyAttested','stage45Go','releaseGo',
    'protocolSha256'];
  if(!keys(p,expected)||p.kind!=='E6_W5L_OFFLINE_PAIRED_PROTOCOL_V1'||
-    !commit(p.sourceCommitSha)||!/^[a-f0-9]{64}$/.test(p.briefSetSha256)||
+    !commit(p.sourceCommitSha)||
+    p.briefSetSha256!==CANONICAL_BRIEF_SET_SHA256||
     p.modelTag!=='qwen2.5:0.5b'||p.runtimeVersion!=='0.40.13'||
     p.executionMode!=='CPU_ONLY_FUTURE_OWNER_APPROVAL_REQUIRED'||
     p.executionOrder!=='SERIAL_FIXED_BRIEF_THEN_METHOD'||

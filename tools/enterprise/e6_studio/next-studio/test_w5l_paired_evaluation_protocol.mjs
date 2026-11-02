@@ -14,6 +14,7 @@ test('paired protocol pins actual held-out identities, two modes and unequal req
  assert.equal(p.planned.length,6);
  assert.equal(p.sourceCommitSha,HEAD);
  assert.match(p.protocolSha256,/^[a-f0-9]{64}$/);
+ assert.equal(p.briefSetSha256,'6bc82186f0cca8ff21d8bf8c370bfa8fa8b9563f17a9358caad45316362edd88');
  assert.equal(manifest().protocolSha256,p.protocolSha256);
  assert.deepEqual([...new Set(p.planned.map(x=>x.projectSlug))],briefs.map(x=>x.projectSlug));
  assert.deepEqual(p.methods.map(x=>x.designCallsMax),[2,3]);
@@ -147,4 +148,29 @@ test('reported design output tokens require actual claimed design calls and acce
  emptyAccepted[0]={...emptyAccepted[0],outcome:'ACCEPTED',failureCode:null,
    reportedDesignCalls:1,reportedOutputTokens:0,reportedElapsedMs:10};
  failRow(emptyAccepted);
+});
+
+test('the full heldout audience, purpose and constraints are pinned, not only the three names',()=>{
+ const p=manifest();
+ for(const edit of [
+   b=>{b[0].audience+=' Updated in secret.';},
+   b=>{b[1].purpose+=' Unapproved alternate task.';},
+   b=>{b[2].constraints[0]+=' Updated in secret.';},
+   b=>{b[0].siteProfile='agency';},
+   b=>{b[1].constraints.reverse();}
+ ]){
+   const changed=structuredClone(briefs);edit(changed);
+   assert.deepEqual(changed.map(x=>x.projectSlug),briefs.map(x=>x.projectSlug));
+   assert.throws(()=>buildPairedEvaluationProtocol({
+      briefs:changed,sourceCommitSha:HEAD
+   }),/BRIEF_CONTENT_CHANGED/);
+ }
+ assert.equal(p.briefSetSha256,'6bc82186f0cca8ff21d8bf8c370bfa8fa8b9563f17a9358caad45316362edd88');
+});
+test('rehashing a forged heldout digest cannot forge a different trial into fixed protocol',()=>{
+ const p=structuredClone(manifest());
+ p.briefSetSha256='f'.repeat(64);
+ const {protocolSha256,...data}=p;
+ p.protocolSha256=createHash('sha256').update(JSON.stringify(data)).digest('hex');
+ assert.throws(()=>summarizePairedResearch(p,empty(p)),/PROTOCOL_NOT_ACCEPTED/);
 });
