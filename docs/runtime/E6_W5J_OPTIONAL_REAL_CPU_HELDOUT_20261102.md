@@ -58,3 +58,14 @@ The optional cloud CPU workflow now refuses to report 3 reviewable candidates un
 **Verified CI:** [Actions #41408033582](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/41408033582), exact head `03b4fecb915e36f08158aa65a1e21afc83c0403a`: **118/118** Node tests, locked Next.js build, 69 inherited simulated browser cases and an end-to-end mock pipeline with **18/18 screenshots** and generated-route keyboard acceptance succeeded. The test report explicitly says `realProviderCalled:false` and `actualWeightsAttested:false`.
 
 The W5-J cloud CPU owner approval label is still absent; **no live model execution or downloads have occurred**. Do not merge/deploy or claim human acceptance from any of these automated results. Stage 45 NO_GO.
+
+
+## Exact-head CI admission and model tag drift safeguards — 2 November 2026
+
+The opt-in GitHub CPU workflow now adds another strictly read-only gate **AFTER the owner-labeled PR authorization but BEFORE installing/downloading the Ollama binary or model**: it queries the public GitHub Checks API for the **exact** PR-HEAD SHA being checked out. Exactly one `bounded-model-proposal-and-simulated-browser-only` check from GitHub Actions must be **completed with conclusion `success` on that same SHA**. Missing, failing, pending, stale, ambiguous or unreachable check data fail closed. This prevents explicit owner label approval from accidentally bypassing the current normal regression CI. Neither approving a label nor a green normal CI is permission to merge or deploy.
+
+The pinned Ollama v0.40.13 GitHub official release metadata confirms `ollama-linux-amd64.tar.zst` size **1,525,346,571 bytes** and official `sha256:c9490e0f520be21271d969e6703f012268b1d39f8b70dd58854e5bfef7a75bb6`; the workflow continues verifying that **full published archive checksum** before extraction. Its 1,600,000,000-byte curl limit remains above this actual asset size.
+
+After an explicitly authorized future `ollama pull qwen2.5:0.5b`, the workflow will compare the local `/api/tags` reported 64-character model digest against the **official Ollama-displayed 12-character `a8b0c5157701` tag ID prefix**. This is a fail-closed **model tag drift warning only**, not a full immutable model manifest pin, independent verification of model weight bytes or proof of model execution. A tag change blocks this particular research experiment pending source review. It is still not permission to load another model, download onto the borrowed PC, use GPU or release product code.
+
+The new workflow-policy tests check both gates and their ordering. These checks operate **only on source strings and human-authored test fixtures in routine CI**; the real owner-labeled workflow has **NOT** run. Full verification requires a separately authorized live experiment and its actual event, check-run and downloaded-model evidence.
