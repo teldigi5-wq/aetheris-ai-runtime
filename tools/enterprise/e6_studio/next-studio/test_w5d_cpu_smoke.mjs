@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {runCpuSmoke} from './w5d_cpu_smoke.mjs';
 const model='qwen2.5:0.5b';
-function mock({malformed=false,wrongModel=false,noEvaluation=false,offRegistry=false}={}){
+function mock({malformed=false,wrongModel=false,noEvaluation=false,offRegistry=false,badOutput=null}={}){
   const calls=[];
   const transport=async(url,init)=>{
     assert(url.startsWith('http://127.0.0.1:11434/'));
@@ -22,7 +22,7 @@ function mock({malformed=false,wrongModel=false,noEvaluation=false,offRegistry=f
       assert.equal(request.options.num_predict,96);
       return new Response(malformed?'not json':JSON.stringify({
         done:true,model:wrongModel?'wrong:tag':model,
-        response:'{"research_status":"fictional study only"}',
+        response:badOutput??'{"research_status":"fictional study only"}',
         eval_count:noEvaluation?0:12,total_duration:123456
       }),{status:200});
     }
@@ -57,6 +57,21 @@ test('provider response must be JSON and contain positive token count',async()=>
     /PROVIDER_JSON_INVALID/);
   await assert.rejects(runCpuSmoke({transport:mock({noEvaluation:true}).transport}),
     /NO_COMPLETE_REAL_PROVIDER_GENERATION/);
+});
+test('model provider must return the exact harmless JSON schema and no HTML or URLs',async()=>{
+  const examples=[
+    '{}',
+    '{"other":"fictional study only"}',
+    '{"research_status":"fine","extra":"unapproved"}',
+    '{"research_status":"https://example.com/exfiltrate"}',
+    '{"research_status":"<script>alert(1)</script>"}',
+    '{"research_status":"short"}',
+    '{"research_status":12}'
+  ];
+  for(const response of examples){
+    await assert.rejects(runCpuSmoke({transport:mock({badOutput:response}).transport}),
+      /MODEL_OUTPUT_UNSAFE_OR_WRONG_SCHEMA/,response);
+  }
 });
 test('no outside URL or arbitrary script/runner inputs are allowed by API implementation',async()=>{
   const testTransport=async(url)=>{assert(url.startsWith('http://127.0.0.1:11434/'));return new Response('x',{status:500});};
