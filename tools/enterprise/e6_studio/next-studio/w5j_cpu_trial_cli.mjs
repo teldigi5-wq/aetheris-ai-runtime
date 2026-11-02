@@ -63,7 +63,7 @@ async function main(){
   const evidenceDir=join(here,'target/e6-w5j-cloud-cpu-review');
   await mkdir(evidenceDir,{recursive:false,mode:0o700});
   await writeFile(join(evidenceDir,'missing-case-report.json'),
-    JSON.stringify(result,null,2)+'\\n',{flag:'wx',mode:0o600});
+    JSON.stringify(result,null,2)+'\n',{flag:'wx',mode:0o600});
   console.log('E6_W5J_MISSING_REPORT_NO_MODEL_CASE_CLAIM '+JSON.stringify({
     reportAvailable:false,caseAttemptsKnown:false,releaseGo:false
   }));
