@@ -102,6 +102,20 @@ jobs:
           fi
           node w5d_owner_browser_review.mjs
           test -s target/e6-w5d-local-owner-browser-evidence/review-report.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('target/e6-w5d-local-owner-browser-evidence')
+          result=json.loads((root/'review-report.json').read_text())
+          assert result['allNineSoftwareBrowserReviewsPassed'] is True
+          assert result['bothRoutesCapturedForAllNineProfiles'] is True
+          assert result['fullPageScreenshotCount'] == 18
+          assert len(result['profiles']) == 9
+          assert len(list(root.glob('*.png'))) == 18
+          assert result['visualQualityHumanApproved'] is False
+          assert result['releaseGo'] is False and result['stage45Go'] is False
+          print('E6_W5J_GENUINE_CANDIDATES_18_SCREENSHOTS_FOR_HUMAN_REVIEW_NO_RELEASE')
+          PY
           echo 'E6_W5J_THREE_GENUINE_CANDIDATES_FOR_HUMAN_REVIEW_ONLY_NOT_PRODUCTION'
       - name: Seven-day fictional candidate and rejection evidence, never model weights
         if: always()
