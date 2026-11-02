@@ -92,7 +92,7 @@ test('provider CSS injection is rejected and fails closed without a site',async(
   assert.equal(result.report.rejected,1);
   assert.equal(result.sites.has(b.projectSlug),false);
   assert.equal(result.report.cases[1].status,'REJECTED');
-  assert.match(result.report.cases[1].rejectionCode,/^E6_W5C_/);
+  assert.match(result.report.cases[1].rejectionCode,/^E6_W5H_VALIDATION_REJECTED_AFTER_ONE_SAFE_RETRY$/);
   assert.equal(result.report.releaseGo,false);
 });
 test('no external runtime model URL or overbroad code authoring allowed',async()=>{

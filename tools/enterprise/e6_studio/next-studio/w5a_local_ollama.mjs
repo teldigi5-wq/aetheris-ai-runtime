@@ -23,7 +23,7 @@ export function buildPrompt(brief){
     'JSON object has EXACT keys: version, projectSlug, siteName, tagline, description, art, pages.',
     'version=1; projectSlug identical to brief.projectSlug.',
     'art has EXACT keys: paper,ink,accent,surface,composition,motif,density.',
-    'paper,ink,accent,surface are unique coherent #RRGGBB colors. Ensure ink-on-paper, accent-on-paper, ink-on-surface contrast >= 4.5:1.',
+    'paper,ink,accent,surface are #RRGGBB colors. All four TEXT pairs require contrast >= 4.5:1: ink-on-paper, accent-on-paper, ink-on-surface, accent-on-surface. Do not assume pale accents on dark surfaces remain readable.',
     'composition is one of split,offset,typographic; motif is rules,material-block,letterform; density is airy,measured,compact.',
     'pages is an array of exactly two objects with paths "/" and "/approach".',
     'Each page EXACT keys: path,navLabel,heading,lede,sections.',
