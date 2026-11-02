@@ -119,3 +119,16 @@ provider, approval label, credentials, inference step or paid compute is added.
 Workflow failures before the trial stage (such as binary download or model
 installation) remain visible through GitHub Actions step failures, not
 misrepresented as generated-model case receipts.
+
+## Pre-request metadata probe regression (offline-only)
+
+Four adversarial test groups exercise the W5-C evaluator before any
+`/api/generate` request: HTTP 503 from the fixed Ollama version probe,
+malformed model tags JSON, a non-cryptographic/invalid installed-model
+digest, and a transport timeout. Each must fail before proposal generation.
+These are synthetic injected provider responses, not observations from a
+running Ollama instance. No evidence report is fabricated; the existing
+`missing-report` receipt remains limited to file absence and expresses
+unknown model/case attempts as `null`. The tests never start inference,
+download weights, request GPUs, approve the GitHub trial label or change
+release authority.
