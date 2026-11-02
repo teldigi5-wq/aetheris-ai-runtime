@@ -13,7 +13,7 @@ import {requestLocalOllama,buildPrompt} from './w5a_local_ollama.mjs';
 import {briefs,proposalFor} from './w5a_test_doubles.mjs';
 const batch=JSON.parse(await readFile(new URL('./w5b_heldout_briefs.json',import.meta.url),'utf8'));
 const css=await readFile(new URL('./w5a_base.css',import.meta.url),'utf8');
-const SHA='a'.repeat(64),PR=275,OWNER='teldigi5-wq';
+const SHA='a'.repeat(40),PR=275,OWNER='teldigi5-wq';
 const event=()=>({
  action:'labeled',label:{name:'e6-w5j-three-brief-cpu-approved'},
  pull_request:{number:PR,state:'open',draft:true,user:{login:OWNER},
@@ -828,4 +828,29 @@ test('W6 saved screenshot preflight rejects missing source re-audit and malforme
  assert(mock.includes('verifyScreenshotEvidence(evidence,batch,{trialRoot:trial})'));
  assert(mock.includes('sourceReauditIntegrityVerified:true'));
  assert(mock.includes('invalidMeasurementRejected:true'));
+});
+
+test('GitHub SHA-1 source identity is exactly 40 hex chars, never a 64-char file SHA-256',async()=>{
+ const e=event();
+ const authorized=authorizeLabelEvent(e,args());
+ assert.equal(authorized.reviewedHeadSha,SHA);
+ const fake64='b'.repeat(64);
+ assert.throws(()=>authorizeLabelEvent({
+   ...e,pull_request:{...e.pull_request,head:{...e.pull_request.head,sha:fake64}}
+ },{...args(),headSha:fake64}),/NOT_OWNER_AUTHORIZED_PR_LABEL_EVENT/);
+ assert.throws(()=>summarizeMissingCaseReport({
+   sourceSha:fake64,caseReportAvailable:false
+ }),/MISSING_REPORT_CONTEXT_REJECTED/);
+ assert.throws(()=>summarizeUnverifiableCaseReport({
+   sourceSha:fake64,caseReportPresent:true
+ }),/UNVERIFIABLE_REPORT_CONTEXT_REJECTED/);
+ const r=await report();
+ assert.throws(()=>summarizeObservedTrial(r,batch.briefs,{
+   sourceSha:fake64,reportRawBytes:JSON.stringify(r,null,2)+'\\n'
+ }),/INVALID_FIXED_RESEARCH_CONTEXT/);
+ const expected=summarizeObservedTrial(r,batch.briefs,{
+   sourceSha:SHA,reportRawBytes:JSON.stringify(r,null,2)+'\\n'
+ });
+ assert.equal(expected.sourceCommitSha,SHA);
+ assert.match(expected.reportRawFileSha256,/^[a-f0-9]{64}$/);
 });

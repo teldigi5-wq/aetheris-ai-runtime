@@ -304,3 +304,23 @@ reviewable integrity receipt can be emitted.
 This is a time-of-check *integrity preflight*, not a signed audit,
 proof of underlying model weights, originality validation, field
 performance measurement, a real screen-reader test, or release approval.
+
+## W5-J critical preflight correction: Git commit SHA is 40, file digest is 64
+
+A review of the owner-labeled CPU workflow found a genuine execution
+blocker: GitHub supplies a 40-character SHA-1 commit ID in the approved
+pull-request event and checked-out head, while the original authorization
+and three evidence-summary paths mistakenly required a 64-character
+SHA-256 digest. As a result, an owner-approved CPU trial would fail its
+authorization gate before model download even if normal mock CI was green.
+
+These paths now require **exactly 40 lowercase hexadecimal characters**
+for a Git commit identity: owner-label authorization, missing-report
+receipt, unverifiable-report receipt, and accepted/rejected-case
+summary. All real artifact SHA-256 digests still require **64 lowercase
+hexadecimal characters**, unchanged. New adversarial tests reject a
+fabricated 64-character commit identity; the mock reviewer uses a
+realistically shaped 40-character fixture and still performs no model
+inference. This fixes compatibility, not permission: explicit owner
+approval is still absent; do not apply the label or start model
+downloads based on a generic continuation request.

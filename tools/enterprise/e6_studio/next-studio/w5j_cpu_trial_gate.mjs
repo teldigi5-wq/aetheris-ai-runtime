@@ -10,6 +10,9 @@ import {createHash} from 'node:crypto';
 const fail=x=>{throw Error('E6_W5J_'+x);};
 const sha=x=>createHash('sha256').update(x).digest('hex');
 const hex=v=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
+// GitHub's SHA-1 commit object ID is 40 lowercase hexadecimal characters.
+// It is not a SHA-256 digest. Never conflate source identity and file hashes.
+const gitCommitSha=v=>typeof v==='string'&&/^[a-f0-9]{40}$/.test(v);
 const OWNER='teldigi5-wq',REPO='teldigi5-wq/aetheris-ai-runtime',
   BASE='feat/e6-w5i-local-inference-completion-20261102',
   LABEL='e6-w5j-three-brief-cpu-approved';
@@ -28,7 +31,7 @@ export function authorizeLabelEvent(event,{actor,repository,expectedPr,headSha}=
     event.pull_request?.user?.login!==OWNER||
     event.pull_request?.head?.repo?.full_name!==REPO||
     event.pull_request?.base?.ref!==BASE||
-    !hex(headSha)||event.pull_request?.head?.sha!==headSha)
+    !gitCommitSha(headSha)||event.pull_request?.head?.sha!==headSha)
     fail('NOT_OWNER_AUTHORIZED_PR_LABEL_EVENT');
  return {kind:'E6_W5J_CPU_OWNER_LABEL_AUTHORIZATION_V1',
    expectedPr,reviewedHeadSha:headSha,repository:REPO,
@@ -112,7 +115,7 @@ const sameReportBytes=(report,bytes)=>{
 // A failed trial with no saved case report is NOT three rejected model cases.
 // The stage that failed and whether any provider requests ran remain unknown.
 export function summarizeMissingCaseReport({sourceSha,caseReportAvailable}={}){
- if(!hex(sourceSha)||caseReportAvailable!==false)
+ if(!gitCommitSha(sourceSha)||caseReportAvailable!==false)
    fail('MISSING_REPORT_CONTEXT_REJECTED');
  return {
    kind:'E6_W5J_MISSING_CASE_REPORT_V1',
@@ -132,7 +135,7 @@ export function summarizeMissingCaseReport({sourceSha,caseReportAvailable}={}){
  // There is a nonempty report file, but the summary attempt failed. This
  // receipt does NOT diagnose its content or assert that any model ran.
 export function summarizeUnverifiableCaseReport({sourceSha,caseReportPresent}={}){
- if(!hex(sourceSha)||caseReportPresent!==true)
+ if(!gitCommitSha(sourceSha)||caseReportPresent!==true)
    fail('UNVERIFIABLE_REPORT_CONTEXT_REJECTED');
  return {
    kind:'E6_W5J_UNVERIFIABLE_CASE_REPORT_V1',
@@ -151,7 +154,7 @@ export function summarizeUnverifiableCaseReport({sourceSha,caseReportPresent}={}
 
 export function summarizeObservedTrial(report,briefs,{sourceSha,reportRawBytes}={}){
  const reportRawFileSha256=sameReportBytes(report,reportRawBytes);
- if(!hex(sourceSha)||!Array.isArray(briefs)||briefs.length!==3||
+ if(!gitCommitSha(sourceSha)||!Array.isArray(briefs)||briefs.length!==3||
     briefs.some(x=>!x||typeof x.projectSlug!=='string')||
     new Set(briefs.map(x=>x.projectSlug)).size!==3)
    fail('INVALID_FIXED_RESEARCH_CONTEXT');

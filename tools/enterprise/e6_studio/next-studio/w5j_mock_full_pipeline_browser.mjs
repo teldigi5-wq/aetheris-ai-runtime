@@ -61,7 +61,7 @@ async function main(){
  await writeFile(join(trial,'source-code-trial-report.json'),raw,
    {flag:'wx',mode:0o600});
  const summary=summarizeObservedTrial(fake,batch.briefs,{
-   sourceSha:'f'.repeat(64),reportRawBytes:raw
+   sourceSha:'f'.repeat(40),reportRawBytes:raw
  });
  assert.equal(summary.accepted,3);
  assert.equal(summary.releaseGo,false);
