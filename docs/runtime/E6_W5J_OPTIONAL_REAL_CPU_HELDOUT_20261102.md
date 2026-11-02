@@ -132,3 +132,20 @@ running Ollama instance. No evidence report is fabricated; the existing
 unknown model/case attempts as `null`. The tests never start inference,
 download weights, request GPUs, approve the GitHub trial label or change
 release authority.
+
+## W5-J provider exception provenance hardening (mock-only)
+
+The fixed 127.0.0.1 provider adapter now converts transport exceptions,
+timeout/abort errors, and response-stream interruptions into deterministic
+source-owned codes. Transport or stream error messages are **untrusted** and
+must never appear in case receipts or impersonate a schema/repair failure,
+even if an exception message happens to begin with `E6_W5A_` or
+`E6_W5H_`. Oversized bodies remain rejected by the existing 48 KB budget.
+
+The held-out runner now exposes only an explicit set of known rejection
+codes; unknown exceptions receive `E6_W5C_UNCLASSIFIED_FAILURE`, not a
+plausible but unverified provider/schema diagnosis. Four model-free
+regression groups cover forged transport exceptions, timeouts, failing
+response streams, and oversized responses without retry inflation.
+These tests do not attest real model execution, release readiness, or
+any rights/visual-quality outcome.
