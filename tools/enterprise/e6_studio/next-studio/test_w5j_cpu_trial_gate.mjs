@@ -593,3 +593,44 @@ test('W5-J real CPU summary path is wired to the actual W5-D disk audit',async()
  assert(gateSource.includes("await import('./w5d_trial_integrity.mjs')"));
  assert(source.includes("trialRoot:join(here,'target/e6-w5c-local-css-research')"));
 });
+
+test('report envelope rejects injected authority, raw prompts, and undocumented fields',async()=>{
+ for(const mutate of [
+  r=>{r.internalToken='example-private-token';},
+  r=>{r.rawModelReply='should never be archived';},
+  r=>{r.runtime.reportedModelWeightsExecuted=true;},
+  r=>{r.runtime.privateEndpoint='http://outside.invalid';},
+  r=>{r.runtime.modelDigestCryptographicallyAttested=true;},
+  r=>{r.runtime.modelDigestCryptographicallyAttested='unknown';},
+  r=>{delete r.runtime.reportedVersion;},
+  r=>{r.runtime.reportedVersion='unsafe\nvalue';}
+ ]){
+  const v=await report();mutate(v);
+  assert.throws(()=>summarize(v),/INVALID_TRIAL_EVIDENCE/);
+ }
+});
+test('accepted case envelope rejects extra source, secrets, or authority fields',async()=>{
+ for(const mutate of [
+  c=>{c.rawModelReply='private generated model text';},
+  c=>{c.ownerApproved=true;},
+  c=>{c.accessToken='fixture-secret';},
+  c=>{c.extraEvidence=true;},
+  c=>{delete c.initialDesignPromptSha256;},
+  c=>{delete c.deterministicRepairBudgetPerPhase;}
+ ]){
+  const v=await report();mutate(v.cases[0]);
+  assert.throws(()=>summarize(v),/UNVERIFIED_ACCEPTED_CANDIDATE/);
+ }
+});
+test('rejected case envelope rejects raw source and invented proof fields',async()=>{
+ for(const mutate of [
+  c=>{c.rawRejectedSource='untrusted CSS';},
+  c=>{c.errorStack='filesystem path';},
+  c=>{c.modelWeightsAttested=true;},
+  c=>{delete c.phaseReceipt;},
+  c=>{c.metadataURL='https://example.invalid';}
+ ]){
+  const v=await report(1);mutate(v.cases[1]);
+  assert.throws(()=>summarize(v),/UNSAFE_REJECTED_CASE|INCONSISTENT_CASE_PROVENANCE/);
+ }
+});

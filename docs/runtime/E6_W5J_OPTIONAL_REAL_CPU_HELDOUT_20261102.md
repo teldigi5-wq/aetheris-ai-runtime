@@ -168,3 +168,17 @@ originality, license rights, visual quality, WCAG certification or release.
 The later independent browser reviewer still rechecks source integrity.
 All tests use synthetic providers and disposable directories; owner label,
 model downloads and deployment remain unchanged.
+
+## Strict report evidence schema (offline-only draft patch)
+
+The W5-J reviewer now checks exact key sets for the W5-C report,
+provider metadata and accepted/rejected cases. Unexpected fields that
+might embed raw model text, filesystem paths, credentials or unsupported
+approval claims are rejected, not summarized. Provider-reported model
+metadata must preserve `modelDigestCryptographicallyAttested:false` and
+the W5-B bounded version-string policy.
+
+This is a strict current-version research contract, not a public extension
+API. Future intentional schema changes require paired writer, verifier and
+adversarial-test updates. This patch adds no real model execution, owner
+approval, remote services, GPU permissions, merging or Stage45 authority.

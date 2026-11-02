@@ -60,6 +60,45 @@ const validPhaseReceipt=(c,accepted)=>{
    p[k.toLowerCase()]===(i<failed?'PASSED':i===failed?'FAILED':'NOT_EXECUTED'));
 };
 
+
+const exactKeys=(v,allowed)=>v&&typeof v==='object'&&!Array.isArray(v)&&
+  Object.keys(v).length===allowed.length&&
+  allowed.every(k=>Object.hasOwn(v,k));
+// These source-owned receipts are archived. Unexpected keys can carry
+// raw provider data, secrets, or invented authority, so reject them.
+const reportKeys=[
+ 'kind','runtime','briefCount','providerWasActualLoopbackRequest',
+ 'modelRuntimeAttested','modelAuthorshipIndependentlyAttested',
+ 'modelGeneratedJavaScript','modelAuthoredRestrictedCssCandidate',
+ 'sourcePolicyEnforced','accepted','rejected','cases',
+ 'humanVisualApproved','physicalGpuMeasured','rightsIndependentlyCertified',
+ 'ownerApproved','stage45Go','releaseGo'
+];
+const runtimeKeys=[
+ 'endpoint','reportedVersion','reportedModelName','reportedModelDigest',
+ 'modelDigestCryptographicallyAttested'
+];
+const caseCommon=[
+ 'projectSlug','briefSha256','modelReportedName','phaseReceipt',
+ 'accepted','status','modelRuntimeAttested','codeSecurityPolicyPassed',
+ 'humanVisualAccepted','releaseGo'
+];
+const acceptedKeys=[...caseCommon,
+ 'designPromptSha256','cssPromptSha256','initialDesignPromptSha256',
+ 'initialCssPromptSha256','designRequestAttempts','cssRequestAttempts',
+ 'designTokenBudget','cssTokenBudget','designReportedStopReason',
+ 'cssReportedStopReason','designStopReasonVerified','cssStopReasonVerified',
+ 'designReportedOutputTokens','cssReportedOutputTokens',
+ 'designFirstRejectionCode','cssFirstRejectionCode',
+ 'rawRejectedModelOutputSaved','deterministicRepairBudgetPerPhase',
+ 'designRawReplySha256','cssRawReplySha256','designSha256',
+ 'modelAuthoredCssCandidateSha256','outputSha256',
+ 'modelAuthorshipIndependentlyAttested'
+];
+const rejectedKeys=[...caseCommon,'rejectionCode','failurePhase','failureKind'];
+const expectedVersion=v=>typeof v==='string'&&v.length>0&&v.length<=48&&
+ /^[0-9A-Za-z.+-]+$/.test(v);
+
 const sameReportBytes=(report,bytes)=>{
   if(!(typeof bytes==='string'||Buffer.isBuffer(bytes))||
      Buffer.byteLength(bytes)<50||Buffer.byteLength(bytes)>120_000)
@@ -95,7 +134,11 @@ export function summarizeObservedTrial(report,briefs,{sourceSha,reportRawBytes}=
     briefs.some(x=>!x||typeof x.projectSlug!=='string')||
     new Set(briefs.map(x=>x.projectSlug)).size!==3)
    fail('INVALID_FIXED_RESEARCH_CONTEXT');
- if(!report||report.kind!=='E6_W5C_LOCAL_SOURCE_CODE_TRIAL_V1'||
+ if(!exactKeys(report,reportKeys)||
+   !exactKeys(report.runtime,runtimeKeys)||
+   !expectedVersion(report.runtime.reportedVersion)||
+   report.runtime.modelDigestCryptographicallyAttested!==false||
+   report.kind!=='E6_W5C_LOCAL_SOURCE_CODE_TRIAL_V1'||
    report.briefCount!==3||report.providerWasActualLoopbackRequest!==true||
    report.sourcePolicyEnforced!==true||
    report.modelAuthoredRestrictedCssCandidate!==true||
@@ -116,6 +159,7 @@ export function summarizeObservedTrial(report,briefs,{sourceSha,reportRawBytes}=
       c.modelRuntimeAttested!==false||c.releaseGo!==false)
      fail('INCONSISTENT_CASE_PROVENANCE');
    if(c.accepted===true){
+     if(!exactKeys(c,acceptedKeys))fail('UNVERIFIED_ACCEPTED_CANDIDATE');
      counted++;
      if(c.status!=='HUMAN_REVIEW_REQUIRED'||
        c.codeSecurityPolicyPassed!==true||
@@ -146,7 +190,8 @@ export function summarizeObservedTrial(report,briefs,{sourceSha,reportRawBytes}=
        modelOutputSha256:c.modelAuthoredCssCandidateSha256,
        sourceIntegrityProvenBySelfReport:false};
    }
-   if(c.accepted!==false||c.status!=='REJECTED'||
+   if(!exactKeys(c,rejectedKeys)||
+      c.accepted!==false||c.status!=='REJECTED'||
       c.codeSecurityPolicyPassed!==false||
       c.humanVisualAccepted!==false||
       !safeRejection(c.rejectionCode)||
