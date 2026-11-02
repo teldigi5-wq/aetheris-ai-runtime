@@ -7,7 +7,6 @@
  * response is NOT a cryptographic proof that the expected model weights ran.
  */
 import {createHash} from 'node:crypto';
-import {inspectTrial} from './w5d_trial_integrity.mjs';
 const fail=x=>{throw Error('E6_W5J_'+x);};
 const sha=x=>createHash('sha256').update(x).digest('hex');
 const hex=v=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
@@ -189,6 +188,9 @@ export async function summarizeWithSavedSourceAudit(report,heldoutSet,{
  };
  if(typeof trialRoot!=='string'||!trialRoot)
    fail('MISSING_SOURCE_AUDIT_ROOT');
+ // Load the disk auditor only for 3/3 accepted cases. Authorization and
+ // missing-report paths must remain independent of candidate audit imports.
+ const {inspectTrial}=await import('./w5d_trial_integrity.mjs');
  const {audit}=await inspectTrial(trialRoot,heldoutSet);
  if(audit.inputReportSha256!==summary.reportRawFileSha256||
     audit.acceptedSiteCount!==3||
