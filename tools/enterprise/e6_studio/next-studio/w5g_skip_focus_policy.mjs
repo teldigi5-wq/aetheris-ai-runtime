@@ -27,7 +27,7 @@ export function checkNoJsFocusProof(x){
     x.skipWasFirstTabStop!==true||x.skipFocusIndicatorVisible!==true||
     x.fragmentNavigatedToMain!==true||x.activeElementIsMain!==true||
     x.mainHasTabindexMinusOne!==true||
-    x.nextTabDidNotReturnToSkip!==true||
+    x.tabMovedOffMainWithoutTrap!==true||
     x.horizontalOverflowPx>2||!Number.isFinite(x.horizontalOverflowPx)||
     x.outsideRequests!==0||x.browserErrors!==0||
     x.ownerDeviceMeasured!==false||x.realModelUsed!==false||
