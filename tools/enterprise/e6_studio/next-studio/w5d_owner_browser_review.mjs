@@ -119,7 +119,7 @@ async function auditCandidateRoutes(origin,width,height){
           return route.abort();
         return route.fulfill({response,
           body:Buffer.concat([raw,Buffer.from(
-            '\\nhtml {font-size:200% !important}\\n')])});
+            String.fromCharCode(10)+'html {font-size:200% !important}')])});
       });
       let resized;
       try{

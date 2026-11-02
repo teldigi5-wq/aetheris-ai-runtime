@@ -724,6 +724,7 @@ test('W5-J browser quality runner must measure real Chromium root text resize on
  const content=await readFile(file,'utf8');
  assert(content.includes("await page.route(cssUrl,async route=>{"));
  assert(content.includes("route.fetch({maxRedirects:0,timeout:10000})"));
+ assert(content.includes("String.fromCharCode(10)+'html {font-size:200% !important}'"));
  assert(content.includes("await page.unroute(cssUrl)"));
  assert(!content.includes('page.addStyleTag('));
  for(const failure of [
