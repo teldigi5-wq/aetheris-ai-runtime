@@ -214,3 +214,59 @@ test('the installed research model must match the published provider tag ID, wit
  assert(source.includes("entries[0].get('digest','')"));
  assert(source.includes("E6_W5J_VENDOR_TAG_PREFIX_DRIFT_CHECK_NOT_WEIGHTS_ATTESTATION"));
 });
+
+test('W5-J rejected cases preserve phase and provider category without executing a model',async()=>{
+ const fake=fakeCssSourceProvider({briefs:batch.briefs});
+ const transport=async(url,opts)=>url.endsWith('/api/generate')
+   ?new Response('offline',{status:503}):fake(url,opts);
+ const result=await evaluateCodeHeldout({batch,model:MODEL,baseCss:css,transport});
+ assert.equal(result.report.accepted,0);
+ for(const c of result.report.cases){
+  assert.equal(c.failurePhase,'DESIGN');
+  assert.equal(c.failureKind,'PROVIDER_IO_OR_LIMIT');
+  assert.deepEqual(c.phaseReceipt,{design:'FAILED',css:'NOT_EXECUTED',compile:'NOT_EXECUTED'});
+ }
+ const simulated=structuredClone(result.report);
+ simulated.providerWasActualLoopbackRequest=true; // test fixture ONLY
+ const receipt=summarize(simulated);
+ assert.equal(receipt.accepted,0);
+ assert.equal(receipt.cases[0].failureKind,'PROVIDER_IO_OR_LIMIT');
+ assert.equal(receipt.cases[0].failurePhase,'DESIGN');
+ assert.equal(receipt.releaseGo,false);
+});
+test('W5-J CSS provider errors are not misreported as rejected design',async()=>{
+ const fake=fakeCssSourceProvider({briefs:batch.briefs});
+ const transport=async(url,opts)=>{
+  if(url.endsWith('/api/generate')&&
+      JSON.parse(opts.body).options.num_predict===900)
+    return new Response('offline',{status:503});
+  return fake(url,opts);
+ };
+ const result=await evaluateCodeHeldout({batch,model:MODEL,baseCss:css,transport});
+ for(const c of result.report.cases){
+  assert.equal(c.failurePhase,'CSS');
+  assert.equal(c.failureKind,'PROVIDER_IO_OR_LIMIT');
+  assert.deepEqual(c.phaseReceipt,{design:'PASSED',css:'FAILED',compile:'NOT_EXECUTED'});
+ }
+});
+test('W5-J rejects forged or contradictory failure phase receipts',async()=>{
+ for(const mutate of [
+  c=>{delete c.phaseReceipt;},
+  c=>{c.phaseReceipt.css='PASSED';},
+  c=>{c.phaseReceipt.extra='PASSED';},
+  c=>{c.failurePhase='DESIGN';},
+  c=>{c.failureKind='SUCCESS';}
+ ]){
+  const source=await report(1);
+  mutate(source.cases[1]);
+  assert.throws(()=>summarize(source),/UNSAFE_REJECTED_CASE/);
+ }
+ for(const mutate of [
+  c=>{c.phaseReceipt.compile='FAILED';},
+  c=>{c.failurePhase='DESIGN';}
+ ]){
+  const source=await report();
+  mutate(source.cases[0]);
+  assert.throws(()=>summarize(source),/UNVERIFIED_ACCEPTED_CANDIDATE/);
+ }
+});
