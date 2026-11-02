@@ -590,6 +590,6 @@ test('W5-J real CPU summary path is wired to the actual W5-D disk audit',async()
  const source=await readFile(new URL('./w5j_cpu_trial_cli.mjs',import.meta.url),'utf8');
  const gateSource=await readFile(new URL('./w5j_cpu_trial_gate.mjs',import.meta.url),'utf8');
  assert(source.includes('await summarizeWithSavedSourceAudit('));
- assert(gateSource.includes("import {inspectTrial} from './w5d_trial_integrity.mjs';"));
+ assert(gateSource.includes("await import('./w5d_trial_integrity.mjs')"));
  assert(source.includes("trialRoot:join(here,'target/e6-w5c-local-css-research')"));
 });
