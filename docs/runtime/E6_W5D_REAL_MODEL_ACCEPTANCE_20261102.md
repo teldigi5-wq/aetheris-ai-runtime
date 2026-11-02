@@ -75,3 +75,19 @@ Review the write-once local outputs (no remote publishing):
 | Production release | Runtime auth #23, Platform #251, Stage 45 9 attestations | **NO_GO** |
 
 **Stop criterion:** if real model responses are rejected or visual quality is insufficient, keep the draft open, preserve the evidence and revise model prompts/grammar in separate reviewed PRs. Do not loosen sanitizer/CSP/allowed selectors just to inflate a pass count. Never claim a real-model success from the fake CI fixtures. Do not merge or deploy.
+
+
+## 2 November update: borrowed-PC constraint — cloud CPU optional, real GPU deferred
+
+**Important hardware correction:** the current WSL2 machine is a friend's computer, not the owner's permanent workstation. **Do not install Ollama, download model weights, run 3D stress tests, alter device drivers, or consume significant CPU/GPU resources on that machine for Aetheris.** Earlier owner-local commands above are now an *alternative for a future authorized machine*, **not instructions to perform on the borrowed PC**.
+
+W5-D has two deliberately independent acceptance paths:
+
+1. **Optional cloud CPU inference smoke:** The public runtime repository supports a separate standard GitHub-hosted Ubuntu runner (no physical GPU required). `.github/workflows/runtime-e6-w5d-cpu-optin.yml` is triggered **only** when the repository owner explicitly applies the label `e6-w5d-cpu-smoke-approved` to **draft PR #269**, with the PR still open and from the same repository. A normal push or pull request sync **does not start this model download**. The workflow pins the official Ollama v0.40.13 Linux amd64 release with SHA-256, uses a CPU backend and `qwen2.5:0.5b` (~398 MB, Apache 2.0), performs **one** short local JSON generation using `w5d_cpu_smoke.mjs`, and keeps a short-retention hash-only record. It uses a 30-minute timeout and no GPU runner, cloud keys, release permissions or deployment. **This workflow has NOT been activated or executed.** Confirm repository usage and review the label before enabling it. This is a narrow *real provider response smoke test*, **not three successful held-out websites or proof of independent model weights/originality**.
+2. **Future owner-controlled hardware GPU acceptance:** high-fidelity Blender/WebGL rendering benchmarks, thermal/memory and browser FPS on a representative GPU, device accessibility and art-quality signoff remain **BLOCKED_PENDING_OWNER_HARDWARE**. They are **not prerequisites** for developing the safe source compiler, policy gate, static browser previews, CI, or conducting a CPU-only inference smoke.
+
+GitHub documentation confirms standard GitHub-hosted Actions are free in public repositories, but runner availability, 1.42 GB runtime downloads, third-party model registry/network reliability, workflow usage policies and eventual resource usage must still be considered. Larger runners can incur charges and are not selected. The model tag and Ollama's reported model digest are not immutable verified weights; the binary checksum verifies only that the downloaded archive matches the pinned release artifact.
+
+**No test is automatically authorized by this documentation.** A user with write permissions must deliberately create/apply the explicit label to PR #269 after review. Until that happens, its status is `NOT_TRIGGERED / NOT_VERIFIED`, and borrowed-device resource usage is zero. `workflow_dispatch` was intentionally not chosen because GitHub requires that manual-dispatch workflow files exist on the default branch, and Aetheris's `main` must not be changed for this research.
+
+The W5-D standard workflow separately runs `test_w5d_cpu_smoke.mjs` with an injected **fake** provider to verify rejection rules at negligible cost. Such tests carry **no real-model claims**. All prior STAGE45 NO_GO, Runtime #23, Platform #251, W4-D hardware gates, and unmerged draft branch safeguards remain unchanged.
