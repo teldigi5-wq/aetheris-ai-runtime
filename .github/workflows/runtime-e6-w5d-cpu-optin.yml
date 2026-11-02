@@ -16,7 +16,10 @@ jobs:
       github.event.label.name == 'e6-w5d-cpu-smoke-approved' &&
       github.event.pull_request.number == 269 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.draft == true
+      github.event.pull_request.draft == true &&
+      github.event.pull_request.user.login == 'teldigi5-wq' &&
+      github.actor == 'teldigi5-wq' &&
+      github.event.pull_request.base.ref == 'feat/e6-w5c-restricted-model-authored-css-20261101'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -49,7 +52,7 @@ jobs:
       - name: Install checksum-verified pinned Ollama binary locally on ephemeral runner
         run: |
           set -euo pipefail
-          curl --fail --location --retry 2 --connect-timeout 20 --max-time 480 \
+          curl --fail --location --retry 2 --connect-timeout 20 --max-time 480 --max-filesize 1600000000 \
             'https://github.com/ollama/ollama/releases/download/v0.40.13/ollama-linux-amd64.tar.zst' \
             --output "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
           echo 'c9490e0f520be21271d969e6703f012268b1d39f8b70dd58854e5bfef7a75bb6  '"$RUNNER_TEMP/ollama-linux-amd64.tar.zst" | sha256sum -c -
