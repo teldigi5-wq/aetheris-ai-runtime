@@ -130,10 +130,13 @@ async function auditCandidateRoutes(origin,width,height){
       const rootRatio=resized.root/baseline.root;
       const bodyRatio=resized.body/baseline.body;
       if(!Number.isFinite(rootRatio)||!Number.isFinite(bodyRatio)||
-         Math.abs(rootRatio-2)>.05||Math.abs(bodyRatio-2)>.05||
-         resized.overflow>2||!resized.mainVisible||
-         !resized.headingVisible||!resized.navigationLinksVisible)
-        refuse('TEXT_RESIZE_200_PERCENT_LAYOUT_FAILED');
+         Math.abs(rootRatio-2)>.05||Math.abs(bodyRatio-2)>.05)
+        refuse('TEXT_RESIZE_SCALE_FAILED');
+      if(!Number.isFinite(resized.overflow)||resized.overflow>2)
+        refuse('TEXT_RESIZE_HORIZONTAL_OVERFLOW');
+      if(!resized.mainVisible||!resized.headingVisible||
+         !resized.navigationLinksVisible)
+        refuse('TEXT_RESIZE_CONTENT_MISSING');
       const textResize200Percent={
         technique:'CHROMIUM_TEST_RUNNER_ROOT_FONT_SIZE_OVERRIDE',
         rootFontRatio:rootRatio,bodyFontRatio:bodyRatio,
@@ -302,7 +305,7 @@ async function main(){
 }
 try{await main();}
 catch(e){console.error('E6_W5D_REVIEW_BLOCKED',
-  /^E6_W5D_[A-Z_]+$/.test(e?.message)?e.message:'E6_W5D_UNVERIFIED_FAILURE');
+  /^E6_W5D_[A-Z0-9_]+$/.test(e?.message)?e.message:'E6_W5D_UNVERIFIED_FAILURE');
   process.exitCode=1;
 }finally{
   if(browser)await browser.close();

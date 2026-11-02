@@ -723,7 +723,12 @@ test('W5-J browser quality runner must measure real Chromium root text resize on
  const file=new URL('./w5d_owner_browser_review.mjs',import.meta.url);
  const content=await readFile(file,'utf8');
  assert(content.includes("await page.addStyleTag({content:'html {font-size:200% !important}'}"));
- assert(content.includes("refuse('TEXT_RESIZE_200_PERCENT_LAYOUT_FAILED')"));
+ for(const failure of [
+   'TEXT_RESIZE_SCALE_FAILED',
+   'TEXT_RESIZE_HORIZONTAL_OVERFLOW',
+   'TEXT_RESIZE_CONTENT_MISSING'
+ ])assert(content.includes("refuse('"+failure+"')"));
+ assert(content.includes('/^E6_W5D_[A-Z0-9_]+$/'));
  assert(content.includes('textResize200PercentRouteScanCount:views.length*2'));
  assert(content.includes('bothRoutesTextResizePassed:views.length===9'));
  const mock=await readFile(new URL('./w5j_mock_full_pipeline_browser.mjs',import.meta.url),'utf8');
