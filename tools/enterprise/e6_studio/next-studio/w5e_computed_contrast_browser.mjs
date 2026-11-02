@@ -61,12 +61,22 @@ try{
         });
         page.on('pageerror',e=>errors.push(String(e)));
         assert.equal((await page.goto(origin+'/',{waitUntil:'load'}))?.status(),200);
-        const colors=await page.evaluate(()=>[...document.querySelectorAll('section.section')]
-          .map(section=>({
-            background:getComputedStyle(section).backgroundColor,
+        const colors=await page.evaluate(()=>{
+          const paintedBackground=element=>{
+            for(let node=element;node;node=node.parentElement){
+              const color=getComputedStyle(node).backgroundColor;
+              if(/^rgb\\(/.test(color))return color;
+              if(color==='rgba(0, 0, 0, 0)')continue;
+              throw Error('Unsupported translucent or malformed background: '+color);
+            }
+            throw Error('No opaque painted ancestor background');
+          };
+          return [...document.querySelectorAll('section.section')].map(section=>({
+            background:paintedBackground(section),
             eyebrow:getComputedStyle(section.querySelector('.eyebrow')).color,
             text:getComputedStyle(section.querySelector('.section__text')).color
-          })));
+          }));
+        });
         assert.equal(colors.length,2);
         for(const c of colors){
           const background=toHex(c.background);
