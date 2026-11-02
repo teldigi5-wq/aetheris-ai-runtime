@@ -2,21 +2,41 @@
  * commands: authorize, live-approval, summarize, missing-report, unverified-report.
  * Fixed paths; no client/model controlled filenames or secrets.
  */
-import {readFile,lstat,mkdir,writeFile} from 'node:fs/promises';
+import {lstat,mkdir,writeFile,open} from 'node:fs/promises';
+import {constants} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {authorizeLabelEvent,authorizeCurrentOwnerPullRequest,summarizeWithSavedSourceAudit,summarizeMissingCaseReport,summarizeUnverifiableCaseReport} from './w5j_cpu_trial_gate.mjs';
 const here=dirname(fileURLToPath(import.meta.url));
 const fail=x=>{throw Error('E6_W5J_'+x);};
+// Pin the inode before inspecting it: lstat(path) followed by readFile(path)
+// permits a concurrent last-component symlink/file swap. O_NOFOLLOW blocks
+// symlinks on the opened leaf; an FD read stays on that same file.
 const readSmall=async(path,maxBytes,{includeBytes=false}={})=>{
- const info=await lstat(path);
- if(!info.isFile()||info.isSymbolicLink()||info.size>maxBytes||info.size===0)
+ const handle=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW);
+ try{
+  const before=await handle.stat();
+  if(!before.isFile()||before.size>maxBytes||before.size===0)
    fail('UNSAFE_EVIDENCE_FILE');
- const raw=await readFile(path);
- let parsed;
- try{parsed=JSON.parse(raw.toString('utf8'));}catch{fail('MALFORMED_EVIDENCE_JSON');}
- return includeBytes?{value:parsed,raw}:parsed;
+  // Allocate only the validated cap and refuse concurrent growth/truncation.
+  const raw=Buffer.alloc(before.size);
+  let total=0;
+  while(total<raw.length){
+   const {bytesRead}=await handle.read(raw,total,raw.length-total,total);
+   if(bytesRead===0)fail('UNSAFE_EVIDENCE_FILE');
+   total+=bytesRead;
+  }
+  const extra=Buffer.alloc(1);
+  if((await handle.read(extra,0,1,total)).bytesRead!==0)
+   fail('UNSAFE_EVIDENCE_FILE');
+  const after=await handle.stat();
+  if(after.size!==before.size||after.mtimeMs!==before.mtimeMs)
+   fail('UNSAFE_EVIDENCE_FILE');
+  let parsed;
+  try{parsed=JSON.parse(raw.toString('utf8'));}catch{fail('MALFORMED_EVIDENCE_JSON');}
+  return includeBytes?{value:parsed,raw}:parsed;
+ }finally{await handle.close();}
 };
 async function main(){
  const mode=process.argv[2];
