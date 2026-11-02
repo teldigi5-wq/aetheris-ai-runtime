@@ -149,3 +149,22 @@ regression groups cover forged transport exceptions, timeouts, failing
 response streams, and oversized responses without retry inflation.
 These tests do not attest real model execution, release readiness, or
 any rights/visual-quality outcome.
+
+## Saved-file integrity before marking three candidates reviewable
+
+The W5-J optional CPU summary now invokes the existing W5-D *independent
+disk-file integrity audit* when all three source candidates are claimed
+accepted. It compares the report's exact raw-file SHA-256 with the W5-D
+audit and requires three real source directories, exact approved paths,
+matching manifests/files, no symlinks or added files, and bounded static
+HTML/CSS safety policy. A missing, altered or extra artifact fails the
+summary step rather than emitting a misleading 3/3 reviewable receipt.
+
+Partial/rejected trials remain incomplete and have
+`savedCandidateFilesHashVerified:false`, never a false all-files audit.
+A complete check reports `savedCandidateFilesHashVerified:true` and a
+hash of the W5-D audit data. This does **not** prove actual model execution,
+originality, license rights, visual quality, WCAG certification or release.
+The later independent browser reviewer still rechecks source integrity.
+All tests use synthetic providers and disposable directories; owner label,
+model downloads and deployment remain unchanged.
