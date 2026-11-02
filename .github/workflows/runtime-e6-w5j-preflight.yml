@@ -5,6 +5,7 @@ on:
       - feat/e6-w5i-local-inference-completion-20261102
     paths:
       - '.github/workflows/runtime-e6-w5j-preflight.yml'
+      - '.github/workflows/runtime-e6-w5j-optin-heldout-cpu.yml'
       - 'tools/enterprise/e6_studio/next-studio/w5j_*'
       - 'tools/enterprise/e6_studio/next-studio/w5d_owner_browser_review.mjs'
       - 'tools/enterprise/e6_studio/next-studio/w5a_model_design_compiler.mjs'
