@@ -178,6 +178,8 @@ test('opt-in real-model workflow is always owner-labeled and validates all 18 pa
   "result['releaseGo'] is False",
   "result['bothRoutesAutomatedAccessibilityPassed'] is True",
   "result['automatedAccessibilityRouteScanCount'] == 18",
+  "result['textResize200PercentRouteScanCount'] == 18",
+  "result['bothRoutesTextResizePassed'] is True",
   "@axe-core/playwright@4.14.0"
  ]){
   // num_gpu is enforced in the adapter, not the workflow itself.
@@ -715,4 +717,20 @@ test('workflow archives only sanitized receipts after failed or unverified sourc
  assert(verified.includes('if: success()'));
  assert(verified.includes('e6-w5c-local-css-research/'));
  assert(verified.includes('e6-w5d-local-owner-browser-evidence/'));
+});
+
+test('W5-J browser quality runner must measure real Chromium root text resize on both routes',async()=>{
+ const file=new URL('./w5d_owner_browser_review.mjs',import.meta.url);
+ const content=await readFile(file,'utf8');
+ assert(content.includes("await page.addStyleTag({content:'html {font-size:200% !important}'}"));
+ assert(content.includes("refuse('TEXT_RESIZE_200_PERCENT_LAYOUT_FAILED')"));
+ assert(content.includes('textResize200PercentRouteScanCount:views.length*2'));
+ assert(content.includes('bothRoutesTextResizePassed:views.length===9'));
+ const mock=await readFile(new URL('./w5j_mock_full_pipeline_browser.mjs',import.meta.url),'utf8');
+ assert(mock.includes('assert.equal(review.textResize200PercentRouteScanCount,18)'));
+ assert(mock.includes('assert.equal(review.bothRoutesTextResizePassed,true)'));
+ const workflow=await readFile(new URL('../../../../.github/workflows/runtime-e6-w5j-optin-heldout-cpu.yml',import.meta.url),'utf8');
+ assert(workflow.includes("resized['browserUiZoomVerified'] is False"));
+ assert(workflow.includes("resized['ownerDeviceVerified'] is False"));
+ assert(workflow.includes("resized['independentWcagCertified'] is False"));
 });

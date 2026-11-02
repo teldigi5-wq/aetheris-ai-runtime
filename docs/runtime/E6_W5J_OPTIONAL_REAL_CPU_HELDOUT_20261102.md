@@ -201,3 +201,21 @@ Otherwise, unverified model content remains on the ephemeral runner and
 does not become a published artifact. Both artifact types retain the same
 seven-day limit. No new trigger, model execution approval, GPU allowance,
 deployment permission or Stage45 GO is introduced.
+
+## W6 preflight: 200% root-text resize in real Chromium (not browser zoom)
+
+The existing W5-D independent reviewer now measures a 200% root-font
+enlargement using Playwright-injected test-runner CSS on **both routes**
+at all nine site/viewport profiles (18 route checks). It captures
+computed root/body scaling, horizontal overflow, content visibility,
+and navigation presence; a scale below 1.95x or overflow above 2 px
+fails the review. The generated candidate remains JavaScript-free, and
+the reviewer runs against saved files with independent hash verification.
+
+This is a useful *software-browser text-resize proxy*, not actual 200%
+browser UI zoom, physical-device validation, real screen-reader testing,
+independent WCAG certification, model execution evidence, or human art
+approval. The owner-labeled W5-J workflow requires all 18 checks to
+pass before optional checked-candidate artifacts can be uploaded.
+Normal PR CI uses a deliberately synthetic source fixture and a real
+Chromium test browser only; it cannot replace human acceptance or release.

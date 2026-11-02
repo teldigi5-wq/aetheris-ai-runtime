@@ -166,6 +166,8 @@ jobs:
           assert result['bothRoutesKeyboardFocusVerified'] is True
           assert result['bothRoutesAutomatedAccessibilityPassed'] is True
           assert result['automatedAccessibilityRouteScanCount'] == 18
+          assert result['textResize200PercentRouteScanCount'] == 18
+          assert result['bothRoutesTextResizePassed'] is True
           for profile in result['profiles']:
               for route in ('homeAutomatedAccessibility', 'approachAutomatedAccessibility'):
                   scanned=profile[route]
@@ -173,6 +175,17 @@ jobs:
                   assert scanned['violations'] == 0
                   assert scanned['independentWcagCertified'] is False
                   assert scanned['screenReaderVerified'] is False
+                  resized=scanned['textResize200Percent']
+                  assert resized['technique'] == 'CHROMIUM_TEST_RUNNER_ROOT_FONT_SIZE_OVERRIDE'
+                  assert 1.95 <= resized['rootFontRatio'] <= 2.05
+                  assert 1.95 <= resized['bodyFontRatio'] <= 2.05
+                  assert resized['horizontalOverflowPx'] <= 2
+                  assert resized['mainVisible'] is True
+                  assert resized['headingVisible'] is True
+                  assert resized['navigationLinksVisible'] is True
+                  assert resized['browserUiZoomVerified'] is False
+                  assert resized['ownerDeviceVerified'] is False
+                  assert resized['independentWcagCertified'] is False
           for profile in result['profiles']:
               for route in ('homeKeyboard', 'approachKeyboard'):
                   keyboard=profile[route]

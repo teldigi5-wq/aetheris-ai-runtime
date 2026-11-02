@@ -91,6 +91,8 @@ async function main(){
  assert.equal(review.bothRoutesKeyboardFocusVerified,true);
  assert.equal(review.bothRoutesAutomatedAccessibilityPassed,true);
  assert.equal(review.automatedAccessibilityRouteScanCount,18);
+ assert.equal(review.textResize200PercentRouteScanCount,18);
+ assert.equal(review.bothRoutesTextResizePassed,true);
  assert(Number.isInteger(review.automatedAccessibilityManualReviewItems));
  assert.equal(review.profiles.length,9);
  assert.equal(review.visualQualityHumanApproved,false);
@@ -106,6 +108,17 @@ async function main(){
      assert.equal(scan.independentWcagCertified,false);
      assert.equal(scan.screenReaderVerified,false);
      assert.equal(scan.generatedAuthorJavaScript,false);
+     assert.equal(scan.textResize200Percent.technique,
+       'CHROMIUM_TEST_RUNNER_ROOT_FONT_SIZE_OVERRIDE');
+     assert(scan.textResize200Percent.rootFontRatio>=1.95);
+     assert(scan.textResize200Percent.bodyFontRatio>=1.95);
+     assert(scan.textResize200Percent.horizontalOverflowPx<=2);
+     assert.equal(scan.textResize200Percent.mainVisible,true);
+     assert.equal(scan.textResize200Percent.headingVisible,true);
+     assert.equal(scan.textResize200Percent.navigationLinksVisible,true);
+     assert.equal(scan.textResize200Percent.browserUiZoomVerified,false);
+     assert.equal(scan.textResize200Percent.ownerDeviceVerified,false);
+     assert.equal(scan.textResize200Percent.independentWcagCertified,false);
      assert(Number.isInteger(scan.needsManualReview));
    }
    for(const k of [v.homeKeyboard,v.approachKeyboard]){
@@ -139,7 +152,8 @@ async function main(){
  await assert.rejects(inspectTrial(trial,batch),/GENERATED_FILE_HASH_MISMATCH/);
  console.log('E6_W5J_MOCK_ONLY_3_SITES_18_ROUTE_SCREENSHOTS_HASHED '+JSON.stringify({
    syntheticModelResponses:true,realProviderCalled:false,views:9,
-   screenshotFiles:18,sourceTamperingRejected:true,
+   screenshotFiles:18,textResize200PercentRouteScans:18,
+   sourceTamperingRejected:true,
    actualWeightsAttested:false,humanVisualApproved:false,releaseGo:false
  }));
 }

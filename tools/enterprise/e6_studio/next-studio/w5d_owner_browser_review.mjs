@@ -101,7 +101,49 @@ async function auditCandidateRoutes(origin,width,height){
       }catch{
         refuse('GENERATED_ACCESSIBILITY_AXE_CHECK_FAILED');
       }
+      // A real Chromium CSS text-resize simulation, not browser UI zoom:
+      // temporarily enlarge the root font to 200% in the isolated axe page.
+      // This must not be misreported as physical-device WCAG certification.
+      const baseline=await page.evaluate(()=>({
+        root:parseFloat(getComputedStyle(document.documentElement).fontSize),
+        body:parseFloat(getComputedStyle(document.body).fontSize)
+      }));
+      await page.addStyleTag({content:'html {font-size:200% !important}'});
+      const resized=await page.evaluate(()=>({
+        root:parseFloat(getComputedStyle(document.documentElement).fontSize),
+        body:parseFloat(getComputedStyle(document.body).fontSize),
+        overflow:Math.max(0,document.documentElement.scrollWidth-innerWidth),
+        mainVisible:(()=>{
+          const el=document.querySelector('main');
+          const rect=el?.getBoundingClientRect();
+          return !!rect&&rect.width>0&&rect.height>0;
+        })(),
+        headingVisible:(()=>{
+          const el=document.querySelector('h1');
+          const rect=el?.getBoundingClientRect();
+          return !!rect&&rect.width>0&&rect.height>0;
+        })(),
+        navigationLinksVisible:[...document.querySelectorAll('.nav a')]
+          .length>=2&&[...document.querySelectorAll('.nav a')]
+          .every(el=>el.getClientRects().length>0)
+      }));
+      const rootRatio=resized.root/baseline.root;
+      const bodyRatio=resized.body/baseline.body;
+      if(!Number.isFinite(rootRatio)||!Number.isFinite(bodyRatio)||
+         Math.abs(rootRatio-2)>.05||Math.abs(bodyRatio-2)>.05||
+         resized.overflow>2||!resized.mainVisible||
+         !resized.headingVisible||!resized.navigationLinksVisible)
+        refuse('TEXT_RESIZE_200_PERCENT_LAYOUT_FAILED');
+      const textResize200Percent={
+        technique:'CHROMIUM_TEST_RUNNER_ROOT_FONT_SIZE_OVERRIDE',
+        rootFontRatio:rootRatio,bodyFontRatio:bodyRatio,
+        horizontalOverflowPx:resized.overflow,
+        mainVisible:true,headingVisible:true,navigationLinksVisible:true,
+        browserUiZoomVerified:false,screenReaderVerified:false,
+        ownerDeviceVerified:false,independentWcagCertified:false
+      };
       evidence[field]={
+        textResize200Percent,
         automatedRuleScanPassed:true,
         violations:data.violations,
         passedRules:data.passedRules,
@@ -223,6 +265,14 @@ async function main(){
       views.every(x=>x.approachScreenshot&&x.approachScreenshotSha256),
     fullPageScreenshotCount:views.length*2,
     automatedAccessibilityRouteScanCount:views.length*2,
+    textResize200PercentRouteScanCount:views.length*2,
+    bothRoutesTextResizePassed:views.length===9&&
+      views.every(v=>[v.homeAutomatedAccessibility,v.approachAutomatedAccessibility]
+        .every(x=>x.textResize200Percent?.rootFontRatio>=1.95&&
+          x.textResize200Percent?.bodyFontRatio>=1.95&&
+          x.textResize200Percent?.horizontalOverflowPx<=2&&
+          x.textResize200Percent?.browserUiZoomVerified===false&&
+          x.textResize200Percent?.independentWcagCertified===false)),
     bothRoutesAutomatedAccessibilityPassed:views.length===9&&
       views.every(v=>v.bothRoutesAutomatedAccessibilityPassed===true&&
         v.homeAutomatedAccessibility.automatedRuleScanPassed===true&&
