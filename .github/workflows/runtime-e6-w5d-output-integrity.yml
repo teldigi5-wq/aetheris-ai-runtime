@@ -1,0 +1,116 @@
+name: Enterprise E6 W5-D Owner Output Integrity and Review Gate - No Real Model in CI
+on:
+  pull_request:
+    branches:
+      - feat/e6-w5c-restricted-model-authored-css-20261101
+    paths:
+      - '.github/workflows/runtime-e6-w5d-output-integrity.yml'
+      - 'tools/enterprise/e6_studio/next-studio/w5d_*'
+      - 'tools/enterprise/e6_studio/next-studio/test_w5d_*'
+      - 'docs/runtime/E6_W5D_REAL_MODEL_ACCEPTANCE_20261102.md'
+permissions:
+  contents: read
+jobs:
+  bounded-model-proposal-and-simulated-browser-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact W5-D pull request head without write credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Pin Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Pin Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Syntax and no-secret real-inference gate policy
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          cd tools/enterprise/e6_studio/next-studio
+          node --check w5a_model_design_compiler.mjs
+          node --check w5a_local_ollama.mjs
+          node --check w5a_test_doubles.mjs
+          node --check w5a_simulated_browser_proof.mjs
+          node --check test_w5a_model_contract.mjs
+          node --check w5b_evaluation_contract.mjs
+          node --check w5b_local_heldout_runner.mjs
+          node --check w5b_simulated_provider.mjs
+          node --check w5b_simulated_browser_proof.mjs
+          node --check test_w5b_heldout_evaluation.mjs
+          node --check w5c_restricted_css_compiler.mjs
+          node --check w5c_local_code_trial.mjs
+          node --check w5c_test_doubles.mjs
+          node --check w5c_css_browser_proof.mjs
+          node --check test_w5c_css_code_gate.mjs
+          node --check w5d_trial_integrity.mjs
+          node --check w5d_owner_browser_review.mjs
+          node --check test_w5d_trial_integrity.mjs
+          node --check w5d_cpu_smoke.mjs
+          node --check test_w5d_cpu_smoke.mjs
+          test -s w5b_heldout_briefs.json
+          test -s w5a_base.css
+          test -s w5a_fictional_owner_brief.json
+          if env | grep -E '^(E6_W5A_ENABLE_LOCAL_INFERENCE|E6_W5A_MODEL|E6_W5B_ALLOW_LOCAL_INFERENCE|E6_W5B_MODEL|E6_W5C_ALLOW_LOCAL_INFERENCE|E6_W5C_MODEL)='; then
+            echo "W5-A CI MUST NOT ENABLE MODEL INFERENCE"
+            exit 1
+          fi
+          echo E6_W5D_NO_REAL_MODEL_INFERENCE_IN_CI
+      - name: Independent compiler/security adversarial tests and prior W1 W2 regressions
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          node --test test_experience_contract.mjs test_w2_compiler.mjs test_w2b_curated_compiler.mjs test_w2c_narrative_compiler.mjs test_w5a_model_contract.mjs test_w5b_heldout_evaluation.mjs test_w5c_css_code_gate.mjs test_w5d_trial_integrity.mjs test_w5d_cpu_smoke.mjs
+          node w2c_generate_preview.mjs
+          echo E6_W5D_AUDIT_FIXTURES_ARE_NOT_REAL_MODEL_EVIDENCE
+      - name: Preserve dependency lock integrity and Next static build
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          python3 scripts/validate_dependency_lock.py
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run typecheck
+          NEXT_PUBLIC_E6_BLENDER_PREVIEW=1 npm run build
+      - name: Install pinned browser test-only Chromium
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Simulated-site browser matrix, no provider calls or claims
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          node w5a_simulated_browser_proof.mjs
+          node w5b_simulated_browser_proof.mjs
+          node w5c_css_browser_proof.mjs
+          test -f target/e6-w5a-simulated-test-double-0/build-evidence.json
+          test -f target/e6-w5a-simulated-test-double-1/build-evidence.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for i in (0,1):
+              data=json.loads(Path(f"target/e6-w5a-simulated-test-double-{i}/build-evidence.json").read_text())
+              assert data["modelCalled"] is False
+              assert data["realModelAuthorshipVerified"] is False
+              assert data["stage45Go"] is False
+              assert data["releaseGo"] is False
+          print("E6_W5A_SIMULATED_TEST_DOUBLE_NO_REAL_MODEL_CLAIM_PASS")
+          PY
+      - name: Short-lived research screenshots, not evidence of actual model inference
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e6-w5d-fixture-tests-no-real-inference
+          path: |
+            tools/enterprise/e6_studio/next-studio/target/e6-w5a-simulated-test-double-0/
+            tools/enterprise/e6_studio/next-studio/target/e6-w5a-simulated-test-double-1/
+            tools/enterprise/e6_studio/next-studio/target/e6-w5b-simulated-browser-only/
+            tools/enterprise/e6_studio/next-studio/target/e6-w5c-human-css-test-doubles/
+          if-no-files-found: warn
+          retention-days: 7
