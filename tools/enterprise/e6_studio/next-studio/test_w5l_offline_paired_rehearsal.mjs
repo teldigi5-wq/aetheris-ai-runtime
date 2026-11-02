@@ -51,7 +51,8 @@ test('all six human-authored simulated design paths pass without genuine inferen
 test('malformed and truncated simulated outputs remain synthetic rejections',()=>{
   for(const [index,change,expected] of [
     [0,c=>{c.envelopes[0].done_reason='length';},'E6_W5A_MODEL_GENERATION_NOT_NORMALLY_FINISHED'],
-    [1,c=>{c.envelopes[0].response='{bad json';},'E6_W5A_MODEL_JSON_PARSE_REJECTED'],
+    [1,c=>{c.envelopes[0].response='{bad json'.repeat(14);},'E6_W5A_MODEL_JSON_PARSE_REJECTED'],
+    [4,c=>{c.envelopes[0].response='{bad json';},'E6_W5A_UNVERIFIED_PROVIDER_ENVELOPE'],
     [2,c=>{const p=JSON.parse(c.envelopes[0].response);p.art.accent=p.art.surface;
       c.envelopes[0].response=JSON.stringify(p);},'E6_W5A_MODEL_SCHEMA_OR_CONTRAST_REJECTED'],
     [3,c=>{const p=JSON.parse(c.envelopes[1].response);p.page.sections=[];
