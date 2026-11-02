@@ -55,6 +55,8 @@ export function checkKeyboardJourney(x){
 export function checkReflowProxy(x){
  if(!x||!views.has(x.viewport)||!routes.has(x.path)||
     x.cssZoomScale!==2||
+    !Number.isInteger(x.testViewportWidthCssPx)||
+    x.testViewportWidthCssPx<640||
     !Number.isFinite(x.horizontalOverflowPx)||
     x.horizontalOverflowPx<0||x.horizontalOverflowPx>2||
     x.contentRemainsVisible!==true||
