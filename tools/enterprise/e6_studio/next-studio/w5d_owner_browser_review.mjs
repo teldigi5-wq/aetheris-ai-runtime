@@ -71,18 +71,39 @@ async function visit(origin,slug,width,height){
       h1:document.querySelector('h1')?.textContent?.trim().slice(0,120)??''
     }));
     if(ui.overflow>2||!ui.h1)refuse('MOBILE_OVERFLOW_OR_EMPTY_HEADING');
-    await page.locator('a[href="/approach/"]').click();
-    if(new URL(page.url()).pathname!=='/approach/'||
-       await page.locator('a[aria-current="page"]').count()!==1)
-      refuse('STATIC_NAVIGATION_FAILED');
+    // Each website has TWO routes. Do not accept nine home screenshots as
+    // evidence of all 18 generated route/viewport compositions.
+    await Promise.all([
+      page.waitForURL(origin+'/approach/',{waitUntil:'load',timeout:12_000}),
+      page.locator('a[href="/approach/"]').click()
+    ]);
+    const approachState=await page.evaluate(()=>({
+      overflow:Math.max(0,document.documentElement.scrollWidth-innerWidth),
+      heading:document.querySelector('h1')?.textContent?.trim()??'',
+      mainCount:document.querySelectorAll('main').length,
+      headingCount:document.querySelectorAll('h1').length,
+      scriptCount:document.querySelectorAll('script').length,
+      navigationCurrentCount:document.querySelectorAll('a[aria-current="page"]').length
+    }));
+    if(approachState.overflow>2||!approachState.heading||
+       approachState.mainCount!==1||approachState.headingCount!==1||
+       approachState.scriptCount!==0||approachState.navigationCurrentCount!==1)
+      refuse('APPROACH_PAGE_CONTRACT_FAILED');
+    const approachFile=slug+'-approach-'+width+'x'+height+'.png';
+    const approachShot=await page.screenshot({fullPage:true,animations:'disabled'});
+    await writeFile(join(resultRoot,approachFile),approachShot,{flag:'wx',mode:0o600});
     if(remote.length||errors.length)refuse('BROWSER_NETWORK_OR_EXCEPTION');
-    return {projectSlug:slug,viewport:[width,height],screenshot:file,
-      screenshotSha256:sha(shot),homeHttpStatus:200,cssHttpStatus:200,
+    return {projectSlug:slug,viewport:[width,height],
+      screenshot:file,screenshotSha256:sha(shot),
+      approachScreenshot:approachFile,approachScreenshotSha256:sha(approachShot),
+      homeHttpStatus:200,approachHttpStatus:200,cssHttpStatus:200,
       noScriptTags:true,externalRequestCount:0,uncaughtExceptions:0,
-      horizontalOverflowPx:ui.overflow,computedBodyBackground:ui.background,
+      horizontalOverflowPx:ui.overflow,
+      approachHorizontalOverflowPx:approachState.overflow,
+      computedBodyBackground:ui.background,
       computedFontFamily:ui.font,homeHeading:ui.h1,
-      approachNavigationPassed:true,
-      fullPageScreenshotForHumanReview:true,
+      approachHeading:approachState.heading,approachNavigationPassed:true,
+      bothFullPageScreenshotsForHumanReview:true,
       physicalGpuFrameTimingMeasured:false,coreWebVitalsCertified:false};
   }finally{await ctx.close();}
 }
@@ -111,6 +132,9 @@ async function main(){
   const report={kind:'E6_W5D_LOCAL_BROWSER_REVIEW_V1',
     sourceIntegrityAudit:audit,profiles:views,
     allNineSoftwareBrowserReviewsPassed:views.length===9,
+    bothRoutesCapturedForAllNineProfiles:views.length===9&&
+      views.every(x=>x.approachScreenshot&&x.approachScreenshotSha256),
+    fullPageScreenshotCount:views.length*2,
     providerSelfReportedLoopbackOnly:true,
     independentModelAuthorshipVerified:false,
     visualQualityHumanApproved:false,
