@@ -18,7 +18,7 @@ const keyboard=(viewport='mobile',path='/')=>({
  keyboardTrapObserved:false,screenReaderVerified:false
 });
 const reflow=(viewport='mobile',path='/')=>({
- viewport,path,cssZoomScale:2,horizontalOverflowPx:0,
+ viewport,path,cssZoomScale:2,testViewportWidthCssPx:640,horizontalOverflowPx:0,
  contentRemainsVisible:true,browserUiZoomVerified:false,ownerDeviceVerified:false
 });
 const clone=x=>structuredClone(x);
@@ -53,7 +53,7 @@ test('page evidence rejects release-like missing routes, extra scripts, off-orig
 test('2x CSS zoom proxy must not be passed as a real browser UI zoom or owner-device measurement',()=>{
  const v=reflow();assert.equal(checkReflowProxy(v),true);
  for(const mutate of [
- x=>{x.cssZoomScale=1;},x=>{x.horizontalOverflowPx=7;},
+ x=>{x.cssZoomScale=1;},x=>{x.testViewportWidthCssPx=320;},x=>{x.horizontalOverflowPx=7;},
  x=>{x.contentRemainsVisible=false;},x=>{x.browserUiZoomVerified=true;},
  x=>{x.ownerDeviceVerified=true;}
  ]){const x=clone(v);mutate(x);assert.throws(()=>checkReflowProxy(x),/CSS_ZOOM_REFLOW_PROXY_BLOCKED/);}
