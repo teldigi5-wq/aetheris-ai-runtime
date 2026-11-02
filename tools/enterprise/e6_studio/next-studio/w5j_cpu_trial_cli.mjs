@@ -2,14 +2,29 @@
  * commands: authorize, live-approval, summarize, missing-report, unverified-report.
  * Fixed paths; no client/model controlled filenames or secrets.
  */
-import {lstat,mkdir,writeFile,open} from 'node:fs/promises';
+import {lstat,mkdir,writeFile,open,realpath} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import {createHash} from 'node:crypto';
-import {dirname,join} from 'node:path';
+import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {authorizeLabelEvent,authorizeCurrentOwnerPullRequest,summarizeWithSavedSourceAudit,summarizeMissingCaseReport,summarizeUnverifiableCaseReport} from './w5j_cpu_trial_gate.mjs';
 const here=dirname(fileURLToPath(import.meta.url));
 const fail=x=>{throw Error('E6_W5J_'+x);};
+// GitHub runner paths are data, not authority. Reject lexical traversal and
+// intermediate symlinks before opening a bounded, no-follow evidence file.
+// The final file is opened with O_NOFOLLOW and pinned by its descriptor.
+// This preflight does not make untrusted parent directories race-proof.
+const checkRunnerPath=async(path,{directory=false}={})=>{
+ const root='/home/runner/work/_temp';
+ if(typeof path!=='string'||path!==resolve(path)||
+    !(directory?path===root||path.startsWith(root+'/'):path.startsWith(root+'/')))
+   fail('UNTRUSTED_RUNNER_EVIDENCE_PATH');
+ const parent=directory?path:dirname(path);
+ let canonical;
+ try{canonical=await realpath(parent);}
+ catch{fail('UNTRUSTED_RUNNER_EVIDENCE_PATH');}
+ if(canonical!==parent)fail('UNTRUSTED_RUNNER_EVIDENCE_PATH');
+};
 // Pin the inode before inspecting it: lstat(path) followed by readFile(path)
 // permits a concurrent last-component symlink/file swap. O_NOFOLLOW blocks
 // symlinks on the opened leaf; an FD read stays on that same file.
@@ -52,6 +67,7 @@ async function main(){
   if(typeof eventPath!=='string'||!eventPath||
      !eventPath.startsWith('/home/runner/work/_temp/'))
     fail('UNTRUSTED_GITHUB_EVENT_PATH');
+  await checkRunnerPath(eventPath);
   const event=await readSmall(eventPath,100_000);
   const info=authorizeLabelEvent(event,{
    actor:process.env.GITHUB_ACTOR,
@@ -68,6 +84,7 @@ async function main(){
   const temp=process.env.RUNNER_TEMP;
   if(typeof temp!=='string'||!/^\/home\/runner\/work\/_temp(?:\/[a-zA-Z0-9_.-]+)*$/.test(temp))
    fail('UNTRUSTED_LIVE_APPROVAL_TEMP_PATH');
+  await checkRunnerPath(temp,{directory:true});
   const live=await readSmall(join(temp,'w5j-live-owner-pr.json'),200_000);
   const result=authorizeCurrentOwnerPullRequest(live,{
    actor:process.env.GITHUB_ACTOR,

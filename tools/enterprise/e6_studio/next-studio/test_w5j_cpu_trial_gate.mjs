@@ -909,6 +909,16 @@ test('real W5-J authorize CLI accepts exact GitHub runner event and refuses forg
      const result=invoke();
      assert.notEqual(result.status,0,'forged event wrongly authorized');
    }
+   // A valid payload must not be authorized through a non-canonical path.
+   await writeFile(payloadPath,JSON.stringify(event()));
+   const traversalPath=payloadDir+'/../'+payloadDir.split('/').at(-1)+'/approved-labeled-event.json';
+   const traversal=invoke({...env,GITHUB_EVENT_PATH:traversalPath});
+   assert.notEqual(traversal.status,0,'dot-dot event path wrongly authorized');
+   const alias=join(payloadDir,'parent-link');
+   await symlink(payloadDir,alias,'dir');
+   const linked=invoke({...env,GITHUB_EVENT_PATH:join(alias,'approved-labeled-event.json')});
+   assert.notEqual(linked.status,0,'intermediate event path symlink wrongly authorized');
+   await rm(alias);
    await rm(payloadPath);
    await symlink(join(dir,'w5j_cpu_trial_cli.mjs'),payloadPath);
    const linkAttempt=invoke();
@@ -1033,6 +1043,12 @@ test('actual live-approval CLI rechecks a runner-style GitHub PR snapshot withou
      {RUNNER_TEMP:dir},
      {E6_W5J_APPROVED_PR_NUMBER:'274'}
    ])assertDenied(run({...env,...change}));
+   const traversalTemp=runnerDir+'/../'+runnerDir.split('/').at(-1);
+   assertDenied(run({...env,RUNNER_TEMP:traversalTemp}));
+   const alias=join(runnerDir,'parent-link');
+   await symlink(runnerDir,alias,'dir');
+   assertDenied(run({...env,RUNNER_TEMP:alias}));
+   await rm(alias);
    await writeFile(snapshotPath,'{not-json');
    assertDenied(run());
    await writeFile(snapshotPath,'x'.repeat(200001));
