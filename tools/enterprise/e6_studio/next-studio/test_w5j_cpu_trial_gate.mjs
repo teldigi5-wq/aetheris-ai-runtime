@@ -69,8 +69,13 @@ async function report(badIndex=-1){
  }
  return v;
 }
+function summarize(report,briefList=batch.briefs){
+ return summarizeObservedTrial(report,briefList,{
+  sourceSha:SHA,reportRawBytes:JSON.stringify(report,null,2)+'\n'
+ });
+}
 test('exact three-case synthetic report can be summarized but NEVER attests real weights or release',async()=>{
- const r=summarizeObservedTrial(await report(),batch.briefs,{sourceSha:SHA});
+ const r=summarize(await report());
  assert.equal(r.accepted,3);
  assert.equal(r.rejected,0);
  assert.equal(r.candidateStatus,'ALL_THREE_SOURCE_CANDIDATES_FOR_REVIEW');
@@ -82,7 +87,7 @@ test('exact three-case synthetic report can be summarized but NEVER attests real
  for(const c of r.cases)assert.equal(c.sourceIntegrityProvenBySelfReport,false);
 });
 test('partial or malicious CSS output stays visible as a REJECTION, not success',async()=>{
- const r=summarizeObservedTrial(await report(1),batch.briefs,{sourceSha:SHA});
+ const r=summarize(await report(1));
  assert.equal(r.accepted,2);
  assert.equal(r.rejected,1);
  assert.equal(r.cases[1].accepted,false);
@@ -92,7 +97,7 @@ test('partial or malicious CSS output stays visible as a REJECTION, not success'
 });
 test('fake provider flag without a real localhost request is never accepted as observed trial',async()=>{
  const v=await report();v.providerWasActualLoopbackRequest=false;
- assert.throws(()=>summarizeObservedTrial(v,batch.briefs,{sourceSha:SHA}),/INVALID_TRIAL_EVIDENCE/);
+ assert.throws(()=>summarize(v),/INVALID_TRIAL_EVIDENCE/);
 });
 test('never upgrade missing stop reasons, invented model authorship or GPU evidence to acceptance',async()=>{
  for(const change of [
@@ -108,7 +113,7 @@ test('never upgrade missing stop reasons, invented model authorship or GPU evide
   r=>{r.cases[1].modelAuthoredCssCandidateSha256='fake';}
  ]){
   const v=await report();change(v);
-  assert.throws(()=>summarizeObservedTrial(v,batch.briefs,{sourceSha:SHA}),/E6_W5J_/);
+  assert.throws(()=>summarize(v),/E6_W5J_/);
  }
 });
 test('refuse incomplete case sets, reused identities and malformed observed origin',async()=>{
@@ -121,6 +126,33 @@ test('refuse incomplete case sets, reused identities and malformed observed orig
   r=>{r.cases[0].modelReportedName='different';}
  ]){
   const v=await report();change(v);
-  assert.throws(()=>summarizeObservedTrial(v,batch.briefs,{sourceSha:SHA}),/E6_W5J_/);
+  assert.throws(()=>summarize(v),/E6_W5J_/);
+ }
+});
+
+test('raw evidence digest refers to bytes actually saved, not normalized JSON only',async()=>{
+ const v=await report();
+ const raw=JSON.stringify(v,null,2)+'\n';
+ const sum=summarizeObservedTrial(v,batch.briefs,{sourceSha:SHA,reportRawBytes:raw});
+ assert.match(sum.reportRawFileSha256,/^[a-f0-9]{64}$/);
+ assert.notEqual(sum.reportSha256,sum.reportRawFileSha256);
+ assert.throws(()=>summarizeObservedTrial(v,batch.briefs,{
+  sourceSha:SHA,reportRawBytes:JSON.stringify({...v,rejected:3},null,2)+'\n'
+ }),/REPORT_BYTES_DO_NOT_MATCH_STRUCTURED_EVIDENCE/);
+ assert.throws(()=>summarizeObservedTrial(v,batch.briefs,{sourceSha:SHA}),
+  /REPORT_RAW_BYTES_REQUIRED/);
+});
+test('accepted candidate must preserve all exact SHA-256 artifact keys and original brief identity',async()=>{
+ for(const damage of [
+  c=>{c.outputSha256={};},
+  c=>{delete c.outputSha256['assets/site.css'];},
+  c=>{c.outputSha256['index.html']='attacker';},
+  c=>{c.outputSha256['extra.txt']='a'.repeat(64);},
+  c=>{c.designSha256='short';},
+  c=>{c.briefSha256='f'.repeat(64);}
+ ]){
+  const v=await report();
+  damage(v.cases[0]);
+  assert.throws(()=>summarize(v),/E6_W5J_/);
  }
 });
