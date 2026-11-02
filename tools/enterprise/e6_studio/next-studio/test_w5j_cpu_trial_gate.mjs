@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile,mkdtemp,copyFile,mkdir,writeFile,rm,symlink} from 'node:fs/promises';
+import {spawnSync} from 'node:child_process';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {authorizeLabelEvent,summarizeObservedTrial,summarizeMissingCaseReport} from './w5j_cpu_trial_gate.mjs';
 import {evaluateCodeHeldout} from './w5c_local_code_trial.mjs';
 import {fakeCssSourceProvider} from './w5c_test_doubles.mjs';
@@ -299,4 +302,64 @@ test('owner-labeled workflow records absent case report before failing and never
  assert(source.includes('E6_W5J_NO_VERIFIABLE_CASE_REPORT_NO_RELEASE'));
  assert(source.includes("exit 1"));
  for(const bad of ['workflow_dispatch:','pull_request_target:','schedule:'])assert(!source.includes(bad));
+});
+
+const offlineCliEnv=()=>({
+ ...process.env,
+ GITHUB_EVENT_NAME:'pull_request',
+ GITHUB_REPOSITORY:'teldigi5-wq/aetheris-ai-runtime',
+ E6_W5J_ENABLE_OWNER_LABELED_CPU_TRIAL:'YES',
+ E6_W5J_CHECKED_OUT_PR_HEAD:SHA
+});
+async function isolatedCli(){
+ const dir=await mkdtemp(join(tmpdir(),'aetheris-w5j-cli-offline-'));
+ await copyFile(new URL('./w5j_cpu_trial_cli.mjs',import.meta.url),join(dir,'w5j_cpu_trial_cli.mjs'));
+ await copyFile(new URL('./w5j_cpu_trial_gate.mjs',import.meta.url),join(dir,'w5j_cpu_trial_gate.mjs'));
+ return dir;
+}
+test('missing-report CLI writes parseable sanitized JSON in isolated offline filesystem and refuses overwrite',async()=>{
+ const dir=await isolatedCli();
+ try{
+  const script=join(dir,'w5j_cpu_trial_cli.mjs');
+  const first=spawnSync(process.execPath,[script,'missing-report'],{
+   env:offlineCliEnv(),encoding:'utf8',timeout:10000
+  });
+  assert.equal(first.status,0,first.stderr);
+  const output=JSON.parse(await readFile(join(dir,'target/e6-w5j-cloud-cpu-review/missing-case-report.json'),'utf8'));
+  assert.equal(output.kind,'E6_W5J_MISSING_CASE_REPORT_V1');
+  assert.equal(output.threeHeldoutCasesAttempted,null);
+  assert.equal(output.accepted,null);
+  assert.equal(output.releaseGo,false);
+  const second=spawnSync(process.execPath,[script,'missing-report'],{
+   env:offlineCliEnv(),encoding:'utf8',timeout:10000
+  });
+  assert.notEqual(second.status,0);
+  assert.match(second.stderr,/E6_W5J_UNVERIFIED_FAILURE|E6_W5J_/);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('missing-report CLI refuses to replace a nonempty source report or traverse a symlink target',async()=>{
+ const dir=await isolatedCli();
+ try{
+  const script=join(dir,'w5j_cpu_trial_cli.mjs');
+  const target=join(dir,'target');
+  await mkdir(join(target,'e6-w5c-local-css-research'),{recursive:true});
+  await writeFile(join(target,'e6-w5c-local-css-research/source-code-trial-report.json'),'{}');
+  const existing=spawnSync(process.execPath,[script,'missing-report'],{
+   env:offlineCliEnv(),encoding:'utf8',timeout:10000
+  });
+  assert.notEqual(existing.status,0);
+  await assert.rejects(readFile(join(target,'e6-w5j-cloud-cpu-review/missing-case-report.json')));
+ }finally{await rm(dir,{recursive:true,force:true});}
+ const linkDir=await isolatedCli(),outside=await mkdtemp(join(tmpdir(),'aetheris-w5j-outside-'));
+ try{
+  await symlink(outside,join(linkDir,'target'));
+  const attempt=spawnSync(process.execPath,[join(linkDir,'w5j_cpu_trial_cli.mjs'),'missing-report'],{
+   env:offlineCliEnv(),encoding:'utf8',timeout:10000
+  });
+  assert.notEqual(attempt.status,0);
+  await assert.rejects(readFile(join(outside,'e6-w5j-cloud-cpu-review/missing-case-report.json')));
+ }finally{
+  await rm(linkDir,{recursive:true,force:true});
+  await rm(outside,{recursive:true,force:true});
+ }
 });
