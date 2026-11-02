@@ -78,3 +78,24 @@ The W5-F accessibility scanner previously verified **only the three human-author
 The scanner uses its own **isolated browser context with test-runner JavaScript enabled**, because axe instrumentation requires JavaScript. It verifies generated HTML has **zero author `<script>` tags** before injection and rejects outside network requests and browser errors. In parallel, the original candidate review remains **JavaScript-disabled** to verify native keyboard focus and both page screenshots. The evidence distinguishes `needsManualReview` (axe incomplete checks), `screenReaderVerified:false`, and `independentWcagCertified:false`; an automated pass cannot replace human accessibility review, real 200% user zoom, assistive technology, or WCAG 2.2 AA conformance.
 
 Routine CI reuses the same saved-file reviewer with human-authored fake model responses and checks 18/18 automated route scans; the optional real-model CPU workflow pins `@axe-core/playwright@4.14.0` separately and requires `bothRoutesAutomatedAccessibilityPassed=true` plus exactly 18 scans before reporting three candidates for independent human review. The owner-only approval label remains absent; **no real model inference occurred**, and this change cannot authorize production release.
+
+## W5-J diagnostic phase receipts — pending exact-head CI verification
+
+The three-brief trial now attaches a bounded `phaseReceipt` to each completed or
+rejected case, using `NOT_EXECUTED`, `ENTERED`, `PASSED`, and `FAILED`
+internally. Rejections record the last entered `failurePhase` (DESIGN, CSS,
+COMPILE) and an allowlisted `failureKind`. Provider HTTP/response failures,
+protocol/truncation failures, deterministic model-content validation and
+compiler-policy failures are distinguished where source errors support the
+classification. Unrecognized exceptions are reported as `UNCLASSIFIED`, never
+upgraded to accepted model output. These states do not attest that network
+requests or model weights actually executed.
+
+The W5-J summary rejects missing, additional, contradictory, or malformed
+phase receipts, and propagates safe rejection metadata without raw source,
+prompts, stack traces, secrets, or provider exception bodies. Explicit
+authorization, exact-SHA preflight, W5-I budgets, W5-H repair limits, source
+hashes, browser acceptance, non-release authority, and Stage 45 NO-GO remain
+unchanged. A runtime probe failing before the three-brief loop still produces
+no three-case report; workflow-level preflight/installation diagnostics remain
+a separate future acceptance concern.
