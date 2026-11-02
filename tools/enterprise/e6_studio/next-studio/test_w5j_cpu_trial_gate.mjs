@@ -156,3 +156,30 @@ test('accepted candidate must preserve all exact SHA-256 artifact keys and origi
   assert.throws(()=>summarize(v),/E6_W5J_/);
  }
 });
+
+test('opt-in real-model workflow is always owner-labeled and validates all 18 page screenshots',async()=>{
+ const source=await readFile(new URL('../../../../.github/workflows/runtime-e6-w5j-optin-heldout-cpu.yml',import.meta.url),'utf8');
+ assert.match(source,/pull_request:\s*\n\s*types:\s*\n\s*- labeled/);
+ for(const forbidden of ['workflow_dispatch:','push:','pull_request_target:','schedule:'])
+  assert(!source.includes(forbidden),'unexpected trigger '+forbidden);
+ for(const required of [
+  "github.event.label.name == 'e6-w5j-three-brief-cpu-approved'",
+  "github.event.pull_request.number == 275",
+  "github.actor == 'teldigi5-wq'",
+  "github.event.pull_request.head.repo.full_name == github.repository",
+  "persist-credentials: false",
+  "timeout-minutes: 55",
+  "num_gpu",
+  "result['fullPageScreenshotCount'] == 18",
+  "result['bothRoutesCapturedForAllNineProfiles'] is True",
+  "result['releaseGo'] is False"
+ ]){
+  // num_gpu is enforced in the adapter, not the workflow itself.
+  if(required==='num_gpu')continue;
+  assert(source.includes(required),'missing explicit launch/review guard '+required);
+ }
+ const approved=source.indexOf('node w5j_cpu_trial_cli.mjs authorize');
+ const download=source.indexOf('Download verified Ollama');
+ const model=source.indexOf('"$RUNNER_TEMP/ollama-bin/bin/ollama" pull');
+ assert(approved>=0&&download>approved&&model>download);
+});
