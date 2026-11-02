@@ -846,10 +846,10 @@ test('GitHub SHA-1 source identity is exactly 40 hex chars, never a 64-char file
  }),/UNVERIFIABLE_REPORT_CONTEXT_REJECTED/);
  const r=await report();
  assert.throws(()=>summarizeObservedTrial(r,batch.briefs,{
-   sourceSha:fake64,reportRawBytes:JSON.stringify(r,null,2)+'\\n'
+   sourceSha:fake64,reportRawBytes:JSON.stringify(r,null,2)+String.fromCharCode(10)
  }),/INVALID_FIXED_RESEARCH_CONTEXT/);
  const expected=summarizeObservedTrial(r,batch.briefs,{
-   sourceSha:SHA,reportRawBytes:JSON.stringify(r,null,2)+'\\n'
+   sourceSha:SHA,reportRawBytes:JSON.stringify(r,null,2)+String.fromCharCode(10)
  });
  assert.equal(expected.sourceCommitSha,SHA);
  assert.match(expected.reportRawFileSha256,/^[a-f0-9]{64}$/);
