@@ -401,13 +401,22 @@ three smaller model-shaped JSON objects (original identity/art, original
 home page, original approach page) preserves the complete W5-A final
 validator, four color-contrast checks, source identities and page routes.
 
-This is OFFLINE-ONLY: the entrypoint accepts an explicit injected
-synthetic transport; it does not have a CLI, default fetch, disk writes,
-production hooks or integration with the owner-labeled CPU workflow.
-A fake-response suite exercises all three held-out briefs and rejects
+This is now **strictly offline by construction**: the entrypoint takes
+three inert synthetic provider-JSON envelopes as data and calls the
+existing W5-A provider-envelope parser and final W5-A design validator.
+The earlier injected-transport approach was insufficient, because a
+wrapper around fetch could perform real inference. W5-K no longer imports
+the Ollama requester and rejects all transport, approval or extra
+arguments. It has no CLI, file writes, network callbacks, production
+hooks or connection to the owner-labeled CPU workflow.
+
+Synthetic tests exercise all three held-out briefs; they reject
 extra keys, swapped identities, incorrect routes, unsafe markup,
-insufficient contrast and abnormal provider completion. Tests do not
-establish real-model capability, performance or premium design quality.
+insufficient contrast, malformed or truncated provider envelopes,
+wrong-model assertions and abnormal generation stops. An offline
+receipt states zero model requests and never claims actual model
+quality or authorship. Tests do not establish real-model capability,
+performance or premium design quality.
 Staging requires three calls versus one initial design request, which
 could increase cost and failure rates. Real-model activation requires a
 separate, exact-head authorization and evidence review.

@@ -1,8 +1,8 @@
-/** E6 W5-K: OFFLINE ONLY staged-design research. No CLI, writes, network
- * default, owner workflow integration, model approval or release authority. */
+/** E6 W5-K: PURE OFFLINE staged-design research. No CLI, writes, network,
+ * transport injection, owner workflow integration or release authority. */
 import {createHash} from 'node:crypto';
 import {validateOwnerBrief,validateModelProposal} from './w5a_model_design_compiler.mjs';
-import {requestLocalOllama} from './w5a_local_ollama.mjs';
+import {parseProviderEnvelope} from './w5a_local_ollama.mjs';
 const sha=s=>createHash('sha256').update(s,'utf8').digest('hex');
 const fail=c=>{throw Error('E6_W5K_'+c);};
 const phases=['identity','home','approach'];
@@ -60,25 +60,52 @@ export function assembleStagedDesign(brief,identity,home,approach){
   validateModelProposal(brief,proposal);
   return proposal;
 }
-export async function evaluateStagedDesignOffline({brief,model,transport}={}){
+// Byte and envelope checks run before the shared W5-A provider parser.
+// Caller supplies inert data; there is no callback capable of I/O here.
+export function evaluateStagedDesignOffline(options){
+  if(!exact(options,['brief','model','envelopes']))
+    fail('PURE_OFFLINE_CONTEXT_REQUIRED');
+  const {brief,model,envelopes}=options;
   validateOwnerBrief(brief);
-  if(typeof transport!=='function'||transport===fetch)
-    fail('INJECTED_FAKE_TRANSPORT_REQUIRED');
+  if(typeof model!=='string'||!/^.{1,80}$/.test(model)||
+     !/^[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)?(?::[a-z0-9][a-z0-9._-]*)?$/.test(model))
+    fail('INVALID_RESEARCH_MODEL_NAME');
+  if(!Array.isArray(envelopes)||Object.getPrototypeOf(envelopes)!==Array.prototype||
+     envelopes.length!==3||
+     Reflect.ownKeys(envelopes).length!==4||
+     [0,1,2].some(i=>!Object.hasOwn(envelopes,i)))
+    fail('EXACT_THREE_FIXTURES_REQUIRED');
   const results=[],receipts=[];
-  for(const phase of phases){
-    const prompt=buildStagedDesignPrompt(brief,phase);
+  for(let i=0;i<phases.length;i++){
+    const phase=phases[i],prompt=buildStagedDesignPrompt(brief,phase);
     if(prompt.length>8000)fail('PROMPT_BUDGET');
-    const response=await requestLocalOllama(prompt,model,{transport,phase:'design'});
-    if(response.providerReportedStopReason!==null&&
-       response.providerReportedStopReason!=='stop')fail('PROVIDER_STOP_UNVERIFIED');
-    results.push(response.design);
-    receipts.push({phase,promptSha256:sha(prompt),
-      rawReplySha256:response.rawReplySha256,stopVerified:response.providerStopReasonVerified});
+    const fixture=envelopes[i];
+    if(!exact(fixture,['model','done','done_reason','response','eval_count'])||
+       fixture.model!==model||fixture.done!==true||
+       fixture.done_reason!=='stop'||
+       typeof fixture.response!=='string'||fixture.response.length>36_000||
+       !Number.isInteger(fixture.eval_count)||fixture.eval_count<1||
+       fixture.eval_count>3001)
+      fail('INVALID_SYNTHETIC_ENVELOPE');
+    // Bound full synthetic provider-shaped object too, not only response text.
+    if(Buffer.byteLength(JSON.stringify(fixture),'utf8')>48_000)
+      fail('SYNTHETIC_ENVELOPE_SIZE_BUDGET');
+    const parsed=parseProviderEnvelope(fixture,model,{phase:'design'});
+    if(parsed.providerStopReasonVerified!==true)
+      fail('UNVERIFIED_SYNTHETIC_STOP');
+    results.push(parsed.design);
+    receipts.push(Object.freeze({
+      phase,promptSha256:sha(prompt),
+      rawReplySha256:parsed.rawReplySha256,
+      reportedOutputTokens:parsed.providerReportedOutputTokens,
+      reportedStopVerified:true
+    }));
   }
-  return {proposal:assembleStagedDesign(brief,...results),receipt:{
-    kind:'E6_W5K_SYNTHETIC_STAGED_DESIGN_RESEARCH_V1',
-    phases:receipts,requestsIssued:3,usesInjectedTransport:true,
-    realModelAuthorshipAttested:false,modelWeightsAttested:false,
-    humanVisualApproved:false,releaseGo:false,stage45Go:false
-  }};
+  return {proposal:assembleStagedDesign(brief,...results),receipt:Object.freeze({
+    kind:'E6_W5K_SYNTHETIC_STAGED_DESIGN_RESEARCH_V2',
+    phases:receipts,fixturesExamined:3,modelRequestsMade:0,
+    networkTransportSupported:false,realModelAuthorshipAttested:false,
+    modelWeightsAttested:false,humanVisualApproved:false,
+    releaseGo:false,stage45Go:false
+  })};
 }
