@@ -134,6 +134,10 @@ async function checkOne(browser,origin,brief,viewport,width,height,path,rows){
        keyboard.keyboardTrapObserved)
       console.error('E6_W5F_KEYBOARD_DIAGNOSTIC '+JSON.stringify({slug:brief.projectSlug,keyboard}));
     checkKeyboardJourney(keyboard);
+    // A 320 CSS-pixel equivalent reflow check at 2x needs >=640px
+    // viewport space before enlargement. Native 320px remains separate.
+    const zoomViewportCssPx=Math.max(640,width);
+    await page.setViewportSize({width:zoomViewportCssPx,height});
     await page.goto(origin+path,{waitUntil:'load'});
     await page.evaluate(()=>{document.documentElement.style.zoom='2';});
     const zoom=await page.evaluate(()=>({
@@ -141,6 +145,7 @@ async function checkOne(browser,origin,brief,viewport,width,height,path,rows){
       contentVisible:Boolean(document.querySelector('h1')?.getBoundingClientRect().width)
     }));
     const reflow={viewport,path,cssZoomScale:2,
+      testViewportWidthCssPx:zoomViewportCssPx,
       horizontalOverflowPx:zoom.overflow,
       contentRemainsVisible:zoom.contentVisible,
       browserUiZoomVerified:false,ownerDeviceVerified:false};
