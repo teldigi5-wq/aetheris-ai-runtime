@@ -811,3 +811,21 @@ test('W6 local performance lab requires actual Chromium timings and same-origin 
  assert(workflow.includes("result['localNavigationLabBudgetsPassed'] is True"));
  assert(workflow.includes("nav['fieldCoreWebVitalsMeasured'] is False"));
 });
+
+test('W6 saved screenshot preflight rejects missing source re-audit and malformed measured fields',async()=>{
+ const source=await readFile(new URL('./w6_screenshot_integrity_gate.mjs',import.meta.url),'utf8');
+ for(const required of [
+  "import {inspectTrial} from './w5d_trial_integrity.mjs'",
+  "fail('SOURCE_REAUDIT_CONTEXT_REQUIRED')",
+  "fail('SAVED_SOURCE_REAUDIT_REJECTED')",
+  "fail('SAVED_SOURCE_AUDIT_CHANGED')",
+  "fail('UNVERIFIED_LAB_NAVIGATION')",
+  "!between(v.horizontalOverflowPx,0,2)",
+  "!between(z.rootFontRatio,1.95,2.05)",
+  "!integerBetween(nav.htmlDocumentBytes,500,50_000)"
+ ])assert(source.includes(required),'missing re-audit or finite-metric requirement '+required);
+ const mock=await readFile(new URL('./w5j_mock_full_pipeline_browser.mjs',import.meta.url),'utf8');
+ assert(mock.includes('verifyScreenshotEvidence(evidence,batch,{trialRoot:trial})'));
+ assert(mock.includes('sourceReauditIntegrityVerified:true'));
+ assert(mock.includes('invalidMeasurementRejected:true'));
+});

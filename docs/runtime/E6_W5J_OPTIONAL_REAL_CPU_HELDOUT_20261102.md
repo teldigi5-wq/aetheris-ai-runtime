@@ -282,3 +282,25 @@ field LCP/INP/CLS, GPU memory, energy/thermals, screen-reader behavior,
 actual owner-device performance, visual originality or release readiness.
 The normal PR CI uses synthetic model output, a genuine local server
 and real Chromium, with no model downloads or remote inference.
+
+## W6: final source re-audit and finite numeric evidence (mock CI only)
+
+The W6 screenshot verifier previously checked saved PNG hashes and a
+self-reported browser evidence record, but did not independently recheck
+that the previously inspected generated source files still matched their
+own W5-C/W5-D manifests. It also used comparison operators that could
+silently accept absent or nonnumeric measurements.
+
+The verifier now re-runs the existing W5-D disk-source integrity audit
+against the saved fixed three-brief trial, requires that audit to
+match the one recorded in the browser review, and strictly validates
+finite numeric overflow, 200% text scaling, static transfer sizes,
+and local Chromium navigation timings. Empty, string or malformed
+numeric values fail closed. The normal model-free mock browser test
+mutates a screenshot, alters measured JSON evidence, and changes a
+source HTML file after reviewing it; each must be rejected before a
+reviewable integrity receipt can be emitted.
+
+This is a time-of-check *integrity preflight*, not a signed audit,
+proof of underlying model weights, originality validation, field
+performance measurement, a real screen-reader test, or release approval.

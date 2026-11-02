@@ -158,8 +158,11 @@ async function main(){
      assert.equal(sha(await readFile(join(evidence,file))),digest);
    }
  }
- const screenshotReceipt=await verifyScreenshotEvidence(evidence,batch);
+ const verifySaved=()=>verifyScreenshotEvidence(evidence,batch,{trialRoot:trial});
+ const screenshotReceipt=await verifySaved();
  assert.equal(screenshotReceipt.verifiedScreenshots,18);
+ assert.equal(screenshotReceipt.savedSourceReauditHashVerified,true);
+ assert.equal(screenshotReceipt.measuredBrowserFieldsFinite,true);
  assert.equal(screenshotReceipt.releaseGo,false);
  // A changed PNG with unchanged recorded SHA must fail independently.
  const screenshotToTamper=join(evidence,review.profiles[0].screenshot);
@@ -167,21 +170,41 @@ async function main(){
  try{
    await writeFile(screenshotToTamper,Buffer.concat([
      originalScreenshot,Buffer.from('tamper fixture')]));
-   await assert.rejects(verifyScreenshotEvidence(evidence,batch),
+   await assert.rejects(verifySaved(),
      /SCREENSHOT_SHA256_MISMATCH/);
  }finally{
    await writeFile(screenshotToTamper,originalScreenshot);
  }
- assert.equal((await verifyScreenshotEvidence(evidence,batch)).verifiedScreenshots,18);
+ assert.equal((await verifySaved()).verifiedScreenshots,18);
+ // Numeric JSON fields without a finite number must never pass
+ // range comparisons through undefined, strings or NaN-like values.
+ const reviewReportPath=join(evidence,'review-report.json');
+ const originalReview=await readFile(reviewReportPath);
+ try{
+   for(const change of [
+     r=>{delete r.profiles[0].horizontalOverflowPx;},
+     r=>{r.profiles[0].horizontalOverflowPx='0';},
+     r=>{r.profiles[0].homeAutomatedAccessibility.textResize200Percent.rootFontRatio='bogus';},
+     r=>{delete r.profiles[0].approachAutomatedAccessibility.localNavigation.loadEventEndMs;}
+   ]){
+     const bad=JSON.parse(originalReview.toString('utf8'));
+     change(bad);
+     await writeFile(reviewReportPath,JSON.stringify(bad)+'\n');
+     await assert.rejects(verifySaved(),/UNVERIFIED_BROWSER_PROFILE|UNVERIFIED_TEXT_RESIZE|UNVERIFIED_LAB_NAVIGATION/);
+   }
+ }finally{await writeFile(reviewReportPath,originalReview);}
+ assert.equal((await verifySaved()).verifiedScreenshots,18);
  // Verify that the source auditor is not fooled by changing HTML after its
  // self-reported manifest was emitted. This is a disposable MOCK fixture only.
  const victim=join(trial,batch.briefs[0].projectSlug,'approach/index.html');
  await writeFile(victim,(await readFile(victim,'utf8'))+'\n<!-- simulated tamper -->');
  await assert.rejects(inspectTrial(trial,batch),/GENERATED_FILE_HASH_MISMATCH/);
+ await assert.rejects(verifySaved(),/SAVED_SOURCE_REAUDIT_REJECTED/);
  console.log('E6_W5J_MOCK_ONLY_3_SITES_18_ROUTE_SCREENSHOTS_HASHED '+JSON.stringify({
    syntheticModelResponses:true,realProviderCalled:false,views:9,
    screenshotFiles:18,localNavigationLabRoutes:18,
-   screenshotIntegrityVerified:true,
+   screenshotIntegrityVerified:true,sourceReauditIntegrityVerified:true,
+   invalidMeasurementRejected:true,
    screenshotTamperingRejected:true,textResize200PercentRouteScans:18,
    sourceTamperingRejected:true,
    actualWeightsAttested:false,humanVisualApproved:false,releaseGo:false
