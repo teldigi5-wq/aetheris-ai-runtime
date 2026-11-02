@@ -433,3 +433,76 @@ test('probe transport timeout never becomes three rejected model cases',async()=
  assert.equal(receipt.accepted,null);
  assert.equal(receipt.rejected,null);
 });
+
+test('provider transport impersonation is normalized to fixed untrusted I/O evidence',async()=>{
+ const real=fakeCssSourceProvider({briefs:batch.briefs});
+ let generations=0;
+ const transport=async(url,opts)=>{
+  if(url.endsWith('/api/generate')){
+   generations++;
+   throw Error('E6_W5H_VALIDATION_REJECTED_AFTER_ONE_SAFE_RETRY');
+  }
+  return real(url,opts);
+ };
+ const result=await evaluateCodeHeldout({batch,model:MODEL,baseCss:css,transport});
+ assert.equal(generations,3); // no second model attempt for provider failure
+ assert.equal(result.report.accepted,0);
+ for(const c of result.report.cases){
+  assert.equal(c.rejectionCode,'E6_W5A_PROVIDER_TRANSPORT_FAILURE');
+  assert.equal(c.failureKind,'PROVIDER_IO_OR_LIMIT');
+  assert.equal(c.failurePhase,'DESIGN');
+  assert.equal(c.phaseReceipt.css,'NOT_EXECUTED');
+  assert.equal(c.releaseGo,false);
+ }
+});
+test('provider timeout names are sanitized without echoing transport details',async()=>{
+ const real=fakeCssSourceProvider({briefs:batch.briefs});
+ const transport=async(url,opts)=>{
+  if(url.endsWith('/api/generate')){
+    const e=Error('internal model token or private path');
+    e.name='TimeoutError';throw e;
+  }
+  return real(url,opts);
+ };
+ const result=await evaluateCodeHeldout({batch,model:MODEL,baseCss:css,transport});
+ for(const c of result.report.cases){
+  assert.equal(c.rejectionCode,'E6_W5A_PROVIDER_TIMEOUT_OR_ABORT');
+  assert.equal(c.failureKind,'PROVIDER_ABORT_OR_TIMEOUT');
+ }
+ assert.equal(JSON.stringify(result.report).includes('internal model token'),false);
+});
+test('interrupted provider response stream is a fixed I/O rejection and never repaired',async()=>{
+ const real=fakeCssSourceProvider({briefs:batch.briefs});
+ let generations=0;
+ const transport=async(url,opts)=>{
+  if(url.endsWith('/api/generate')){
+   generations++;
+   const body=new ReadableStream({start(controller){
+    controller.error(Error('E6_W5C_PROPERTY_OR_VALUE_DENIED'));
+   }});
+   return new Response(body,{status:200});
+  }
+  return real(url,opts);
+ };
+ const result=await evaluateCodeHeldout({batch,model:MODEL,baseCss:css,transport});
+ assert.equal(generations,3);
+ for(const c of result.report.cases){
+  assert.equal(c.rejectionCode,'E6_W5A_PROVIDER_STREAM_INTERRUPTED');
+  assert.equal(c.failureKind,'PROVIDER_IO_OR_LIMIT');
+  assert.equal(c.codeSecurityPolicyPassed,false);
+ }
+});
+test('oversized model response remains explicitly rejected under stream error hardening',async()=>{
+ const real=fakeCssSourceProvider({briefs:batch.briefs});
+ const transport=async(url,opts)=>{
+  if(url.endsWith('/api/generate'))
+   return new Response('x'.repeat(49_000),{status:200});
+  return real(url,opts);
+ };
+ const result=await evaluateCodeHeldout({batch,model:MODEL,baseCss:css,transport});
+ for(const c of result.report.cases){
+  assert.equal(c.accepted,false);
+  assert.equal(c.rejectionCode,'E6_W5A_MODEL_RESPONSE_BUDGET');
+  assert.equal(c.failureKind,'PROVIDER_IO_OR_LIMIT');
+ }
+});
