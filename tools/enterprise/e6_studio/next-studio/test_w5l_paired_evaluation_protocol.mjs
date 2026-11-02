@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {buildPairedEvaluationProtocol,summarizePairedResearch} from './w5l_paired_evaluation_protocol.mjs';
 const briefs=JSON.parse(await readFile(new URL('./w5b_heldout_briefs.json',import.meta.url),'utf8')).briefs;
@@ -18,6 +19,7 @@ test('paired protocol pins actual held-out identities, two modes and unequal req
  assert.deepEqual(p.methods.map(x=>x.designCallsMax),[2,3]);
  assert.equal(p.modelTag,'qwen2.5:0.5b');
  assert.equal(p.modelRequestsMade,0);
+ assert.equal(p.executionOrder,'SERIAL_FIXED_BRIEF_THEN_METHOD');
  assert.equal(p.modelInvocationAuthorized,false);
  assert.equal(p.releaseGo,false);
  assert.throws(()=>buildPairedEvaluationProtocol({briefs,sourceCommitSha:'b'.repeat(64)}),/SOURCE_SHA_NOT_GIT_COMMIT/);
@@ -59,6 +61,7 @@ test('complete synthetic data allows descriptive difference but never a winner o
  assert.equal(summary.methods[0].accepted,2);
  assert.equal(summary.methods[1].accepted,3);
  assert.equal(summary.observedAcceptanceDifference,1);
+ assert.equal(summary.cumulativeReportedElapsedMs,6000);
  assert.equal(summary.comparableBudget,false);
  assert.equal(summary.realProviderEvidenceVerified,false);
  assert.equal(summary.originalDesignQualityVerified,false);
@@ -94,4 +97,54 @@ test('paired comparison has no network, model execution or filesystem writes',as
  }
  assert(source.includes('modelRequestsMade:0'));
  assert(source.includes('realProviderEvidenceVerified:false'));
+});
+
+test('55-minute ceiling constrains aggregate serial observations, not only each cell',()=>{
+ const p=manifest(),obs=empty(p);
+ for(let i=0;i<obs.length;i++)obs[i]={...obs[i],
+   outcome:'ACCEPTED',failureCode:null,reportedDesignCalls:i%2===0?1:3,
+   reportedOutputTokens:100,reportedElapsedMs:600_000};
+ assert.throws(()=>summarizePairedResearch(p,obs),/AGGREGATE_JOB_TIME_BUDGET_EXCEEDED/);
+ // Exactly at the whole-job ceiling, bounded self-reports remain explicitly unverified.
+ for(let i=0;i<obs.length;i++)obs[i].reportedElapsedMs=550_000;
+ const s=summarizePairedResearch(p,obs);
+ assert.equal(s.cumulativeReportedElapsedMs,3_300_000);
+ assert.equal(s.realProviderEvidenceVerified,false);
+ assert.equal(s.releaseGo,false);
+});
+test('re-hashing an altered protocol cannot forge model, clock budget, plan, order or source scope',()=>{
+ const p=manifest(),obs=empty(p);
+ const rehash=x=>{
+  const {protocolSha256,...other}=x;
+  x.protocolSha256=createHash('sha256').update(JSON.stringify(other)).digest('hex');
+  return x;
+ };
+ for(const change of [
+  x=>{x.modelTag='unauthorized:large';},
+  x=>{x.runtimeVersion='99.99.99';},
+  x=>{x.jobWallClockCeilingMinutes=10_000;},
+  x=>{x.executionOrder='PARALLEL_UNBOUNDED';},
+  x=>{x.methods[1].designCallsMax=100;},
+  x=>{x.planned[0].projectSlug='unapproved-brief';},
+  x=>{x.planned[0].designCallsMax=99;},
+  x=>{x.planned[0].outputTokenCeilingPerCall=30_000;},
+  x=>{x.modelRequestsMade=1;},
+  x=>{x.ownerApproved=true;}
+ ]){
+  const forged=rehash((()=>{const x=structuredClone(p);change(x);return x;})());
+  assert.throws(()=>summarizePairedResearch(forged,obs),
+    /PROTOCOL_NOT_ACCEPTED|PROTOCOL_MATRIX_CHANGED/);
+ }
+});
+test('reported design output tokens require actual claimed design calls and accepted output',()=>{
+ const p=manifest(),obs=empty(p);
+ const failRow=x=>assert.throws(()=>summarizePairedResearch(p,x),/INVALID_BOUNDED_OBSERVATION/);
+ const fabricated=structuredClone(obs);
+ fabricated[0]={...fabricated[0],outcome:'REJECTED',failureCode:'DESIGN_MODEL_UNAVAILABLE',
+   reportedDesignCalls:0,reportedOutputTokens:100,reportedElapsedMs:0};
+ failRow(fabricated);
+ const emptyAccepted=structuredClone(obs);
+ emptyAccepted[0]={...emptyAccepted[0],outcome:'ACCEPTED',failureCode:null,
+   reportedDesignCalls:1,reportedOutputTokens:0,reportedElapsedMs:10};
+ failRow(emptyAccepted);
 });

@@ -478,3 +478,24 @@ the new W5-K code. Before conducting a genuine A/B comparison, obtain
 fresh approval for the exact commit, method budgets, compute provider
 and experiment steps; do not reapply the consumed approval label
 from run 41447764457.
+
+
+### W5-L validity correction: fixed protocol and aggregate serial CPU ceiling
+
+A review found two meaningful holes in the offline paired-comparison
+calculator. First, the 55-minute budget was applied separately to each
+of six observations, so an apparent comparison could contain over five
+hours of aggregate serial time. The protocol now fixes serial order and
+rejects any aggregate reported duration above 55 minutes. Second, its
+SHA-256 checksum could be recomputed after changing the model tag,
+inference budget or brief identities. It remains an unkeyed checksum,
+not a security signature, and the summarizer now independently enforces
+every fixed method, model version, brief identity, request ceiling,
+execution order and no-authority field even when a caller rehashes a
+tampered protocol.
+
+The offline summary continues to treat all reported measurements as
+**unverified**, rejects inconsistent accepted-token and request counts,
+and never grants release permission. These controls are prerequisites
+for a future approved experiment, not evidence of real inference,
+performance, originality or production readiness.

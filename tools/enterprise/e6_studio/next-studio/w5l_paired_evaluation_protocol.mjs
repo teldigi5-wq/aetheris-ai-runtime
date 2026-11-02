@@ -55,6 +55,7 @@ export function buildPairedEvaluationProtocol({briefs,sourceCommitSha}={}){
    runtimeVersion:'0.40.13',
    executionMode:'CPU_ONLY_FUTURE_OWNER_APPROVAL_REQUIRED',
    jobWallClockCeilingMinutes:55,
+   executionOrder:'SERIAL_FIXED_BRIEF_THEN_METHOD',
    methods:modes,
    planned,
    measurementsVerified:false,
@@ -67,18 +68,47 @@ export function buildPairedEvaluationProtocol({briefs,sourceCommitSha}={}){
    protocolSha256:sha(JSON.stringify(protocol))
  });
 }
-export function summarizePairedResearch(protocol,observations){
- if(!protocol||protocol.kind!=='E6_W5L_OFFLINE_PAIRED_PROTOCOL_V1'||
-    !commit(protocol.sourceCommitSha)||
-    !Array.isArray(protocol.planned)||protocol.planned.length!==6||
-    protocol.executionMode!=='CPU_ONLY_FUTURE_OWNER_APPROVAL_REQUIRED'||
-    protocol.modelInvocationAuthorized!==false||
-    protocol.measurementsVerified!==false||
-    protocol.releaseGo!==false||protocol.stage45Go!==false||
-    typeof protocol.protocolSha256!=='string'||
-    !/^[0-9a-f]{64}$/.test(protocol.protocolSha256)){
+function checkFixedProtocol(p){
+ const expected=['kind','sourceCommitSha','briefSetSha256','modelTag',
+   'runtimeVersion','executionMode','jobWallClockCeilingMinutes',
+   'executionOrder','methods','planned','measurementsVerified',
+   'modelInvocationAuthorized','modelRequestsMade',
+   'modelWeightsCryptographicallyAttested','stage45Go','releaseGo',
+   'protocolSha256'];
+ if(!keys(p,expected)||p.kind!=='E6_W5L_OFFLINE_PAIRED_PROTOCOL_V1'||
+    !commit(p.sourceCommitSha)||!/^[a-f0-9]{64}$/.test(p.briefSetSha256)||
+    p.modelTag!=='qwen2.5:0.5b'||p.runtimeVersion!=='0.40.13'||
+    p.executionMode!=='CPU_ONLY_FUTURE_OWNER_APPROVAL_REQUIRED'||
+    p.executionOrder!=='SERIAL_FIXED_BRIEF_THEN_METHOD'||
+    p.jobWallClockCeilingMinutes!==55||p.measurementsVerified!==false||
+    p.modelInvocationAuthorized!==false||p.modelRequestsMade!==0||
+    p.modelWeightsCryptographicallyAttested!==false||
+    p.releaseGo!==false||p.stage45Go!==false||
+    !/^[a-f0-9]{64}$/.test(p.protocolSha256))
    fail('PROTOCOL_NOT_ACCEPTED');
+ if(!Array.isArray(p.methods)||p.methods.length!==2||
+    !Array.isArray(p.planned)||p.planned.length!==6)
+   fail('PROTOCOL_MATRIX_CHANGED');
+ for(let i=0;i<2;i++){
+   const actual=p.methods[i],original=modes[i];
+   if(!keys(actual,['id','designCallsMax','designTokenCeilingPerCall'])||
+      actual.id!==original.id||
+      actual.designCallsMax!==original.designCallsMax||
+      actual.designTokenCeilingPerCall!==original.designTokenCeilingPerCall)
+      fail('PROTOCOL_MATRIX_CHANGED');
  }
+ for(let i=0;i<6;i++){
+   const actual=p.planned[i],method=modes[i%2];
+   if(!keys(actual,['projectSlug','mode','designCallsMax','outputTokenCeilingPerCall'])||
+      actual.projectSlug!==slugs[Math.floor(i/2)]||
+      actual.mode!==method.id||
+      actual.designCallsMax!==method.designCallsMax||
+      actual.outputTokenCeilingPerCall!==method.designTokenCeilingPerCall)
+      fail('PROTOCOL_MATRIX_CHANGED');
+ }
+}
+export function summarizePairedResearch(protocol,observations){
+ checkFixedProtocol(protocol);
  const {protocolSha256,...payload}=protocol;
  if(sha(JSON.stringify(payload))!==protocolSha256)
    fail('PROTOCOL_DIGEST_MISMATCH');
@@ -108,9 +138,11 @@ export function summarizePairedResearch(protocol,observations){
         !Number.isInteger(x.reportedOutputTokens)||x.reportedOutputTokens<0||
         x.reportedOutputTokens>cap||
         !Number.isInteger(x.reportedElapsedMs)||x.reportedElapsedMs<0||
-        x.reportedElapsedMs>55*60*1000||
+        x.reportedElapsedMs>protocol.jobWallClockCeilingMinutes*60*1000||
+        (x.reportedDesignCalls===0&&x.reportedOutputTokens!==0)||
         (x.outcome==='ACCEPTED'&&
-          (x.failureCode!==null||x.reportedDesignCalls<1))||
+          (x.failureCode!==null||x.reportedDesignCalls<1||
+           x.reportedOutputTokens<1))||
         (x.outcome==='REJECTED'&&!failures.has(x.failureCode)))
        fail('INVALID_BOUNDED_OBSERVATION');
      totalsRow.reportedDesignCalls+=x.reportedDesignCalls;
@@ -121,12 +153,19 @@ export function summarizePairedResearch(protocol,observations){
    rows.push({projectSlug:x.projectSlug,mode:x.mode,outcome:x.outcome,
      failureCode:x.failureCode});
  }
+ // The approved 55-minute ceiling is for ONE serial job, not six jobs.
+ // Per-cell checks alone could previously admit six hours of observations.
+ const cumulativeReportedElapsedMs=totals.reduce((n,t)=>n+t.reportedElapsedMs,0);
+ if(cumulativeReportedElapsedMs>protocol.jobWallClockCeilingMinutes*60*1000)
+   fail('AGGREGATE_JOB_TIME_BUDGET_EXCEEDED');
  const complete=totals.every(t=>t.notRun===0);
  return Object.freeze({
    kind:'E6_W5L_UNATTESTED_RESEARCH_COMPARISON_V1',
    sourceCommitSha:protocol.sourceCommitSha,
    protocolSha256,
    plannedPairs:3,
+   executionOrder:protocol.executionOrder,
+   cumulativeReportedElapsedMs,
    methods:totals,
    observations:rows,
    allSixCellsReported:complete,
