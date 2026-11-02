@@ -9,6 +9,8 @@
  * Offline fake transports exercise this in CI; no model runs there.
  */
 import {buildPrompt,requestLocalOllama} from './w5a_local_ollama.mjs';
+import {createHash} from 'node:crypto';
+const sha=s=>createHash('sha256').update(s,'utf8').digest('hex');
 import {validateModelProposal} from './w5a_model_design_compiler.mjs';
 import {buildCssCodePrompt,parseCodeProposal} from './w5c_local_code_trial.mjs';
 import {compileRestrictedCss} from './w5c_restricted_css_compiler.mjs';
@@ -61,6 +63,7 @@ async function tryValidated({basePrompt,model,transport,validator,allowed}){
       const accepted=validator(response.design);
       return {value:accepted,rawReplySha256:response.rawReplySha256,
         attempts:attempt,repairAttempted:attempt===2,
+        attemptedPromptSha256:sha(prompt),initialPromptSha256:sha(basePrompt),
         firstRejectedValidationCode:failureCodes[0]||null,
         retryBudgetExhausted:false};
     }catch(e){
