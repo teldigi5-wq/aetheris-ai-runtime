@@ -58,7 +58,7 @@ export async function runCpuSmoke({transport=fetch}={}){
      typeof parsed.research_status!=='string'||
      parsed.research_status.trim().length<8||
      parsed.research_status.length>240||
-     /[\\x00-\\x1f\\x7f]|https?:\\/\\/|www\\.|<[^>]*>|javascript:/i.test(parsed.research_status))
+     /[\x00-\x1f\x7f]|https?:\/\/|www\.|<[^>]*>|javascript:/i.test(parsed.research_status))
     fail('MODEL_OUTPUT_UNSAFE_OR_WRONG_SCHEMA');
   return {kind:'E6_W5D_EPHEMERAL_CPU_INFERENCE_SMOKE_V1',
     modelReportedName:model,ollamaReportedVersion:version.version,
