@@ -51,6 +51,8 @@ jobs:
           node --check w5d_trial_integrity.mjs
           node --check w5d_owner_browser_review.mjs
           node --check test_w5d_trial_integrity.mjs
+          node --check w5d_cpu_smoke.mjs
+          node --check test_w5d_cpu_smoke.mjs
           test -s w5b_heldout_briefs.json
           test -s w5a_base.css
           test -s w5a_fictional_owner_brief.json
@@ -63,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           cd tools/enterprise/e6_studio/next-studio
-          node --test test_experience_contract.mjs test_w2_compiler.mjs test_w2b_curated_compiler.mjs test_w2c_narrative_compiler.mjs test_w5a_model_contract.mjs test_w5b_heldout_evaluation.mjs test_w5c_css_code_gate.mjs test_w5d_trial_integrity.mjs
+          node --test test_experience_contract.mjs test_w2_compiler.mjs test_w2b_curated_compiler.mjs test_w2c_narrative_compiler.mjs test_w5a_model_contract.mjs test_w5b_heldout_evaluation.mjs test_w5c_css_code_gate.mjs test_w5d_trial_integrity.mjs test_w5d_cpu_smoke.mjs
           node w2c_generate_preview.mjs
           echo E6_W5D_AUDIT_FIXTURES_ARE_NOT_REAL_MODEL_EVIDENCE
       - name: Preserve dependency lock integrity and Next static build
