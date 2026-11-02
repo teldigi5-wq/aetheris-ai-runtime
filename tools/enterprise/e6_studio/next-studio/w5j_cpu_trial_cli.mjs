@@ -6,7 +6,7 @@ import {readFile,lstat,mkdir,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {authorizeLabelEvent,summarizeObservedTrial,summarizeMissingCaseReport} from './w5j_cpu_trial_gate.mjs';
+import {authorizeLabelEvent,summarizeWithSavedSourceAudit,summarizeMissingCaseReport} from './w5j_cpu_trial_gate.mjs';
 const here=dirname(fileURLToPath(import.meta.url));
 const fail=x=>{throw Error('E6_W5J_'+x);};
 const readSmall=async(path,maxBytes,{includeBytes=false}={})=>{
@@ -73,8 +73,9 @@ async function main(){
  const report=await readSmall(
   join(here,'target/e6-w5c-local-css-research/source-code-trial-report.json'),
   120_000,{includeBytes:true});
- const sum=summarizeObservedTrial(report.value,batch.briefs,{
-  sourceSha:head,reportRawBytes:report.raw
+ const sum=await summarizeWithSavedSourceAudit(report.value,batch,{
+  sourceSha:head,reportRawBytes:report.raw,
+  trialRoot:join(here,'target/e6-w5c-local-css-research')
  });
  const evidenceDir=join(here,'target/e6-w5j-cloud-cpu-review');
  await mkdir(evidenceDir,{recursive:false,mode:0o700});
