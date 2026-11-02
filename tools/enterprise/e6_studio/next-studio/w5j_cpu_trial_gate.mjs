@@ -7,6 +7,7 @@
  * response is NOT a cryptographic proof that the expected model weights ran.
  */
 import {createHash} from 'node:crypto';
+import {inspectTrial} from './w5d_trial_integrity.mjs';
 const fail=x=>{throw Error('E6_W5J_'+x);};
 const sha=x=>createHash('sha256').update(x).digest('hex');
 const hex=v=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
@@ -172,4 +173,34 @@ export function summarizeObservedTrial(report,briefs,{sourceSha,reportRawBytes}=
    humanDesignApproved:false,physicalGpuTested:false,
    ownerHardwareBenchmarked:false,independentWcagCertified:false,
    stage45Go:false,releaseGo:false};
+}
+
+// This additional disk-backed check is *only* for the 3/3 accepted case.
+// A self-reported hash is not independent evidence that a file exists.
+export async function summarizeWithSavedSourceAudit(report,heldoutSet,{
+ sourceSha,reportRawBytes,trialRoot
+}={}){
+ const summary=summarizeObservedTrial(report,heldoutSet?.briefs,{
+  sourceSha,reportRawBytes
+ });
+ if(summary.accepted!==3)return {
+  ...summary,savedCandidateFilesHashVerified:false,
+  savedSourceAuditSha256:null
+ };
+ if(typeof trialRoot!=='string'||!trialRoot)
+   fail('MISSING_SOURCE_AUDIT_ROOT');
+ const {audit}=await inspectTrial(trialRoot,heldoutSet);
+ if(audit.inputReportSha256!==summary.reportRawFileSha256||
+    audit.acceptedSiteCount!==3||
+    audit.allCandidateFilesHashVerified!==true||
+    audit.releaseGo!==false||
+    audit.actualWeightsExecutionAttested!==false)
+   fail('SAVED_SOURCE_AUDIT_MISMATCH');
+ return {...summary,
+  savedCandidateFilesHashVerified:true,
+  savedSourceAuditSha256:sha(JSON.stringify(audit)),
+  independentModelAuthorshipVerified:false,
+  humanDesignApproved:false,
+  releaseGo:false
+ };
 }
