@@ -70,6 +70,25 @@ const sameReportBytes=(report,bytes)=>{
     fail('REPORT_BYTES_DO_NOT_MATCH_STRUCTURED_EVIDENCE');
   return sha(bytes);
 };
+// A failed trial with no saved case report is NOT three rejected model cases.
+// The stage that failed and whether any provider requests ran remain unknown.
+export function summarizeMissingCaseReport({sourceSha,caseReportAvailable}={}){
+ if(!hex(sourceSha)||caseReportAvailable!==false)
+   fail('MISSING_REPORT_CONTEXT_REJECTED');
+ return {
+   kind:'E6_W5J_MISSING_CASE_REPORT_V1',
+   sourceCommitSha:sourceSha,
+   status:'NO_VERIFIABLE_CASE_REPORT',
+   observedCondition:'W5C_SOURCE_CASE_REPORT_ABSENT_OR_EMPTY',
+   verifiedCaseReceipts:0,
+   threeHeldoutCasesAttempted:null,
+   modelRequestsObserved:null,
+   accepted:null,rejected:null,
+   modelRuntimeAttested:false,modelWeightsCryptographicallyAttested:false,
+   sourceIntegrityVerified:false,browserReviewVerified:false,
+   humanVisualApproved:false,stage45Go:false,releaseGo:false
+ };
+}
 export function summarizeObservedTrial(report,briefs,{sourceSha,reportRawBytes}={}){
  const reportRawFileSha256=sameReportBytes(report,reportRawBytes);
  if(!hex(sourceSha)||!Array.isArray(briefs)||briefs.length!==3||
