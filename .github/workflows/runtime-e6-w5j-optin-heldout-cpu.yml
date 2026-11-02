@@ -140,7 +140,11 @@ jobs:
           E6_W5C_ALLOW_LOCAL_INFERENCE=YES E6_W5C_MODEL="$MODEL_TAG" node w5c_local_code_trial.mjs
           inference_status=$?
           set -e
-          test -s target/e6-w5c-local-css-research/source-code-trial-report.json
+          if [ ! -s target/e6-w5c-local-css-research/source-code-trial-report.json ]; then
+            node w5j_cpu_trial_cli.mjs missing-report
+            echo 'E6_W5J_NO_VERIFIABLE_CASE_REPORT_NO_RELEASE'
+            exit 1
+          fi
           node w5j_cpu_trial_cli.mjs summarize
           if [ "$inference_status" -ne 0 ]; then
             echo 'E6_W5J_GENUINE_MODEL_CASE_REJECTED; preserving sanitized evidence, NOT A RELEASE PASS'
