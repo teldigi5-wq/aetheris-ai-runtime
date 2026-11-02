@@ -87,7 +87,7 @@ test('research summaries reject untrusted raw content, extra keys, missing cells
  },/INVALID_BOUNDED_OBSERVATION/);
  const changed=structuredClone(p);
  changed.planned[0].designCallsMax=1000;
- assert.throws(()=>summarizePairedResearch(changed,obs),/PROTOCOL_DIGEST_MISMATCH/);
+ assert.throws(()=>summarizePairedResearch(changed,obs),/PROTOCOL_MATRIX_CHANGED/);
 });
 test('paired comparison has no network, model execution or filesystem writes',async()=>{
  const source=await readFile(new URL('./w5l_paired_evaluation_protocol.mjs',import.meta.url),'utf8');
