@@ -61,13 +61,32 @@ const PROTOCOL_CODES=new Set([
  'E6_W5A_MODEL_GENERATION_NOT_NORMALLY_FINISHED',
  'E6_W5A_INVALID_GENERATION_TOKEN_COUNT'
 ]);
+// Only publish known deterministic source codes. An injected provider error
+// matching the old E6_W5* regex must never be treated as trusted evidence.
+const SAFE_REJECTIONS=new Set([
+ ...VALIDATION_CODES,...PROTOCOL_CODES,
+ 'E6_W5A_MODEL_UNAVAILABLE_OR_HTTP_ERROR',
+ 'E6_W5A_MODEL_RESPONSE_BUDGET',
+ 'E6_W5A_PROVIDER_TIMEOUT_OR_ABORT',
+ 'E6_W5A_PROVIDER_TRANSPORT_FAILURE',
+ 'E6_W5A_PROVIDER_STREAM_INTERRUPTED',
+ 'E6_W5A_INVALID_LOCAL_MODEL_REQUEST',
+ 'E6_W5A_UNAPPROVED_INFERENCE_PHASE',
+ 'E6_W5H_REPAIR_PROMPT_BUDGET',
+ 'E6_W5H_INVALID_ATTEMPT_CONTRACT',
+ 'E6_W5C_COMPILED_CSS_SIZE_BUDGET'
+]);
 // Fixed codes only: never publish rejected source or arbitrary exception messages.
 const failureKind=(code,error,phase)=>{
  if((phase==='DESIGN'||phase==='CSS')&&
     ['AbortError','TimeoutError'].includes(error?.name))
    return 'PROVIDER_ABORT_OR_TIMEOUT';
+ if(code==='E6_W5A_PROVIDER_TIMEOUT_OR_ABORT')
+   return 'PROVIDER_ABORT_OR_TIMEOUT';
  if(code==='E6_W5A_MODEL_UNAVAILABLE_OR_HTTP_ERROR'||
-    code==='E6_W5A_MODEL_RESPONSE_BUDGET')return 'PROVIDER_IO_OR_LIMIT';
+    code==='E6_W5A_MODEL_RESPONSE_BUDGET'||
+    code==='E6_W5A_PROVIDER_TRANSPORT_FAILURE'||
+    code==='E6_W5A_PROVIDER_STREAM_INTERRUPTED')return 'PROVIDER_IO_OR_LIMIT';
  if(PROTOCOL_CODES.has(code))return 'PROVIDER_PROTOCOL';
  if(VALIDATION_CODES.has(code))
    return phase==='COMPILE'?'COMPILER_POLICY':'MODEL_CONTENT_OR_SCHEMA';
@@ -130,7 +149,7 @@ export async function evaluateCodeHeldout({batch,model,baseCss,transport=fetch})
       const code=String(error?.message||'');
       phaseReceipt[failurePhase.toLowerCase()]='FAILED';
       cases.push({...base,accepted:false,status:'REJECTED',
-        rejectionCode:/^E6_W5[ABCH]_[A-Z0-9_]+$/.test(code)?code:'E6_W5C_PROVIDER_OR_SCHEMA_REJECTED',
+        rejectionCode:SAFE_REJECTIONS.has(code)?code:'E6_W5C_UNCLASSIFIED_FAILURE',
         failurePhase,failureKind:failureKind(code,error,failurePhase),
         phaseReceipt:{...phaseReceipt},
         modelRuntimeAttested:false,codeSecurityPolicyPassed:false,
