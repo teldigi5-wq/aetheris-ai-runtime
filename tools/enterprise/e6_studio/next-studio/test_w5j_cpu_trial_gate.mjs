@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {authorizeLabelEvent,summarizeObservedTrial} from './w5j_cpu_trial_gate.mjs';
+import {authorizeLabelEvent,summarizeObservedTrial,summarizeMissingCaseReport} from './w5j_cpu_trial_gate.mjs';
 import {evaluateCodeHeldout} from './w5c_local_code_trial.mjs';
 import {fakeCssSourceProvider} from './w5c_test_doubles.mjs';
 import {MODEL} from './w5b_simulated_provider.mjs';
@@ -269,4 +269,34 @@ test('W5-J rejects forged or contradictory failure phase receipts',async()=>{
   mutate(source.cases[0]);
   assert.throws(()=>summarize(source),/UNVERIFIED_ACCEPTED_CANDIDATE/);
  }
+});
+
+test('missing W5-C report never fabricates three held-out case attempts',()=>{
+ const receipt=summarizeMissingCaseReport({sourceSha:SHA,caseReportAvailable:false});
+ assert.equal(receipt.verifiedCaseReceipts,0);
+ assert.equal(receipt.threeHeldoutCasesAttempted,null);
+ assert.equal(receipt.modelRequestsObserved,null);
+ assert.equal(receipt.accepted,null);
+ assert.equal(receipt.rejected,null);
+ assert.equal(receipt.sourceIntegrityVerified,false);
+ assert.equal(receipt.releaseGo,false);
+});
+test('missing-report receipt refuses readable evidence and invalid source identity',()=>{
+ for(const context of [
+  {sourceSha:'not-a-commit',caseReportAvailable:false},
+  {sourceSha:SHA,caseReportAvailable:true},
+  {sourceSha:SHA},
+  {}
+ ])assert.throws(()=>summarizeMissingCaseReport(context),/MISSING_REPORT_CONTEXT_REJECTED/);
+});
+test('owner-labeled workflow records absent case report before failing and never treats it as reviewable',async()=>{
+ const source=await readFile(new URL('../../../../.github/workflows/runtime-e6-w5j-optin-heldout-cpu.yml',import.meta.url),'utf8');
+ const run=source.indexOf('node w5c_local_code_trial.mjs');
+ const missing=source.indexOf('node w5j_cpu_trial_cli.mjs missing-report');
+ const summary=source.indexOf('node w5j_cpu_trial_cli.mjs summarize');
+ assert(run>0&&missing>run&&summary>missing);
+ assert(source.includes('if [ ! -s target/e6-w5c-local-css-research/source-code-trial-report.json ]; then'));
+ assert(source.includes('E6_W5J_NO_VERIFIABLE_CASE_REPORT_NO_RELEASE'));
+ assert(source.includes("exit 1"));
+ for(const bad of ['workflow_dispatch:','pull_request_target:','schedule:'])assert(!source.includes(bad));
 });
