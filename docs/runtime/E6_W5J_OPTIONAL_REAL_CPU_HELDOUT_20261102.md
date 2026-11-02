@@ -514,3 +514,27 @@ origin, and any later legitimate brief edit requires explicit protocol
 review and versioning. Resource durations remain self-reported;
 aggregate per-case generation time is not a substitute for an
 independent full-job wall-clock timeout.
+
+
+### W5-L v2: design acceptance only, independent of downstream site checks
+
+The first W5-L comparison protocol could count CSS generation,
+compilation, or Chromium failure codes as failures of the design
+generation method. That confounded a study comparing compact and
+three-stage JSON design generation with later shared website gates.
+
+The protocol is now V2, with scope DESIGN_VALIDATION_ONLY. A
+reported ACCEPTED design means only that the complete two-page
+JSON proposal passed the existing W5-A design validator. It does
+not indicate that model-authored CSS, compilation, browser testing,
+accessibility, visual quality, or release approval passed. CSS,
+compiler and browser failure codes are not valid DESIGN rejections.
+A reported schema, completion or response-budget rejection requires
+at least one design request. Only model unavailability or transport
+failure can explain a zero-call rejected design observation.
+All observations remain SELF-REPORTED and UNVERIFIED.
+
+The semantic change uses new V2 protocol and summary kinds so old
+V1 manifests are not mixed with design-only V2 observations. The
+real CPU workflow, release restrictions, and independent browser
+gates remain unchanged. No model inference was authorized or run.

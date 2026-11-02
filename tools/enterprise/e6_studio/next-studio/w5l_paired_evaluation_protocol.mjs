@@ -26,11 +26,11 @@ const slugs=[
  'afterlight-mapping-atelier',
  'paper-migration-journal'
 ];
+// Strict DESIGN-only research: CSS, compilation and browser gates are separate.
 const failures=new Set([
  'DESIGN_ABNORMAL_FINISH','DESIGN_SCHEMA_REJECTED',
  'DESIGN_RESPONSE_BUDGET','DESIGN_TIMEOUT_OR_TRANSPORT',
- 'DESIGN_MODEL_UNAVAILABLE','DESIGN_OTHER_BOUNDED',
- 'CSS_REJECTED','COMPILE_REJECTED','BROWSER_REJECTED'
+ 'DESIGN_MODEL_UNAVAILABLE','DESIGN_OTHER_BOUNDED'
 ]);
 function pairs(briefs){
  if(!Array.isArray(briefs)||Object.getPrototypeOf(briefs)!==Array.prototype||
@@ -54,7 +54,8 @@ export function buildPairedEvaluationProtocol({briefs,sourceCommitSha}={}){
  const planned=pairs(briefs);
  const briefSetSha256=sha(JSON.stringify(briefs));
  const protocol={
-   kind:'E6_W5L_OFFLINE_PAIRED_PROTOCOL_V1',
+   kind:'E6_W5L_OFFLINE_PAIRED_PROTOCOL_V2',
+   acceptanceScope:'DESIGN_VALIDATION_ONLY',
    sourceCommitSha,briefSetSha256,
    modelTag:'qwen2.5:0.5b',
    runtimeVersion:'0.40.13',
@@ -74,13 +75,14 @@ export function buildPairedEvaluationProtocol({briefs,sourceCommitSha}={}){
  });
 }
 function checkFixedProtocol(p){
- const expected=['kind','sourceCommitSha','briefSetSha256','modelTag',
+ const expected=['kind','acceptanceScope','sourceCommitSha','briefSetSha256','modelTag',
    'runtimeVersion','executionMode','jobWallClockCeilingMinutes',
    'executionOrder','methods','planned','measurementsVerified',
    'modelInvocationAuthorized','modelRequestsMade',
    'modelWeightsCryptographicallyAttested','stage45Go','releaseGo',
    'protocolSha256'];
- if(!keys(p,expected)||p.kind!=='E6_W5L_OFFLINE_PAIRED_PROTOCOL_V1'||
+ if(!keys(p,expected)||p.kind!=='E6_W5L_OFFLINE_PAIRED_PROTOCOL_V2'||
+    p.acceptanceScope!=='DESIGN_VALIDATION_ONLY'||
     !commit(p.sourceCommitSha)||
     p.briefSetSha256!==CANONICAL_BRIEF_SET_SHA256||
     p.modelTag!=='qwen2.5:0.5b'||p.runtimeVersion!=='0.40.13'||
@@ -149,7 +151,9 @@ export function summarizePairedResearch(protocol,observations){
         (x.outcome==='ACCEPTED'&&
           (x.failureCode!==null||x.reportedDesignCalls<1||
            x.reportedOutputTokens<1))||
-        (x.outcome==='REJECTED'&&!failures.has(x.failureCode)))
+        (x.outcome==='REJECTED'&&(!failures.has(x.failureCode)||
+          (x.reportedDesignCalls===0&&
+           !['DESIGN_MODEL_UNAVAILABLE','DESIGN_TIMEOUT_OR_TRANSPORT'].includes(x.failureCode)))))
        fail('INVALID_BOUNDED_OBSERVATION');
      totalsRow.reportedDesignCalls+=x.reportedDesignCalls;
      totalsRow.reportedOutputTokens+=x.reportedOutputTokens;
@@ -166,7 +170,9 @@ export function summarizePairedResearch(protocol,observations){
    fail('AGGREGATE_JOB_TIME_BUDGET_EXCEEDED');
  const complete=totals.every(t=>t.notRun===0);
  return Object.freeze({
-   kind:'E6_W5L_UNATTESTED_RESEARCH_COMPARISON_V1',
+   kind:'E6_W5L_UNATTESTED_DESIGN_COMPARISON_V2',
+   acceptanceScope:'DESIGN_VALIDATION_ONLY',
+   downstreamCssCompilerBrowserEvaluated:false,
    sourceCommitSha:protocol.sourceCommitSha,
    protocolSha256,
    plannedPairs:3,

@@ -19,6 +19,7 @@ test('paired protocol pins actual held-out identities, two modes and unequal req
  assert.deepEqual([...new Set(p.planned.map(x=>x.projectSlug))],briefs.map(x=>x.projectSlug));
  assert.deepEqual(p.methods.map(x=>x.designCallsMax),[2,3]);
  assert.equal(p.modelTag,'qwen2.5:0.5b');
+ assert.equal(p.acceptanceScope,'DESIGN_VALIDATION_ONLY');
  assert.equal(p.modelRequestsMade,0);
  assert.equal(p.executionOrder,'SERIAL_FIXED_BRIEF_THEN_METHOD');
  assert.equal(p.modelInvocationAuthorized,false);
@@ -65,6 +66,8 @@ test('complete synthetic data allows descriptive difference but never a winner o
  assert.equal(summary.cumulativeReportedElapsedMs,6000);
  assert.equal(summary.comparableBudget,false);
  assert.equal(summary.realProviderEvidenceVerified,false);
+ assert.equal(summary.acceptanceScope,'DESIGN_VALIDATION_ONLY');
+ assert.equal(summary.downstreamCssCompilerBrowserEvaluated,false);
  assert.equal(summary.originalDesignQualityVerified,false);
  assert.equal(summary.stage45Go,false);
 });
@@ -172,5 +175,45 @@ test('rehashing a forged heldout digest cannot forge a different trial into fixe
  p.briefSetSha256='f'.repeat(64);
  const {protocolSha256,...data}=p;
  p.protocolSha256=createHash('sha256').update(JSON.stringify(data)).digest('hex');
+ assert.throws(()=>summarizePairedResearch(p,empty(p)),/PROTOCOL_NOT_ACCEPTED/);
+});
+
+test('design comparison refuses downstream CSS, compiler, browser failure codes',()=>{
+ const p=manifest();
+ for(const failureCode of ['CSS_REJECTED','COMPILE_REJECTED','BROWSER_REJECTED']){
+  const obs=empty(p);
+  obs[0]={...obs[0],outcome:'REJECTED',failureCode,
+    reportedDesignCalls:1,reportedOutputTokens:120,reportedElapsedMs:200};
+  assert.throws(()=>summarizePairedResearch(p,obs),/INVALID_BOUNDED_OBSERVATION/);
+ }
+ const obs=empty(p);
+ obs[0]={...obs[0],outcome:'REJECTED',failureCode:'DESIGN_SCHEMA_REJECTED',
+   reportedDesignCalls:1,reportedOutputTokens:120,reportedElapsedMs:200};
+ const s=summarizePairedResearch(p,obs);
+ assert.equal(s.acceptanceScope,'DESIGN_VALIDATION_ONLY');
+ assert.equal(s.downstreamCssCompilerBrowserEvaluated,false);
+ assert.equal(s.releaseGo,false);
+});
+test('design schema or truncation failure cannot claim no design request',()=>{
+ const p=manifest();
+ for(const failureCode of [
+   'DESIGN_SCHEMA_REJECTED','DESIGN_ABNORMAL_FINISH',
+   'DESIGN_RESPONSE_BUDGET','DESIGN_OTHER_BOUNDED']){
+  const obs=empty(p);
+  obs[0]={...obs[0],outcome:'REJECTED',failureCode,
+   reportedDesignCalls:0,reportedOutputTokens:0,reportedElapsedMs:0};
+  assert.throws(()=>summarizePairedResearch(p,obs),/INVALID_BOUNDED_OBSERVATION/);
+ }
+ const unavailable=empty(p);
+ unavailable[0]={...unavailable[0],outcome:'REJECTED',
+  failureCode:'DESIGN_MODEL_UNAVAILABLE',reportedDesignCalls:0,
+  reportedOutputTokens:0,reportedElapsedMs:0};
+ assert.equal(summarizePairedResearch(p,unavailable).methods[0].rejected,1);
+});
+test('forged acceptance scope rejected even when protocol is rehashed',()=>{
+ const p=structuredClone(manifest());
+ p.acceptanceScope='FULL_CSS_AND_BROWSER_ACCEPTANCE';
+ const {protocolSha256,...payload}=p;
+ p.protocolSha256=createHash('sha256').update(JSON.stringify(payload)).digest('hex');
  assert.throws(()=>summarizePairedResearch(p,empty(p)),/PROTOCOL_NOT_ACCEPTED/);
 });
