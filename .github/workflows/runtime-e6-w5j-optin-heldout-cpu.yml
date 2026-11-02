@@ -7,6 +7,7 @@ on:
       - feat/e6-w5i-local-inference-completion-20261102
 permissions:
   contents: read
+  pull-requests: read
 concurrency:
   group: e6-w5j-owner-approval-pilot
   cancel-in-progress: false
@@ -82,6 +83,21 @@ jobs:
           assert c.get('app',{}).get('slug')=='github-actions'
           print('E6_W5J_PINNED_HEAD_NORMAL_CI_SUCCESS_REQUIRED_BEFORE_DOWNLOAD')
           PY
+      - name: Revalidate current owner approval before research dependencies and model downloads
+        env:
+          GH_READ_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$E6_W5J_CHECKED_OUT_PR_HEAD"
+          curl --fail --silent --show-error --location --retry 2 \
+            --connect-timeout 12 --max-time 35 --max-filesize 200000 \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer $GH_READ_TOKEN" \
+            -H 'User-Agent: aetheris-w5j-live-approval-recheck' \
+            'https://api.github.com/repos/teldigi5-wq/aetheris-ai-runtime/pulls/275' \
+            --output "$RUNNER_TEMP/w5j-live-owner-pr.json"
+          cd tools/enterprise/e6_studio/next-studio
+          node w5j_cpu_trial_cli.mjs live-approval
       - name: Install locked build dependencies and test-only Chromium on isolated runner
         run: |
           set -euo pipefail
@@ -132,6 +148,21 @@ jobs:
           print('E6_W5J_VENDOR_TAG_PREFIX_DRIFT_CHECK_NOT_WEIGHTS_ATTESTATION')
           PY
           echo 'E6_W5J_ONE_REAL_MODEL_DOWNLOADED_EPHEMERAL_CPU_RESEARCH_ONLY'
+      - name: Revalidate current owner approval immediately before model inference
+        env:
+          GH_READ_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$E6_W5J_CHECKED_OUT_PR_HEAD"
+          curl --fail --silent --show-error --location --retry 2 \
+            --connect-timeout 12 --max-time 35 --max-filesize 200000 \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer $GH_READ_TOKEN" \
+            -H 'User-Agent: aetheris-w5j-live-approval-recheck' \
+            'https://api.github.com/repos/teldigi5-wq/aetheris-ai-runtime/pulls/275' \
+            --output "$RUNNER_TEMP/w5j-live-owner-pr.json"
+          cd tools/enterprise/e6_studio/next-studio
+          node w5j_cpu_trial_cli.mjs live-approval
       - name: Attempt genuine model authored design and restricted CSS for all 3 fixed briefs
         run: |
           set -euo pipefail

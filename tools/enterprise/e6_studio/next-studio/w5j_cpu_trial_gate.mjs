@@ -39,6 +39,23 @@ export function authorizeLabelEvent(event,{actor,repository,expectedPr,headSha}=
    gpuAuthorization:false,modelExecutionOnBorrowedPc:false,
    productionAuthorization:false};
 }
+// A historical labeled event is insufficient after a queued job's approval is revoked.
+export function authorizeCurrentOwnerPullRequest(live,{actor,repository,expectedPr,headSha}={}){
+ const labels=live?.labels;
+ if(!live||typeof live!=='object'||Array.isArray(live)||
+    actor!==OWNER||repository!==REPO||expectedPr!==275||
+    !gitCommitSha(headSha)||live.number!==expectedPr||
+    live.state!=='open'||live.draft!==true||live.merged_at!==null||
+    live.user?.login!==OWNER||live.head?.sha!==headSha||
+    live.head?.repo?.full_name!==REPO||
+    live.base?.ref!==BASE||live.base?.repo?.full_name!==REPO||
+    !Array.isArray(labels)||labels.length>100||
+    labels.filter(x=>x&&typeof x==='object'&&x.name===LABEL).length!==1)
+   fail('CURRENT_OWNER_APPROVAL_REVOKED_OR_HEAD_CHANGED');
+ return {kind:'E6_W5J_LIVE_OWNER_APPROVAL_RECHECK_V1',
+   approvedPr:275,headSha,ownerLabelStillPresent:true,
+   gpuAuthorized:false,releaseGo:false};
+}
 const safeRejection=x=>typeof x==='string'&&
   /^E6_W5[ABCH]_[A-Z0-9_]{1,96}$/.test(x);
 const outputFiles=Object.freeze(['index.html','approach/index.html','assets/site.css']);

@@ -4,7 +4,7 @@ import {readFile,mkdtemp,copyFile,mkdir,writeFile,rm,symlink} from 'node:fs/prom
 import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
-import {authorizeLabelEvent,summarizeObservedTrial,summarizeMissingCaseReport,summarizeUnverifiableCaseReport,summarizeWithSavedSourceAudit} from './w5j_cpu_trial_gate.mjs';
+import {authorizeLabelEvent,authorizeCurrentOwnerPullRequest,summarizeObservedTrial,summarizeMissingCaseReport,summarizeUnverifiableCaseReport,summarizeWithSavedSourceAudit} from './w5j_cpu_trial_gate.mjs';
 import {evaluateCodeHeldout} from './w5c_local_code_trial.mjs';
 import {fakeCssSourceProvider} from './w5c_test_doubles.mjs';
 import {verifyScreenshotEvidence} from './w6_screenshot_integrity_gate.mjs';
@@ -917,4 +917,50 @@ test('real W5-J authorize CLI accepts exact GitHub runner event and refuses forg
    await rm(dir,{recursive:true,force:true});
    await rm(payloadDir,{recursive:true,force:true});
  }
+});
+
+test('current owner approval rejects revoked label, stale SHA, closed, nondraft and fork PR',()=>{
+ const snap=()=>({number:PR,state:'open',draft:true,merged_at:null,
+   user:{login:OWNER},
+   base:{ref:'feat/e6-w5i-local-inference-completion-20261102',
+     repo:{full_name:'teldigi5-wq/aetheris-ai-runtime'}},
+   head:{sha:SHA,repo:{full_name:'teldigi5-wq/aetheris-ai-runtime'}},
+   labels:[{name:'e6-w5j-three-brief-cpu-approved'}]});
+ const good=authorizeCurrentOwnerPullRequest(snap(),args());
+ assert.equal(good.ownerLabelStillPresent,true);
+ assert.equal(good.releaseGo,false);
+ for(const edit of [
+  x=>{x.labels=[];},
+  x=>{x.labels[0].name='not-approved';},
+  x=>{x.labels.push({name:'e6-w5j-three-brief-cpu-approved'});},
+  x=>{x.head.sha='f'.repeat(40);},
+  x=>{x.head.sha='f'.repeat(64);},
+  x=>{x.state='closed';},
+  x=>{x.merged_at='2026-11-02T00:00:00Z';},
+  x=>{x.draft=false;},
+  x=>{x.number=276;},
+  x=>{x.base.ref='main';},
+  x=>{x.base.repo.full_name='other/repo';},
+  x=>{x.head.repo.full_name='other/fork';},
+  x=>{x.user.login='other';}
+ ]){
+  const s=snap();edit(s);
+  assert.throws(()=>authorizeCurrentOwnerPullRequest(s,args()),
+    /CURRENT_OWNER_APPROVAL_REVOKED_OR_HEAD_CHANGED/);
+ }
+});
+test('owner CPU workflow must recheck live label before downloads and real inference',async()=>{
+ const source=await readFile(new URL('../../../../.github/workflows/runtime-e6-w5j-optin-heldout-cpu.yml',import.meta.url),'utf8');
+ const order=[
+  'Require successful model-free exact-head research CI before cloud downloads',
+  'Revalidate current owner approval before research dependencies and model downloads',
+  'Download verified Ollama v0.40.13 binary to ephemeral CPU host',
+  'Revalidate current owner approval immediately before model inference',
+  'Attempt genuine model authored design and restricted CSS for all 3 fixed briefs'
+ ];
+ let last=-1;
+ for(const name of order){const idx=source.indexOf(name);assert(idx>last);last=idx;}
+ assert.equal((source.match(/node w5j_cpu_trial_cli\.mjs live-approval/g)||[]).length,2);
+ assert.equal((source.match(/https:\/\/api\.github\.com\/repos\/teldigi5-wq\/aetheris-ai-runtime\/pulls\/275/g)||[]).length,2);
+ assert(source.includes('pull-requests: read'));
 });

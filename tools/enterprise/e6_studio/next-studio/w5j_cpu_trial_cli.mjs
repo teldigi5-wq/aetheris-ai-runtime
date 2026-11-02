@@ -1,12 +1,12 @@
 /** Owner-labeled cloud CPU experiment CLI. NEVER called by normal PR CI.
- * commands: authorize, summarize, missing-report, unverified-report (failure only).
+ * commands: authorize, live-approval, summarize, missing-report, unverified-report.
  * Fixed paths; no client/model controlled filenames or secrets.
  */
 import {readFile,lstat,mkdir,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {authorizeLabelEvent,summarizeWithSavedSourceAudit,summarizeMissingCaseReport,summarizeUnverifiableCaseReport} from './w5j_cpu_trial_gate.mjs';
+import {authorizeLabelEvent,authorizeCurrentOwnerPullRequest,summarizeWithSavedSourceAudit,summarizeMissingCaseReport,summarizeUnverifiableCaseReport} from './w5j_cpu_trial_gate.mjs';
 const here=dirname(fileURLToPath(import.meta.url));
 const fail=x=>{throw Error('E6_W5J_'+x);};
 const readSmall=async(path,maxBytes,{includeBytes=false}={})=>{
@@ -20,7 +20,7 @@ const readSmall=async(path,maxBytes,{includeBytes=false}={})=>{
 };
 async function main(){
  const mode=process.argv[2];
- if(process.argv.length!==3||!['authorize','summarize','missing-report','unverified-report'].includes(mode))
+ if(process.argv.length!==3||!['authorize','live-approval','summarize','missing-report','unverified-report'].includes(mode))
   fail('INVALID_FIXED_COMMAND');
  if(process.env.GITHUB_EVENT_NAME!=='pull_request'||
     process.env.GITHUB_REPOSITORY!=='teldigi5-wq/aetheris-ai-runtime'||
@@ -42,6 +42,23 @@ async function main(){
   console.log('E6_W5J_CLOUD_CPU_OWNER_APPROVAL_VERIFIED '+JSON.stringify({
    reviewedHeadSha:info.reviewedHeadSha,approvedPr:info.expectedPr,
    gpuAuthorized:false,releaseGo:false}));
+  return;
+ }
+ if(mode==='live-approval'){
+  const temp=process.env.RUNNER_TEMP;
+  if(typeof temp!=='string'||!/^\/home\/runner\/work\/_temp(?:\/[a-zA-Z0-9_.-]+)*$/.test(temp))
+   fail('UNTRUSTED_LIVE_APPROVAL_TEMP_PATH');
+  const live=await readSmall(join(temp,'w5j-live-owner-pr.json'),200_000);
+  const result=authorizeCurrentOwnerPullRequest(live,{
+   actor:process.env.GITHUB_ACTOR,
+   repository:process.env.GITHUB_REPOSITORY,
+   expectedPr:Number(process.env.E6_W5J_APPROVED_PR_NUMBER),
+   headSha:head
+  });
+  console.log('E6_W5J_LIVE_OWNER_LABEL_AND_HEAD_STILL_APPROVED '+JSON.stringify({
+   approvedPr:result.approvedPr,headSha:result.headSha,
+   gpuAuthorized:false,releaseGo:false
+  }));
   return;
  }
  if(mode==='missing-report'){

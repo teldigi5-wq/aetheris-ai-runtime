@@ -538,3 +538,8 @@ The semantic change uses new V2 protocol and summary kinds so old
 V1 manifests are not mixed with design-only V2 observations. The
 real CPU workflow, release restrictions, and independent browser
 gates remain unchanged. No model inference was authorized or run.
+
+
+### W5-J live owner approval revocation rechecks
+
+The earlier owner-only GitHub CPU workflow trusted a historical labeled event throughout the queued job. Its current form will additionally read the live PR #275 snapshot before any dependencies or model downloads, and again immediately before inference. It requires a still-present approval label, unchanged exact approved head, same owner and repository, and open unmerged draft status. Absent labels, closed or changed PRs, API failures and malformed read-only responses stop the run. GitHub tokens never reach model prompts or inference and the API response remains temporary. Model-free synthetic tests verify this policy and step ordering. This is not continuous cancellation of a model request already running: the owner must cancel an active job in GitHub Actions. No fresh owner approval, merge or deployment is implied.
