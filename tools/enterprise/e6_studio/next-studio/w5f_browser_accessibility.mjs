@@ -63,8 +63,17 @@ async function keyboardAudit(page,viewport,path,origin){
     found=await page.evaluate(to=>
       document.activeElement?.getAttribute('href')===to,dest);
     if(found){
-      await page.keyboard.press('Enter');
-      passed=new URL(page.url()).pathname===dest;
+      // Keyboard-driven navigation is asynchronous: observe the actual
+      // destination commit/load rather than reading the old URL immediately.
+      try{
+        await Promise.all([
+          page.waitForURL(origin+dest,{timeout:5000,waitUntil:'load'}),
+          page.keyboard.press('Enter')
+        ]);
+        passed=new URL(page.url()).pathname===dest;
+      }catch{
+        passed=false;
+      }
       break;
     }
   }
