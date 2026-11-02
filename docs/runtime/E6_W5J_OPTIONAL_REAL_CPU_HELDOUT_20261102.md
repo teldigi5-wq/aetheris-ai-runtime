@@ -441,3 +441,40 @@ This models a safer architectural handoff, not proof that Qwen2.5 0.5B
 can generate coherent, original websites. Offline CI still makes zero
 model calls. No real inference, rollout, merge, owner label or
 production authority is introduced.
+
+
+## W5-L: preregistered paired-comparison protocol (offline, no model calls)
+
+The first real, owner-approved W5-J trial rejected all three designs
+with the pinned Qwen2.5 0.5B model. W5-K later changed the proposed
+architecture to split identity, home and approach JSON into three
+responses; only synthetic fixtures have tested W5-K so far.
+
+W5-L now specifies a reproducible **3 held-out briefs × 2 methods**
+comparison manifest: compact single-proposal (up to two design
+requests including its existing safe retry) against staged
+three-proposal (three design requests without a retry). The methods
+**do not have equal compute budgets**, so one arm's higher observed
+acceptance alone cannot establish a cost-adjusted win. A proper later
+experiment must report per-brief acceptance, bounded rejection codes,
+observed design calls, reported model tokens and wall-clock time, as
+well as independently reviewed quality. Three paired briefs are not
+statistically powered for broad claims.
+
+The standalone W5-L tool is a **pure offline manifest and untrusted
+observation summarizer**. It accepts only six fixed, structured
+observations with no raw model text, secret fields, dynamic URLs or
+extra authorization claims. Missing executions are represented as
+NOT_RUN with null metrics, never inferred rejects. The manifest's
+SHA-256 checksum detects accidental change but is NOT a signature or
+proof of model provenance. Even if every submitted observation says
+ACCEPTED, the summary explicitly denies real-model attestation,
+human aesthetic approval, statistically reliable superiority and
+Stage 45 release authority.
+
+This does not start or authorize a second cloud trial. Real CPU
+inference, resource cost and each actual result remain unverified on
+the new W5-K code. Before conducting a genuine A/B comparison, obtain
+fresh approval for the exact commit, method budgets, compute provider
+and experiment steps; do not reapply the consumed approval label
+from run 41447764457.
