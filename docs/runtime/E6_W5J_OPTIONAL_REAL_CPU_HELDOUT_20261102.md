@@ -30,3 +30,20 @@ After approval, the temporary runner may download ~1.4 GB of Ollama binary archi
 A success with 3 static validated pages is not a high-end original cinematic site; W5-C CSS is a deliberately restricted language. Even browser screenshots do not prove human art approval or rights. If any of the three fail, **preserve sanitized rejection evidence** and do not permit a partial run to count as a release pass. Stage 45 nine attestations, runtime security #23, platform security #251, E6 Task7/8, real performance/GPU and independent WCAG/quality/rights checks remain NO_GO.
 
 **Stop condition:** If no explicit owner label is applied, no hosted inference occurs. A verified mock-only CI pass merely establishes that the optional three-brief run has a valid, secure *launch and evidence pathway*—not that the real-model experiment has passed.
+
+
+## 2 November — Independent two-route browser evidence and mock-only E2E proof
+
+The first W5-J integrity update was verified at commit `e5efd66572a7b278ed2d6f0061c111c08b65f150`: 117/117 Node tests and 69/69 human-authored Chromium scenarios passed on GitHub Actions #41405618633. All three candidate source hash keys, held-out brief digests and the literal saved-report byte digest are now required. These are tampering detection improvements, **not independent model provenance attestations**.
+
+An additional defect was found: W5-D's source reviewer saved **nine home-page screenshots**, leaving **all three `/approach/` pages visually unreviewed**. The W5-J child branch now extends its existing W5-D reviewer to:
+
+- validate navigation to the approach route and that route's main/H1/script/active-nav and mobile overflow conditions;
+- capture **both full-page screenshots** (home plus approach) for each of 3 distinct fictional candidate sites × 3 viewport sizes (320, 390, 1440), **18 images** total;
+- record each screenshot's SHA-256, approach heading and overflow, and require `bothRoutesCapturedForAllNineProfiles=true`, `fullPageScreenshotCount=18`, and all release/art-approval flags false.
+
+`w5j_mock_full_pipeline_browser.mjs` creates three **HUMAN-AUTHORED FAKE MODEL** source bundles in disposable CI-only directories, explicitly fabricates the provider's localhost and stop metadata strictly to exercise the evidence gate, passes the real saved-file auditor and end-to-end two-route Chromium reviewer, verifies all **18** PNG bytes/digests, then modifies a previously hashed approach page and confirms that `inspectTrial` fails closed. The test-double report and screenshots are deliberately **excluded from normal CI-uploaded artifacts** to avoid mistaking them for real-model output.
+
+The actual optional real-model workflow has a separate explicit post-review condition requiring all 18 screenshots and both routes; if one screenshot is missing it fails rather than claiming acceptance. The ordinary PR preflight now also runs if the optional workflow file changes. The optional workflow remains owner-label-only and has **not been triggered or authorized**.
+
+At no point does successful mock-only CI prove actual Ollama execution, original generated art direction, human-approved premium quality, a physical GPU benchmark, copyright rights, or independent WCAG conformance. All Stage45 release gates remain NO_GO and both protected `main` branches are unchanged.
