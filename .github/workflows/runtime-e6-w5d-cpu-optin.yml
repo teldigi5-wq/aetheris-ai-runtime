@@ -1,0 +1,101 @@
+name: Enterprise E6 W5-D Optional Cloud CPU Inference - Explicit PR Label Only
+on:
+  pull_request:
+    types:
+      - labeled
+    branches:
+      - feat/e6-w5c-restricted-model-authored-css-20261101
+permissions:
+  contents: read
+concurrency:
+  group: e6-w5d-owner-cpu-pilot
+  cancel-in-progress: false
+jobs:
+  opt-in-ephemeral-cloud-cpu-only:
+    if: >-
+      github.event.label.name == 'e6-w5d-cpu-smoke-approved' &&
+      github.event.pull_request.number == 269 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.draft == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      OLLAMA_HOST: 127.0.0.1:11434
+      OLLAMA_LLM_LIBRARY: cpu
+      OLLAMA_NUM_PARALLEL: '1'
+      CUDA_VISIBLE_DEVICES: '-1'
+      HIP_VISIBLE_DEVICES: '-1'
+      E6_W5D_CPU_RUN_AUTHORIZED: PR_LABEL_OWNER_APPROVED
+      MODEL_TAG: qwen2.5:0.5b
+    steps:
+      - name: Checkout approved exact PR commit, no write credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Assert reviewed source and absolutely no borrowed device/GPU needed
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          test "$(uname -m)" = 'x86_64'
+          cd tools/enterprise/e6_studio/next-studio
+          node --check w5d_cpu_smoke.mjs
+          node --test test_w5d_cpu_smoke.mjs
+          echo 'CPU-only hosted-runner experiment; NOT a GPU or real-device benchmark'
+      - name: Install checksum-verified pinned Ollama binary locally on ephemeral runner
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 2 --connect-timeout 20 --max-time 480 \
+            'https://github.com/ollama/ollama/releases/download/v0.40.13/ollama-linux-amd64.tar.zst' \
+            --output "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
+          echo 'c9490e0f520be21271d969e6703f012268b1d39f8b70dd58854e5bfef7a75bb6  '"$RUNNER_TEMP/ollama-linux-amd64.tar.zst" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/ollama-bin" "$RUNNER_TEMP/ollama-models"
+          tar --zstd -xf "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" -C "$RUNNER_TEMP/ollama-bin"
+          test -x "$RUNNER_TEMP/ollama-bin/bin/ollama"
+          echo "$RUNNER_TEMP/ollama-bin/bin" >> "$GITHUB_PATH"
+      - name: Start CPU-only localhost Ollama and download only licensed 0.5B evaluation model
+        run: |
+          set -euo pipefail
+          export OLLAMA_MODELS="$RUNNER_TEMP/ollama-models"
+          "$RUNNER_TEMP/ollama-bin/bin/ollama" serve > "$RUNNER_TEMP/ollama-server-private.log" 2>&1 &
+          for n in $(seq 1 100); do
+            if curl --silent --fail --max-time 2 \
+              'http://127.0.0.1:11434/api/version' >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent --max-time 5 'http://127.0.0.1:11434/api/version' >/dev/null
+          "$RUNNER_TEMP/ollama-bin/bin/ollama" pull "$MODEL_TAG"
+          echo 'E6_W5D_CLOUD_CPU_MODEL_DOWNLOADED_FOR_SINGLE_OPT_IN_TEST_ONLY'
+      - name: Run one genuine loopback JSON generation and hash-only receipt
+        env:
+          GITHUB_EVENT_NAME: pull_request
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          node w5d_cpu_smoke.mjs
+          test -s target/e6-w5d-cpu-inference-smoke/research-receipt.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('target/e6-w5d-cpu-inference-smoke/research-receipt.json')
+          v=json.loads(p.read_text())
+          assert v['realLoopbackApiCalled'] is True
+          assert v['providerReportedGenerationComplete'] is True
+          assert v['gpuUseRequested'] is False
+          assert v['actualWeightsExecutionCryptographicallyAttested'] is False
+          assert v['threeHeldoutSitesGenerated'] is False
+          assert v['releaseGo'] is False
+          print('E6_W5D_ONE_CPU_REAL_API_RESPONSE_NO_SITE_OR_GPU_CLAIMS')
+          PY
+      - name: Seven-day hash-only evidence, never model files or original replies
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e6-w5d-cpu-only-single-model-smoke-no-gpu-acceptance
+          path: tools/enterprise/e6_studio/next-studio/target/e6-w5d-cpu-inference-smoke/research-receipt.json
+          retention-days: 7
+          if-no-files-found: ignore
