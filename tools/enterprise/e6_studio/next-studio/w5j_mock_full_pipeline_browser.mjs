@@ -89,6 +89,9 @@ async function main(){
  assert.equal(review.allNineSoftwareBrowserReviewsPassed,true);
  assert.equal(review.bothRoutesCapturedForAllNineProfiles,true);
  assert.equal(review.bothRoutesKeyboardFocusVerified,true);
+ assert.equal(review.bothRoutesAutomatedAccessibilityPassed,true);
+ assert.equal(review.automatedAccessibilityRouteScanCount,18);
+ assert(Number.isInteger(review.automatedAccessibilityManualReviewItems));
  assert.equal(review.profiles.length,9);
  assert.equal(review.visualQualityHumanApproved,false);
  assert.equal(review.releaseGo,false);
@@ -96,6 +99,15 @@ async function main(){
  for(const v of review.profiles){
    assert.equal(v.approachNavigationPassed,true);
    assert.equal(v.bothRoutesKeyboardFocusVerified,true);
+   assert.equal(v.bothRoutesAutomatedAccessibilityPassed,true);
+   for(const scan of [v.homeAutomatedAccessibility,v.approachAutomatedAccessibility]){
+     assert.equal(scan.automatedRuleScanPassed,true);
+     assert.equal(scan.violations,0);
+     assert.equal(scan.independentWcagCertified,false);
+     assert.equal(scan.screenReaderVerified,false);
+     assert.equal(scan.generatedAuthorJavaScript,false);
+     assert(Number.isInteger(scan.needsManualReview));
+   }
    for(const k of [v.homeKeyboard,v.approachKeyboard]){
      assert.equal(k.firstTabIsSkip,true);
      assert.equal(k.skipVisible,true);
