@@ -109,6 +109,15 @@ jobs:
           result=json.loads((root/'review-report.json').read_text())
           assert result['allNineSoftwareBrowserReviewsPassed'] is True
           assert result['bothRoutesCapturedForAllNineProfiles'] is True
+          assert result['bothRoutesKeyboardFocusVerified'] is True
+          for profile in result['profiles']:
+              for route in ('homeKeyboard', 'approachKeyboard'):
+                  keyboard=profile[route]
+                  assert keyboard['firstTabIsSkip'] is True
+                  assert keyboard['focusOutlineVisible'] is True
+                  assert keyboard['mainFocused'] is True
+                  assert keyboard['focusReleased'] is True
+                  assert keyboard['authorJavascriptEnabled'] is False
           assert result['fullPageScreenshotCount'] == 18
           assert len(result['profiles']) == 9
           assert len(list(root.glob('*.png'))) == 18
