@@ -14,7 +14,7 @@ const evidence={
  browserJavaScriptEnabled:false,hasExactlyOneMain:true,hasExactlyOneSkipLink:true,
  skipWasFirstTabStop:true,skipFocusIndicatorVisible:true,
  fragmentNavigatedToMain:true,activeElementIsMain:true,
- mainHasTabindexMinusOne:true,nextTabDidNotReturnToSkip:true,
+ mainHasTabindexMinusOne:true,tabMovedOffMainWithoutTrap:true,
  horizontalOverflowPx:0,outsideRequests:0,browserErrors:0,
  ownerDeviceMeasured:false,realModelUsed:false,wcagCertified:false,releaseGo:false
 };
@@ -58,7 +58,7 @@ test('only actual no-author-JS focus proof passes; hash or scroll is insufficien
   x=>{x.activeElementIsMain=false;},
   x=>{x.mainHasTabindexMinusOne=false;},
   x=>{x.browserJavaScriptEnabled=true;},
-  x=>{x.nextTabDidNotReturnToSkip=false;},
+  x=>{x.tabMovedOffMainWithoutTrap=false;},
   x=>{x.fragmentNavigatedToMain=false;},
   x=>{x.horizontalOverflowPx=3;},
   x=>{x.outsideRequests=1;},
