@@ -74,7 +74,8 @@ export async function requestLocalOllama(prompt,model,{transport=fetch,phase='de
      typeof prompt!=='string'||!prompt||prompt.length>8_000)
     fail('INVALID_LOCAL_MODEL_REQUEST');
   const request={model,prompt,stream:false,format:'json',
-    options:{temperature:.55,num_predict:budget.num_predict,num_ctx:budget.num_ctx},
+    // E6 W5-J: CPU research cannot activate a GPU on any execution host.
+    options:{temperature:.55,num_predict:budget.num_predict,num_ctx:budget.num_ctx,num_gpu:0},
     keep_alive:'0'};
   // The URL is fixed; never take user/model-provided hosts, ports or paths.
   // The injected transport exists solely for offline contract tests.
