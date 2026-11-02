@@ -7,7 +7,8 @@ import {createHash} from 'node:crypto';
 import {readFile,mkdir,lstat,writeFile} from 'node:fs/promises';
 import {dirname,join,relative,isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {buildPrompt,requestLocalOllama} from './w5a_local_ollama.mjs';
+import {buildPrompt} from './w5a_local_ollama.mjs';
+import {requestValidatedDesign,requestValidatedCss} from './w5h_bounded_model_repair.mjs';
 import {probeLocalModel} from './w5b_local_heldout_runner.mjs';
 import {verifyHeldoutCollection} from './w5b_evaluation_contract.mjs';
 import {compileAuthoredSite} from './w5c_restricted_css_compiler.mjs';
@@ -55,14 +56,21 @@ export async function evaluateCodeHeldout({batch,model,baseCss,transport=fetch})
       modelReportedName:model};
     try{
       const designPrompt=buildPrompt(brief);
-      const first=await requestLocalOllama(designPrompt,model,{transport});
-      const codePrompt=buildCssCodePrompt(brief,first.design);
-      const second=await requestLocalOllama(codePrompt,model,{transport});
-      const cssSource=parseCodeProposal(second.design,brief.projectSlug);
-      const result=compileAuthoredSite(brief,first.design,cssSource,baseCss);
+      const first=await requestValidatedDesign(brief,model,{transport});
+      const codePrompt=buildCssCodePrompt(brief,first.value);
+      const second=await requestValidatedCss(brief,first.value,model,{transport});
+      const result=compileAuthoredSite(brief,first.value,second.value,baseCss);
       sites.set(brief.projectSlug,result);
       cases.push({...base,accepted:true,status:'HUMAN_REVIEW_REQUIRED',
-        designPromptSha256:sha(designPrompt),cssPromptSha256:sha(codePrompt),
+        designPromptSha256:first.attemptedPromptSha256,
+        cssPromptSha256:second.attemptedPromptSha256,
+        initialDesignPromptSha256:first.initialPromptSha256,
+        initialCssPromptSha256:second.initialPromptSha256,
+        designRequestAttempts:first.attempts,cssRequestAttempts:second.attempts,
+        designFirstRejectionCode:first.firstRejectedValidationCode,
+        cssFirstRejectionCode:second.firstRejectedValidationCode,
+        rawRejectedModelOutputSaved:false,
+        deterministicRepairBudgetPerPhase:1,
         designRawReplySha256:first.rawReplySha256,
         cssRawReplySha256:second.rawReplySha256,
         designSha256:result.evidence.proposalSha256,
@@ -73,7 +81,7 @@ export async function evaluateCodeHeldout({batch,model,baseCss,transport=fetch})
     }catch(error){
       const code=String(error?.message||'');
       cases.push({...base,accepted:false,status:'REJECTED',
-        rejectionCode:/^E6_W5[ABC]_[A-Z0-9_]+$/.test(code)?code:'E6_W5C_PROVIDER_OR_SCHEMA_REJECTED',
+        rejectionCode:/^E6_W5[ABCH]_[A-Z0-9_]+$/.test(code)?code:'E6_W5C_PROVIDER_OR_SCHEMA_REJECTED',
         modelRuntimeAttested:false,codeSecurityPolicyPassed:false,
         humanVisualAccepted:false,releaseGo:false});
     }
