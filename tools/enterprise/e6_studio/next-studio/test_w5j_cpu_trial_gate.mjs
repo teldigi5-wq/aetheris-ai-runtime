@@ -183,3 +183,31 @@ test('opt-in real-model workflow is always owner-labeled and validates all 18 pa
  const model=source.indexOf('"$RUNNER_TEMP/ollama-bin/bin/ollama" pull');
  assert(approved>=0&&download>approved&&model>download);
 });
+
+test('a labeled CPU run refuses downloads unless the exact PR head has successful normal GitHub CI',async()=>{
+ const source=await readFile(new URL('../../../../.github/workflows/runtime-e6-w5j-optin-heldout-cpu.yml',import.meta.url),'utf8');
+ const authorize=source.indexOf('node w5j_cpu_trial_cli.mjs authorize');
+ const preflight=source.indexOf('Require successful model-free exact-head research CI');
+ const checkApi=source.indexOf('/commits/$W5J_APPROVED_HEAD/check-runs?per_page=100');
+ const modelDownload=source.indexOf('Download verified Ollama');
+ assert(authorize>=0&&preflight>authorize&&checkApi>preflight&&modelDownload>checkApi);
+ for(const requirement of [
+  "test \"$(git rev-parse HEAD)\" = \"$W5J_APPROVED_HEAD\"",
+  "c.get('name')=='bounded-model-proposal-and-simulated-browser-only'",
+  "c.get('head_sha')==sha",
+  "c.get('status')=='completed' and c.get('conclusion')=='success'",
+  "c.get('app',{}).get('slug')=='github-actions'",
+  "checks.get('total_count',101)<=100"
+ ])assert(source.includes(requirement),'missing exact-head positive CI guard: '+requirement);
+});
+test('the installed research model must match the published provider tag ID, with no false weight-attestation claim',async()=>{
+ const source=await readFile(new URL('../../../../.github/workflows/runtime-e6-w5j-optin-heldout-cpu.yml',import.meta.url),'utf8');
+ const pull=source.indexOf('ollama" pull "$MODEL_TAG"');
+ const tagged=source.indexOf('w5j-installed-model-tags.json');
+ const verify=source.indexOf("model_id.startswith('a8b0c5157701')");
+ const inference=source.indexOf('Attempt genuine model authored design');
+ assert(pull>0&&tagged>pull&&verify>tagged&&inference>verify);
+ assert(source.includes("len(model_id)==64"));
+ assert(source.includes("entries[0].get('digest','')"));
+ assert(source.includes("E6_W5J_VENDOR_TAG_PREFIX_DRIFT_CHECK_NOT_WEIGHTS_ATTESTATION"));
+});
