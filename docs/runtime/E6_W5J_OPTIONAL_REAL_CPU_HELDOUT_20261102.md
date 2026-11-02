@@ -47,3 +47,14 @@ An additional defect was found: W5-D's source reviewer saved **nine home-page sc
 The actual optional real-model workflow has a separate explicit post-review condition requiring all 18 screenshots and both routes; if one screenshot is missing it fails rather than claiming acceptance. The ordinary PR preflight now also runs if the optional workflow file changes. The optional workflow remains owner-label-only and has **not been triggered or authorized**.
 
 At no point does successful mock-only CI prove actual Ollama execution, original generated art direction, human-approved premium quality, a physical GPU benchmark, copyright rights, or independent WCAG conformance. All Stage45 release gates remain NO_GO and both protected `main` branches are unchanged.
+
+
+## 2 November — Generated-candidate keyboard validation on BOTH routes
+
+A critical acceptance gap remained despite prior W5-F/W5-G mock keyboard tests: the **real-candidate W5-D browser reviewer did not verify native keyboard focus on the actual generated site pages**. W5-J now extends `w5d_owner_browser_review.mjs` to run a **JavaScript-disabled first-Tab, visible focus ring, Enter-to-`#main`, actual `document.activeElement===main#main`, and subsequent Tab release** check on EACH of `/` and `/approach/`, at all 3 widths, across all 3 candidate sites. The main landmark must have `tabindex="-1"`. A hash-only/scroll-only success fails closed.
+
+The optional cloud CPU workflow now refuses to report 3 reviewable candidates unless all 18 route checks pass and each route's report has true `mainFocused` plus no author scripts. A separate mock-only full-pipeline test verifies those facts through the **same** real Chromium reviewer, while keeping model weights, rights, art quality, owner GPU, WCAG signoff and production approval false.
+
+**Verified CI:** [Actions #41408033582](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/41408033582), exact head `03b4fecb915e36f08158aa65a1e21afc83c0403a`: **118/118** Node tests, locked Next.js build, 69 inherited simulated browser cases and an end-to-end mock pipeline with **18/18 screenshots** and generated-route keyboard acceptance succeeded. The test report explicitly says `realProviderCalled:false` and `actualWeightsAttested:false`.
+
+The W5-J cloud CPU owner approval label is still absent; **no live model execution or downloads have occurred**. Do not merge/deploy or claim human acceptance from any of these automated results. Stage 45 NO_GO.
