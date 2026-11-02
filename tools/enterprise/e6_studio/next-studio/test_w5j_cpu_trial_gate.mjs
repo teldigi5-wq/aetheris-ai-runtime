@@ -363,3 +363,73 @@ test('missing-report CLI refuses to replace a nonempty source report or traverse
   await rm(outside,{recursive:true,force:true});
  }
 });
+
+test('metadata probe HTTP refusal never fabricates held-out requests',async()=>{
+ const actual=fakeCssSourceProvider({briefs:batch.briefs});
+ const calls=[];
+ const transport=async(url,opts)=>{
+  calls.push(url);
+  if(url.endsWith('/api/version'))return new Response('service down',{status:503});
+  return actual(url,opts);
+ };
+ await assert.rejects(
+  evaluateCodeHeldout({batch,model:MODEL,baseCss:css,transport}),
+  /E6_W5B_LOCAL_METADATA_UNAVAILABLE/
+ );
+ assert.equal(calls.filter(url=>url.endsWith('/api/generate')).length,0);
+ const receipt=summarizeMissingCaseReport({sourceSha:SHA,caseReportAvailable:false});
+ assert.equal(receipt.threeHeldoutCasesAttempted,null);
+ assert.equal(receipt.releaseGo,false);
+});
+test('malformed provider metadata is infrastructure failure before any site output',async()=>{
+ const actual=fakeCssSourceProvider({briefs:batch.briefs});
+ let requestedGeneration=false;
+ const transport=async(url,opts)=>{
+  if(url.endsWith('/api/generate'))requestedGeneration=true;
+  if(url.endsWith('/api/tags'))return new Response('{not valid json',{status:200});
+  return actual(url,opts);
+ };
+ await assert.rejects(
+  evaluateCodeHeldout({batch,model:MODEL,baseCss:css,transport}),
+  /E6_W5B_INVALID_LOCAL_METADATA_JSON/
+ );
+ assert.equal(requestedGeneration,false);
+});
+test('installed-model metadata must match exact requested model and valid reported digest',async()=>{
+ const actual=fakeCssSourceProvider({briefs:batch.briefs});
+ let requestedGeneration=false;
+ const transport=async(url,opts)=>{
+  if(url.endsWith('/api/generate'))requestedGeneration=true;
+  if(url.endsWith('/api/tags'))
+   return new Response(JSON.stringify({models:[{name:MODEL,digest:'forged'}]}),{status:200});
+  return actual(url,opts);
+ };
+ await assert.rejects(
+  evaluateCodeHeldout({batch,model:MODEL,baseCss:css,transport}),
+  /E6_W5B_MODEL_NOT_INSTALLED_OR_DIGEST_MISSING/
+ );
+ assert.equal(requestedGeneration,false);
+});
+test('probe transport timeout never becomes three rejected model cases',async()=>{
+ const actual=fakeCssSourceProvider({briefs:batch.briefs});
+ let requestedGeneration=false;
+ const transport=async(url,opts)=>{
+  if(url.endsWith('/api/generate'))requestedGeneration=true;
+  if(url.endsWith('/api/version')){
+   const error=new Error('private transport detail must not enter receipts');
+   error.name='TimeoutError';
+   throw error;
+  }
+  return actual(url,opts);
+ };
+ await assert.rejects(
+  evaluateCodeHeldout({batch,model:MODEL,baseCss:css,transport}),
+  error=>error.name==='TimeoutError'
+ );
+ assert.equal(requestedGeneration,false);
+ const receipt=summarizeMissingCaseReport({sourceSha:SHA,caseReportAvailable:false});
+ assert.equal(JSON.stringify(receipt).includes('private transport detail'),false);
+ assert.equal(receipt.modelRequestsObserved,null);
+ assert.equal(receipt.accepted,null);
+ assert.equal(receipt.rejected,null);
+});
