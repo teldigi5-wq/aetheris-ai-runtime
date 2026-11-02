@@ -92,6 +92,8 @@ async function main(){
  assert.equal(review.bothRoutesKeyboardFocusVerified,true);
  assert.equal(review.bothRoutesAutomatedAccessibilityPassed,true);
  assert.equal(review.automatedAccessibilityRouteScanCount,18);
+ assert.equal(review.localNavigationLabRouteCount,18);
+ assert.equal(review.localNavigationLabBudgetsPassed,true);
  assert.equal(review.textResize200PercentRouteScanCount,18);
  assert.equal(review.bothRoutesTextResizePassed,true);
  assert(Number.isInteger(review.automatedAccessibilityManualReviewItems));
@@ -109,6 +111,16 @@ async function main(){
      assert.equal(scan.independentWcagCertified,false);
      assert.equal(scan.screenReaderVerified,false);
      assert.equal(scan.generatedAuthorJavaScript,false);
+     const perf=scan.localNavigation;
+     assert.equal(perf.technique,'ACTUAL_LOCAL_CHROMIUM_NAVIGATION_AND_STATIC_BYTES');
+     assert.equal(perf.sameOriginLocalOnly,true);
+     assert(perf.htmlDocumentBytes>=500&&perf.htmlDocumentBytes<=50_000);
+     assert(perf.cssStylesheetBytes>=1000&&perf.cssStylesheetBytes<=25_000);
+     assert(perf.loadEventEndMs>=perf.domContentLoadedMs);
+     assert(perf.domContentLoadedMs>=perf.responseEndMs);
+     assert.equal(perf.fieldCoreWebVitalsMeasured,false);
+     assert.equal(perf.physicalDevicePerformanceMeasured,false);
+     assert.equal(perf.productionPerformanceCertified,false);
      assert.equal(scan.textResize200Percent.technique,
        'CHROMIUM_SAME_ORIGIN_CSS_RESPONSE_ROOT_RESIZE');
      assert(scan.textResize200Percent.rootFontRatio>=1.95);
@@ -168,7 +180,8 @@ async function main(){
  await assert.rejects(inspectTrial(trial,batch),/GENERATED_FILE_HASH_MISMATCH/);
  console.log('E6_W5J_MOCK_ONLY_3_SITES_18_ROUTE_SCREENSHOTS_HASHED '+JSON.stringify({
    syntheticModelResponses:true,realProviderCalled:false,views:9,
-   screenshotFiles:18,screenshotIntegrityVerified:true,
+   screenshotFiles:18,localNavigationLabRoutes:18,
+   screenshotIntegrityVerified:true,
    screenshotTamperingRejected:true,textResize200PercentRouteScans:18,
    sourceTamperingRejected:true,
    actualWeightsAttested:false,humanVisualApproved:false,releaseGo:false

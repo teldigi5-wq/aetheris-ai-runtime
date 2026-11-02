@@ -263,3 +263,22 @@ integrity is **not** authenticity or originality: a source-controlled
 digest is not a cryptographic signature of human review or model
 execution. Browser UI zoom, assistive technology, human visual approval
 and Stage 45 remain independently blocked.
+
+
+## W6 real Chromium local navigation and static transfer preflight
+
+The independent W5-D browser reviewer measures actual local Chromium
+Navigation Timing for **both routes in each of nine site/viewport
+combinations**, plus fetched same-origin HTML and CSS response sizes.
+It rejects route redirects, missing stylesheets, unpopulated or
+non-monotonic navigation timestamps, HTML over 50 KB, CSS over 25 KB,
+and load event completion beyond 30 seconds in the bounded lab.
+The optional owner-gated W5-J workflow checks all 18 resulting
+route receipts before accepting preview artifacts.
+
+**Scope:** These are actual model-free Chromium *lab* measurements, not
+field Real User Monitoring or p75 Core Web Vitals. They do not measure
+field LCP/INP/CLS, GPU memory, energy/thermals, screen-reader behavior,
+actual owner-device performance, visual originality or release readiness.
+The normal PR CI uses synthetic model output, a genuine local server
+and real Chromium, with no model downloads or remote inference.

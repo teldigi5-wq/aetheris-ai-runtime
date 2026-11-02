@@ -73,6 +73,57 @@ async function verifyKeyboardFocus(page,expectedRoute){
     focusReleased:true,authorJavascriptEnabled:false,
     assistiveTechnologySpeechVerified:false,wcagCertified:false};
 }
+
+async function measureLocalNavigation(page,response,origin,route){
+ // This is measured local Chromium navigation, not field Core Web Vitals.
+ // Only fixed, same-origin HTML and CSS are read. No model output is logged.
+ if(response?.status()!==200||response.url()!==origin+route)
+   refuse('LAB_NAVIGATION_ROUTE_OR_STATUS_MISMATCH');
+ const documentBytes=(await response.body()).length;
+ const sheet=await page.request.get(origin+'/assets/site.css',{
+   maxRedirects:0,timeout:10000
+ });
+ if(sheet.status()!==200||sheet.url()!==origin+'/assets/site.css')
+   refuse('LAB_STYLESHEET_MISSING');
+ const stylesheetBytes=(await sheet.body()).length;
+ if(documentBytes<500||documentBytes>50_000||
+    stylesheetBytes<1000||stylesheetBytes>25_000)
+   refuse('LAB_STATIC_TRANSFER_BUDGET_EXCEEDED');
+ const sample=await page.evaluate(()=>{
+   const nav=performance.getEntriesByType('navigation')[0];
+   if(!nav)return null;
+   return {
+     navigationType:nav.type,
+     responseEndMs:nav.responseEnd,
+     domContentLoadedMs:nav.domContentLoadedEventEnd,
+     loadEventEndMs:nav.loadEventEnd,
+     stylesheetApplied:document.styleSheets.length>0
+   };
+ });
+ if(!sample||!['navigate','reload'].includes(sample.navigationType)||
+    !sample.stylesheetApplied||
+    !Number.isFinite(sample.responseEndMs)||
+    !Number.isFinite(sample.domContentLoadedMs)||
+    !Number.isFinite(sample.loadEventEndMs)||
+    sample.responseEndMs<0||
+    sample.domContentLoadedMs<sample.responseEndMs||
+    sample.loadEventEndMs<sample.domContentLoadedMs||
+    sample.loadEventEndMs>30_000)
+   refuse('LAB_NAVIGATION_TIMING_UNVERIFIED');
+ return {
+   technique:'ACTUAL_LOCAL_CHROMIUM_NAVIGATION_AND_STATIC_BYTES',
+   htmlDocumentBytes:documentBytes,
+   cssStylesheetBytes:stylesheetBytes,
+   responseEndMs:sample.responseEndMs,
+   domContentLoadedMs:sample.domContentLoadedMs,
+   loadEventEndMs:sample.loadEventEndMs,
+   sameOriginLocalOnly:true,
+   fieldCoreWebVitalsMeasured:false,
+   physicalDevicePerformanceMeasured:false,
+   productionPerformanceCertified:false
+ };
+}
+
 async function auditCandidateRoutes(origin,width,height){
   // The production candidate stays JS-disabled in the primary reviewer.
   // axe injects TEST-RUNNER JavaScript into separate isolated pages; the
@@ -94,6 +145,7 @@ async function auditCandidateRoutes(origin,width,height){
       const response=await page.goto(origin+route,{waitUntil:'load',timeout:30_000});
       if(response?.status()!==200||await page.locator('script').count()!==0)
         refuse('GENERATED_ACCESSIBILITY_SOURCE_CONTRACT_FAILED');
+      const localNavigation=await measureLocalNavigation(page,response,origin,route);
       let data;
       try{
         data=checkAxeResult(await new AxeBuilder({page})
@@ -180,6 +232,7 @@ async function auditCandidateRoutes(origin,width,height){
         ownerDeviceVerified:false,independentWcagCertified:false
       };
       evidence[field]={
+        localNavigation,
         textResize200Percent,
         automatedRuleScanPassed:true,
         violations:data.violations,
@@ -302,6 +355,18 @@ async function main(){
       views.every(x=>x.approachScreenshot&&x.approachScreenshotSha256),
     fullPageScreenshotCount:views.length*2,
     automatedAccessibilityRouteScanCount:views.length*2,
+    localNavigationLabRouteCount:views.length*2,
+    localNavigationLabBudgetsPassed:views.length===9&&
+      views.every(v=>[v.homeAutomatedAccessibility,v.approachAutomatedAccessibility]
+        .every(x=>x.localNavigation?.technique===
+          'ACTUAL_LOCAL_CHROMIUM_NAVIGATION_AND_STATIC_BYTES'&&
+          x.localNavigation?.sameOriginLocalOnly===true&&
+          x.localNavigation?.htmlDocumentBytes>=500&&
+          x.localNavigation?.htmlDocumentBytes<=50_000&&
+          x.localNavigation?.cssStylesheetBytes>=1000&&
+          x.localNavigation?.cssStylesheetBytes<=25_000&&
+          x.localNavigation?.fieldCoreWebVitalsMeasured===false&&
+          x.localNavigation?.physicalDevicePerformanceMeasured===false)),
     textResize200PercentRouteScanCount:views.length*2,
     bothRoutesTextResizePassed:views.length===9&&
       views.every(v=>[v.homeAutomatedAccessibility,v.approachAutomatedAccessibility]

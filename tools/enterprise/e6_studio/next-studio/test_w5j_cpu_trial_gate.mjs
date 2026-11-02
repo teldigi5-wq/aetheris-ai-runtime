@@ -792,3 +792,22 @@ test('W6 screenshot archive verification is required by owner CPU workflow',asyn
  assert(mock.includes('verifyScreenshotEvidence(evidence,batch)'));
  assert(mock.includes('screenshotTamperingRejected:true'));
 });
+
+test('W6 local performance lab requires actual Chromium timings and same-origin bounded assets',async()=>{
+ const reviewer=await readFile(new URL('./w5d_owner_browser_review.mjs',import.meta.url),'utf8');
+ for(const required of [
+  "response.url()!==origin+route",
+  "maxRedirects:0,timeout:10000",
+  "stylesheetBytes>25_000",
+  "performance.getEntriesByType('navigation')[0]",
+  "refuse('LAB_NAVIGATION_TIMING_UNVERIFIED')",
+  "refuse('LAB_STATIC_TRANSFER_BUDGET_EXCEEDED')",
+  "fieldCoreWebVitalsMeasured:false",
+  "physicalDevicePerformanceMeasured:false",
+  "localNavigationLabRouteCount:views.length*2"
+ ])assert(reviewer.includes(required),'missing W6 lab constraint '+required);
+ const workflow=await readFile(new URL('../../../../.github/workflows/runtime-e6-w5j-optin-heldout-cpu.yml',import.meta.url),'utf8');
+ assert(workflow.includes("result['localNavigationLabRouteCount'] == 18"));
+ assert(workflow.includes("result['localNavigationLabBudgetsPassed'] is True"));
+ assert(workflow.includes("nav['fieldCoreWebVitalsMeasured'] is False"));
+});

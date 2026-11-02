@@ -166,6 +166,8 @@ jobs:
           assert result['bothRoutesKeyboardFocusVerified'] is True
           assert result['bothRoutesAutomatedAccessibilityPassed'] is True
           assert result['automatedAccessibilityRouteScanCount'] == 18
+          assert result['localNavigationLabRouteCount'] == 18
+          assert result['localNavigationLabBudgetsPassed'] is True
           assert result['textResize200PercentRouteScanCount'] == 18
           assert result['bothRoutesTextResizePassed'] is True
           for profile in result['profiles']:
@@ -175,6 +177,15 @@ jobs:
                   assert scanned['violations'] == 0
                   assert scanned['independentWcagCertified'] is False
                   assert scanned['screenReaderVerified'] is False
+                  nav=scanned['localNavigation']
+                  assert nav['technique'] == 'ACTUAL_LOCAL_CHROMIUM_NAVIGATION_AND_STATIC_BYTES'
+                  assert nav['sameOriginLocalOnly'] is True
+                  assert 500 <= nav['htmlDocumentBytes'] <= 50_000
+                  assert 1000 <= nav['cssStylesheetBytes'] <= 25_000
+                  assert 0 <= nav['responseEndMs'] <= nav['domContentLoadedMs'] <= nav['loadEventEndMs'] <= 30_000
+                  assert nav['fieldCoreWebVitalsMeasured'] is False
+                  assert nav['physicalDevicePerformanceMeasured'] is False
+                  assert nav['productionPerformanceCertified'] is False
                   resized=scanned['textResize200Percent']
                   assert resized['technique'] == 'CHROMIUM_SAME_ORIGIN_CSS_RESPONSE_ROOT_RESIZE'
                   assert 1.95 <= resized['rootFontRatio'] <= 2.05
