@@ -201,6 +201,7 @@ jobs:
           assert result['releaseGo'] is False and result['stage45Go'] is False
           print('E6_W5J_GENUINE_CANDIDATES_18_SCREENSHOTS_FOR_HUMAN_REVIEW_NO_RELEASE')
           PY
+          node w6_screenshot_integrity_gate.mjs
           echo 'E6_W5J_THREE_GENUINE_CANDIDATES_FOR_HUMAN_REVIEW_ONLY_NOT_PRODUCTION'
       - name: Seven-day sanitized summary even on rejection; never raw model source
         if: always()

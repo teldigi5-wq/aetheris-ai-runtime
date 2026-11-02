@@ -15,6 +15,7 @@ import {fakeCssSourceProvider} from './w5c_test_doubles.mjs';
 import {MODEL} from './w5b_simulated_provider.mjs';
 import {summarizeObservedTrial} from './w5j_cpu_trial_gate.mjs';
 import {inspectTrial} from './w5d_trial_integrity.mjs';
+import {verifyScreenshotEvidence} from './w6_screenshot_integrity_gate.mjs';
 const here=dirname(fileURLToPath(import.meta.url));
 const trial=join(here,'target/e6-w5c-local-css-research');
 const evidence=join(here,'target/e6-w5d-local-owner-browser-evidence');
@@ -145,6 +146,21 @@ async function main(){
      assert.equal(sha(await readFile(join(evidence,file))),digest);
    }
  }
+ const screenshotReceipt=await verifyScreenshotEvidence(evidence,batch);
+ assert.equal(screenshotReceipt.verifiedScreenshots,18);
+ assert.equal(screenshotReceipt.releaseGo,false);
+ // A changed PNG with unchanged recorded SHA must fail independently.
+ const screenshotToTamper=join(evidence,review.profiles[0].screenshot);
+ const originalScreenshot=await readFile(screenshotToTamper);
+ try{
+   await writeFile(screenshotToTamper,Buffer.concat([
+     originalScreenshot,Buffer.from('tamper fixture')]));
+   await assert.rejects(verifyScreenshotEvidence(evidence,batch),
+     /SCREENSHOT_SHA256_MISMATCH/);
+ }finally{
+   await writeFile(screenshotToTamper,originalScreenshot);
+ }
+ assert.equal((await verifyScreenshotEvidence(evidence,batch)).verifiedScreenshots,18);
  // Verify that the source auditor is not fooled by changing HTML after its
  // self-reported manifest was emitted. This is a disposable MOCK fixture only.
  const victim=join(trial,batch.briefs[0].projectSlug,'approach/index.html');
@@ -152,7 +168,8 @@ async function main(){
  await assert.rejects(inspectTrial(trial,batch),/GENERATED_FILE_HASH_MISMATCH/);
  console.log('E6_W5J_MOCK_ONLY_3_SITES_18_ROUTE_SCREENSHOTS_HASHED '+JSON.stringify({
    syntheticModelResponses:true,realProviderCalled:false,views:9,
-   screenshotFiles:18,textResize200PercentRouteScans:18,
+   screenshotFiles:18,screenshotIntegrityVerified:true,
+   screenshotTamperingRejected:true,textResize200PercentRouteScans:18,
    sourceTamperingRejected:true,
    actualWeightsAttested:false,humanVisualApproved:false,releaseGo:false
  }));

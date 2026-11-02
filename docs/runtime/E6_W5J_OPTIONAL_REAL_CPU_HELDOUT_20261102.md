@@ -243,3 +243,23 @@ and publishes only bounded width/route/structural-selector geometry on
 failure, never model-generated text or raw HTML. This work remains a
 browser-laboratory proxy; actual browser UI zoom and human accessibility
 acceptance remain pending.
+
+## W6: independent saved screenshot integrity gate (no model required)
+
+The optional owner-gated W5-J experiment now runs a second, **read-only**
+screenshot evidence verifier before it can upload checked candidate
+artifacts. The verifier reads the W5-D browser evidence, requires exactly
+3 held-out case identities × 3 fixed viewports × both website routes,
+and verifies the 18 saved PNG files against their exact recorded
+SHA-256 hashes. It requires matching screenshot filenames, PNG headers
+and viewport widths, rejects duplicate/missing/extra files, symlinks,
+unsupported approval claims, failed accessibility/reflow checks, and
+unexpected evidence structure.
+
+The normal CI mock pipeline exercises the real verifier on Chromium
+screenshots, deliberately changes a PNG, confirms hash rejection, then
+restores it. No raw candidate text is logged by the verifier. File
+integrity is **not** authenticity or originality: a source-controlled
+digest is not a cryptographic signature of human review or model
+execution. Browser UI zoom, assistive technology, human visual approval
+and Stage 45 remain independently blocked.

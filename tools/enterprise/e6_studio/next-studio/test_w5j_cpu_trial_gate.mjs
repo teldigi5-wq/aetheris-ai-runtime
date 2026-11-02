@@ -7,6 +7,7 @@ import {join,dirname} from 'node:path';
 import {authorizeLabelEvent,summarizeObservedTrial,summarizeMissingCaseReport,summarizeUnverifiableCaseReport,summarizeWithSavedSourceAudit} from './w5j_cpu_trial_gate.mjs';
 import {evaluateCodeHeldout} from './w5c_local_code_trial.mjs';
 import {fakeCssSourceProvider} from './w5c_test_doubles.mjs';
+import {verifyScreenshotEvidence} from './w6_screenshot_integrity_gate.mjs';
 import {MODEL} from './w5b_simulated_provider.mjs';
 import {requestLocalOllama,buildPrompt} from './w5a_local_ollama.mjs';
 import {briefs,proposalFor} from './w5a_test_doubles.mjs';
@@ -755,4 +756,39 @@ test('W6 200-percent reflow gate keeps fail-closed geometry diagnostics and resp
  assert(runner.includes('structuralSelectors:resized.overflowSelectors'));
  assert(runner.includes("refuse('TEXT_RESIZE_HORIZONTAL_OVERFLOW')"));
  assert(!runner.includes('document.documentElement.style.overflow'));
+});
+
+test('W6 screenshot verifier rejects missing review files and malformed matrix without invoking a model',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'aetheris-w6-absence-'));
+ try{
+   await assert.rejects(verifyScreenshotEvidence(dir,batch),
+     /MISSING_OR_UNSAFE_EVIDENCE_FILE/);
+   await writeFile(join(dir,'review-report.json'),JSON.stringify({
+     kind:'E6_W5D_LOCAL_BROWSER_REVIEW_V1',profiles:[],
+     fullPageScreenshotCount:18
+   }));
+   await assert.rejects(verifyScreenshotEvidence(dir,batch),
+     /UNVERIFIED_BROWSER_REVIEW/);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('W6 rejects fabricated held-out identities before accessing candidate evidence',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'aetheris-w6-identities-'));
+ try{
+   for(const bad of [
+     {briefs:[{projectSlug:'a'}]},
+     {briefs:[{projectSlug:'a'},{projectSlug:'a'},{projectSlug:'c'}]},
+     {briefs:[{projectSlug:'../bad'},{projectSlug:'b'},{projectSlug:'c'}]}
+   ])await assert.rejects(verifyScreenshotEvidence(dir,bad),
+     /INVALID_FIXED_REVIEW_CONTEXT/);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('W6 screenshot archive verification is required by owner CPU workflow',async()=>{
+ const workflow=await readFile(new URL('../../../../.github/workflows/runtime-e6-w5j-optin-heldout-cpu.yml',import.meta.url),'utf8');
+ const browser=workflow.indexOf('node w5d_owner_browser_review.mjs');
+ const gate=workflow.indexOf('node w6_screenshot_integrity_gate.mjs');
+ const upload=workflow.indexOf('- name: Seven-day checked candidate');
+ assert(browser>0&&gate>browser&&upload>gate);
+ const mock=await readFile(new URL('./w5j_mock_full_pipeline_browser.mjs',import.meta.url),'utf8');
+ assert(mock.includes('verifyScreenshotEvidence(evidence,batch)'));
+ assert(mock.includes('screenshotTamperingRejected:true'));
 });
