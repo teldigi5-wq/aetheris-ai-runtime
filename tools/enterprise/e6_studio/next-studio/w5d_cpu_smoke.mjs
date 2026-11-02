@@ -53,8 +53,13 @@ export async function runCpuSmoke({transport=fetch}={}){
      actual.eval_count<=0)fail('NO_COMPLETE_REAL_PROVIDER_GENERATION');
   let parsed;
   try{parsed=JSON.parse(actual.response);}catch{fail('MODEL_OUTPUT_NOT_VALID_JSON');}
-  if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))
-    fail('MODEL_OUTPUT_NOT_JSON_OBJECT');
+  if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)||
+     Object.keys(parsed).length!==1||!Object.hasOwn(parsed,'research_status')||
+     typeof parsed.research_status!=='string'||
+     parsed.research_status.trim().length<8||
+     parsed.research_status.length>240||
+     /[\\x00-\\x1f\\x7f]|https?:\\/\\/|www\\.|<[^>]*>|javascript:/i.test(parsed.research_status))
+    fail('MODEL_OUTPUT_UNSAFE_OR_WRONG_SCHEMA');
   return {kind:'E6_W5D_EPHEMERAL_CPU_INFERENCE_SMOKE_V1',
     modelReportedName:model,ollamaReportedVersion:version.version,
     ollamaReportedModelDigest:match.digest,
