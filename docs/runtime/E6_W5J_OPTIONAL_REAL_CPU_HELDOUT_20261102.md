@@ -324,3 +324,21 @@ realistically shaped 40-character fixture and still performs no model
 inference. This fixes compatibility, not permission: explicit owner
 approval is still absent; do not apply the label or start model
 downloads based on a generic continuation request.
+
+## W5-J exact GitHub event: subprocess authorization preflight
+
+Normal research CI now exercises the actual `w5j_cpu_trial_cli.mjs
+authorize` entrypoint in a **disposable, synthetic `RUNNER_TEMP`
+event directory** matching the real GitHub Actions Linux event-path
+policy. The test uses a 40-hex fake pull-request head, verifies a
+successful sanitized authorization response, and independently refuses
+incorrect actors, head identities, event types, branch bases, labels,
+non-draft state, disabled opt-in, paths outside the runner temporary
+directory and symlinked event files. It also verifies the authorization
+operation created no model trial result.
+
+This integration test runs in the pinned model-free CI job; outside a
+compatible GitHub runner it is explicitly skipped. It does not apply a
+real approval label, download a model, prove cloud-run feasibility,
+authorize billable compute, merge or deploy. The owner-controlled
+launch remains a separate explicit decision.

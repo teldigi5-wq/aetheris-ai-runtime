@@ -854,3 +854,64 @@ test('GitHub SHA-1 source identity is exactly 40 hex chars, never a 64-char file
  assert.equal(expected.sourceCommitSha,SHA);
  assert.match(expected.reportRawFileSha256,/^[a-f0-9]{64}$/);
 });
+
+test('real W5-J authorize CLI accepts exact GitHub runner event and refuses forged actor, label, SHA or symlink without executing model',{
+ skip:!process.env.RUNNER_TEMP?.startsWith('/home/runner/work/_temp/')
+},async()=>{
+ // Only run this filesystem test on the matching GitHub Linux runner.
+ // It never applies a label, calls Ollama, or invokes the real CPU workflow.
+ const dir=await isolatedCli();
+ const payloadDir=await mkdtemp(join(process.env.RUNNER_TEMP,'e6-w5j-offline-event-'));
+ const payloadPath=join(payloadDir,'approved-labeled-event.json');
+ const script=join(dir,'w5j_cpu_trial_cli.mjs');
+ const env={
+   ...offlineCliEnv(),
+   GITHUB_EVENT_PATH:payloadPath,
+   GITHUB_ACTOR:OWNER,
+   E6_W5J_APPROVED_PR_NUMBER:String(PR),
+   E6_W5C_ALLOW_LOCAL_INFERENCE:'NO',
+   GITHUB_TOKEN:''
+ };
+ const invoke=(options=env)=>spawnSync(process.execPath,[script,'authorize'],{
+   env:options,encoding:'utf8',timeout:10000
+ });
+ try{
+   await writeFile(payloadPath,JSON.stringify(event()));
+   const good=invoke();
+   assert.equal(good.status,0,good.stderr);
+   assert.match(good.stdout,/E6_W5J_CLOUD_CPU_OWNER_APPROVAL_VERIFIED/);
+   assert(good.stdout.includes(SHA));
+   assert(!good.stdout.includes('model response'));
+   await assert.rejects(readFile(join(dir,'target/e6-w5c-local-css-research/source-code-trial-report.json')));
+   for(const patch of [
+     {GITHUB_ACTOR:'not-owner'},
+     {E6_W5J_CHECKED_OUT_PR_HEAD:'b'.repeat(64)},
+     {E6_W5J_ENABLE_OWNER_LABELED_CPU_TRIAL:'NO'},
+     {GITHUB_EVENT_PATH:join(dir,'untrusted-event.json')},
+     {GITHUB_EVENT_NAME:'workflow_dispatch'}
+   ]){
+     const invalid=invoke({...env,...patch});
+     assert.notEqual(invalid.status,0,'bad environment wrongly authorized');
+     assert(!invalid.stdout.includes('E6_W5J_CLOUD_CPU_OWNER_APPROVAL_VERIFIED'));
+   }
+   for(const change of [
+     e=>{e.label.name='e6-w5d-cpu-smoke-approved';},
+     e=>{e.pull_request.base.ref='main';},
+     e=>{e.pull_request.head.sha='f'.repeat(64);},
+     e=>{e.pull_request.user.login='not-owner';},
+     e=>{e.pull_request.draft=false;}
+   ]){
+     const bad=event();change(bad);
+     await writeFile(payloadPath,JSON.stringify(bad));
+     const result=invoke();
+     assert.notEqual(result.status,0,'forged event wrongly authorized');
+   }
+   await rm(payloadPath);
+   await symlink(join(dir,'w5j_cpu_trial_cli.mjs'),payloadPath);
+   const linkAttempt=invoke();
+   assert.notEqual(linkAttempt.status,0,'symlinked event wrongly authorized');
+ }finally{
+   await rm(dir,{recursive:true,force:true});
+   await rm(payloadDir,{recursive:true,force:true});
+ }
+});
