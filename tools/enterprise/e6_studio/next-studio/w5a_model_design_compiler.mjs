@@ -55,6 +55,9 @@ export function validateModelProposal(b,d){
     contrast(d.art.paper,d.art.ink)<4.5||
     contrast(d.art.paper,d.art.accent)<4.5||
     contrast(d.art.surface,d.art.ink)<4.5||
+    // .eyebrow uses accent on both the page and alternate section surface.
+    // Accepting only accent-on-paper would allow unreadable section labels.
+    contrast(d.art.surface,d.art.accent)<4.5||
     !arr(d.pages,2,2))fail('MODEL_SCHEMA_OR_CONTRAST_REJECTED');
   const byPath=new Map();
   for(const p of d.pages){
