@@ -99,3 +99,23 @@ hashes, browser acceptance, non-release authority, and Stage 45 NO-GO remain
 unchanged. A runtime probe failing before the three-brief loop still produces
 no three-case report; workflow-level preflight/installation diagnostics remain
 a separate future acceptance concern.
+
+## W5-J missing-case-report receipt — model-free infrastructure diagnostic
+
+If the future owner-authorized W5-C trial exits without a nonempty
+`source-code-trial-report.json`, the optional CPU workflow writes a short,
+sanitized `missing-case-report.json` in the existing W5-J research artifact
+directory, then **fails the workflow**. This is a report-existence observation
+only: it does not infer whether model requests started, whether a local model
+was available, or whether any of the three held-out cases were attempted.
+`threeHeldoutCasesAttempted`, `modelRequestsObserved`, `accepted`, and
+`rejected` are deliberately `null`, not fabricated zeros or successes.
+
+The fixed-path CLI refuses to create this fallback when a nonempty W5-C
+report exists; normal signed-source summary validation continues to govern
+that case. Missing or malformed report evidence never authorizes screenshots,
+model quality acceptance, deployment or Stage 45 GO. No new model trigger,
+provider, approval label, credentials, inference step or paid compute is added.
+Workflow failures before the trial stage (such as binary download or model
+installation) remain visible through GitHub Actions step failures, not
+misrepresented as generated-model case receipts.
