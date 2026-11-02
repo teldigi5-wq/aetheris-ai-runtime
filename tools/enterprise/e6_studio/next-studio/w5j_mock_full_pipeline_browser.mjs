@@ -88,12 +88,25 @@ async function main(){
  assert.equal(review.fullPageScreenshotCount,18);
  assert.equal(review.allNineSoftwareBrowserReviewsPassed,true);
  assert.equal(review.bothRoutesCapturedForAllNineProfiles,true);
+ assert.equal(review.bothRoutesKeyboardFocusVerified,true);
  assert.equal(review.profiles.length,9);
  assert.equal(review.visualQualityHumanApproved,false);
  assert.equal(review.releaseGo,false);
  assert.equal(review.stage45Go,false);
  for(const v of review.profiles){
    assert.equal(v.approachNavigationPassed,true);
+   assert.equal(v.bothRoutesKeyboardFocusVerified,true);
+   for(const k of [v.homeKeyboard,v.approachKeyboard]){
+     assert.equal(k.firstTabIsSkip,true);
+     assert.equal(k.skipVisible,true);
+     assert.equal(k.focusOutlineVisible,true);
+     assert.equal(k.hashReached,true);
+     assert.equal(k.mainFocused,true);
+     assert.equal(k.mainTabIndexMinusOne,true);
+     assert.equal(k.focusReleased,true);
+     assert.equal(k.authorJavascriptEnabled,false);
+     assert.equal(k.wcagCertified,false);
+   }
    assert.equal(v.horizontalOverflowPx<=2,true);
    assert.equal(v.approachHorizontalOverflowPx<=2,true);
    assert.equal(v.externalRequestCount,0);
