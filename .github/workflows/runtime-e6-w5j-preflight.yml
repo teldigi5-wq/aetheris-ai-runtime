@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/runtime-e6-w5j-preflight.yml'
       - 'tools/enterprise/e6_studio/next-studio/w5j_*'
+      - 'tools/enterprise/e6_studio/next-studio/w5d_owner_browser_review.mjs'
       - 'tools/enterprise/e6_studio/next-studio/w5a_model_design_compiler.mjs'
       - 'tools/enterprise/e6_studio/next-studio/w5a_local_ollama.mjs'
       - 'tools/enterprise/e6_studio/next-studio/w5c_local_code_trial.mjs'
@@ -73,6 +74,7 @@ jobs:
           node --check w5j_cpu_trial_gate.mjs
           node --check w5j_cpu_trial_cli.mjs
           node --check test_w5j_cpu_trial_gate.mjs
+          node --check w5j_mock_full_pipeline_browser.mjs
           test -s w5b_heldout_briefs.json
           test -s w5a_base.css
           test -s w5a_fictional_owner_brief.json
@@ -127,6 +129,14 @@ jobs:
               assert data["releaseGo"] is False
           print("E6_W5A_SIMULATED_TEST_DOUBLE_NO_REAL_MODEL_CLAIM_PASS")
           PY
+      - name: Independent MOCK end-to-end source integrity plus 18-route Chromium screenshots
+        env:
+          E6_W5J_MOCK_INTEGRATION: TEST_DOUBLE_ONLY
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          node w5j_mock_full_pipeline_browser.mjs
+          echo E6_W5J_FULL_PIPELINE_TEST_DOUBLE_ONLY_NO_OLLAMA_CALLED
       - name: Short-lived research screenshots, not evidence of actual model inference
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
