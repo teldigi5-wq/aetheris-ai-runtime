@@ -65,7 +65,7 @@ try{
           const paintedBackground=element=>{
             for(let node=element;node;node=node.parentElement){
               const color=getComputedStyle(node).backgroundColor;
-              if(/^rgb\\(/.test(color))return color;
+              if(color.startsWith('rgb('))return color;
               if(color==='rgba(0, 0, 0, 0)')continue;
               throw Error('Unsupported translucent or malformed background: '+color);
             }
