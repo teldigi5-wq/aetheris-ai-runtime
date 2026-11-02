@@ -156,7 +156,7 @@ test('post-trial compact design prompt keeps source ownership, all strict fields
  }
 });
 test('compactness prompt does not alter strict compiled design contract or repair attempts',async()=>{
- const b=batch.briefs[0], goodDesign=syntheticDesign(b);
+ const b=batch.briefs[0], goodDesign=syntheticDesign(b,0);
  const fixed=structuredClone(goodDesign);
  fixed.art.accent=fixed.art.surface;
  assert.throws(()=>validateModelProposal(b,fixed),/MODEL_SCHEMA_OR_CONTRAST_REJECTED/);
