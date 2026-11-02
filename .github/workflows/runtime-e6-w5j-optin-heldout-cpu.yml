@@ -54,6 +54,34 @@ jobs:
           node w5j_cpu_trial_cli.mjs authorize
           node --test test_w5j_cpu_trial_gate.mjs
           echo 'E6_W5J_EXPLICIT_OWNER_CLOUD_CPU_TRIAL_ONLY_NO_GPU_NO_DEPLOY'
+      - name: Require successful model-free exact-head research CI before cloud downloads
+        env:
+          W5J_APPROVED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$W5J_APPROVED_HEAD"
+          curl --fail --silent --show-error --location --retry 2 \
+            --connect-timeout 12 --max-time 35 \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'User-Agent: aetheris-w5j-exact-head-gate' \
+            "https://api.github.com/repos/teldigi5-wq/aetheris-ai-runtime/commits/$W5J_APPROVED_HEAD/check-runs?per_page=100" \
+            --output "$RUNNER_TEMP/w5j-preflight-checks.json"
+          python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          sha=os.environ['W5J_APPROVED_HEAD']
+          assert re.fullmatch(r'[a-f0-9]{40}',sha)
+          checks=json.loads((Path(os.environ['RUNNER_TEMP'])/'w5j-preflight-checks.json').read_text())
+          assert isinstance(checks,dict) and checks.get('total_count',101)<=100
+          matches=[c for c in checks.get('check_runs',[]) if
+                   c.get('name')=='bounded-model-proposal-and-simulated-browser-only']
+          assert len(matches)==1,'exact-head model-free preflight absent or ambiguous'
+          c=matches[0]
+          assert c.get('head_sha')==sha
+          assert c.get('status')=='completed' and c.get('conclusion')=='success'
+          assert c.get('app',{}).get('slug')=='github-actions'
+          print('E6_W5J_PINNED_HEAD_NORMAL_CI_SUCCESS_REQUIRED_BEFORE_DOWNLOAD')
+          PY
       - name: Install locked build dependencies and test-only Chromium on isolated runner
         run: |
           set -euo pipefail
@@ -85,6 +113,24 @@ jobs:
           done
           curl --fail --silent --max-time 5 'http://127.0.0.1:11434/api/version' > /dev/null
           "$RUNNER_TEMP/ollama-bin/bin/ollama" pull "$MODEL_TAG"
+          # Official Ollama tag ID prefix catches accidental manifest drift.
+          # This is NOT independently verified execution of immutable model weights.
+          curl --fail --silent --show-error --max-time 15             'http://127.0.0.1:11434/api/tags'             --output "$RUNNER_TEMP/w5j-installed-model-tags.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          data=json.loads((Path(os.environ['RUNNER_TEMP'])/'w5j-installed-model-tags.json').read_text())
+          entries=[v for v in data.get('models',[]) if isinstance(v,dict) and
+                   (v.get('name')=='qwen2.5:0.5b' or v.get('model')=='qwen2.5:0.5b')]
+          assert len(entries)==1,'expected model was not installed unambiguously'
+          digest=entries[0].get('digest','')
+          assert isinstance(digest,str)
+          model_id=digest.removeprefix('sha256:').lower()
+          assert len(model_id)==64 and model_id.startswith('a8b0c5157701'),(
+            'installed tag differs from documented research model'
+          )
+          print('E6_W5J_VENDOR_TAG_PREFIX_DRIFT_CHECK_NOT_WEIGHTS_ATTESTATION')
+          PY
           echo 'E6_W5J_ONE_REAL_MODEL_DOWNLOADED_EPHEMERAL_CPU_RESEARCH_ONLY'
       - name: Attempt genuine model authored design and restricted CSS for all 3 fixed briefs
         run: |
