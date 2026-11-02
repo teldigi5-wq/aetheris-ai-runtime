@@ -49,21 +49,27 @@ const repairText=(original,code)=>{
   if(prompt.length>8000)fail('REPAIR_PROMPT_BUDGET');
   return prompt;
 };
-async function tryValidated({basePrompt,model,transport,validator,allowed}){
+async function tryValidated({basePrompt,model,transport,validator,allowed,phase}){
   if(typeof basePrompt!=='string'||!basePrompt||
-     typeof validator!=='function'||!(allowed instanceof Set))
+     typeof validator!=='function'||!(allowed instanceof Set)||
+     !['design','css'].includes(phase))
     fail('INVALID_ATTEMPT_CONTRACT');
   const failureCodes=[];
   for(let attempt=1;attempt<=2;attempt++){
     // Provider-level errors (HTTP, malformed JSON, size/timeout, wrong model)
     // are NEVER retried. Only deterministic validator failures qualify.
     const prompt=attempt===1?basePrompt:repairText(basePrompt,failureCodes[0]);
-    const response=await requestLocalOllama(prompt,model,{transport});
+    const response=await requestLocalOllama(prompt,model,{transport,phase});
     try{
       const accepted=validator(response.design);
       return {value:accepted,rawReplySha256:response.rawReplySha256,
         attempts:attempt,repairAttempted:attempt===2,
         attemptedPromptSha256:sha(prompt),initialPromptSha256:sha(basePrompt),
+        providerReportedStopReason:response.providerReportedStopReason,
+        providerStopReasonVerified:response.providerStopReasonVerified,
+        providerReportedOutputTokens:response.providerReportedOutputTokens,
+        inferencePhase:response.inferencePhase,
+        maximumOutputTokens:response.maximumOutputTokens,
         firstRejectedValidationCode:failureCodes[0]||null,
         retryBudgetExhausted:false};
     }catch(e){
@@ -77,7 +83,7 @@ async function tryValidated({basePrompt,model,transport,validator,allowed}){
 }
 export async function requestValidatedDesign(brief,model,{transport=fetch}={}){
   const basePrompt=buildPrompt(brief);
-  return tryValidated({basePrompt,model,transport,allowed:designErrors,
+  return tryValidated({basePrompt,model,transport,phase:'design',allowed:designErrors,
     validator:x=>{
       validateModelProposal(brief,x);
       return x;
@@ -87,7 +93,7 @@ export async function requestValidatedCss(brief,proposal,model,{transport=fetch}
   // Already validated design required; caller must not pass unvalidated data.
   validateModelProposal(brief,proposal);
   const basePrompt=buildCssCodePrompt(brief,proposal);
-  return tryValidated({basePrompt,model,transport,allowed:cssErrors,
+  return tryValidated({basePrompt,model,transport,phase:'css',allowed:cssErrors,
     validator:x=>{
       const source=parseCodeProposal(x,brief.projectSlug);
       compileRestrictedCss(source);
