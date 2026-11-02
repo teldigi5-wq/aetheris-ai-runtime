@@ -142,7 +142,14 @@ async function auditCandidateRoutes(origin,width,height){
         })(),
         navigationLinksVisible:[...document.querySelectorAll('.nav a')]
           .length>=2&&[...document.querySelectorAll('.nav a')]
-          .every(el=>el.getClientRects().length>0)
+          .every(el=>el.getClientRects().length>0),
+        overflowSelectors:(()=>{
+          const names=['.brand','.nav','.header','.hero__type',
+            '.hero__figure','h1','h2','.section__content',
+            '.section__text','.footer'];
+          return names.filter(name=>[...document.querySelectorAll(name)]
+            .some(el=>el.getBoundingClientRect().right>innerWidth+2));
+        })()
         }));
       }finally{
         await page.unroute(cssUrl);
@@ -152,8 +159,15 @@ async function auditCandidateRoutes(origin,width,height){
       if(!Number.isFinite(rootRatio)||!Number.isFinite(bodyRatio)||
          Math.abs(rootRatio-2)>.05||Math.abs(bodyRatio-2)>.05)
         refuse('TEXT_RESIZE_SCALE_FAILED');
-      if(!Number.isFinite(resized.overflow)||resized.overflow>2)
+      if(!Number.isFinite(resized.overflow)||resized.overflow>2){
+        // Bounded geometry only. Do not log model text or untrusted HTML.
+        console.error('E6_W5D_TEXT_RESIZE_OVERFLOW_METRIC '+JSON.stringify({
+          route:field,width,height,
+          overflowPx:Number.isFinite(resized.overflow)?Math.ceil(resized.overflow):null,
+          structuralSelectors:resized.overflowSelectors
+        }));
         refuse('TEXT_RESIZE_HORIZONTAL_OVERFLOW');
+      }
       if(!resized.mainVisible||!resized.headingVisible||
          !resized.navigationLinksVisible)
         refuse('TEXT_RESIZE_CONTENT_MISSING');

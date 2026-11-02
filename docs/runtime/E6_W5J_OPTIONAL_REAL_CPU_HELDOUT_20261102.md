@@ -231,3 +231,15 @@ root-font rule only to the temporary test response, not to saved files
 or production markup. It validates a bounded CSS response, forbids
 redirects, and removes the test interception after the measurement.
 No CSP weakening, remote resource, or owner-device claim is allowed.
+
+### 200% text resize overflow regression
+
+The first real-browser text-resize exercise detected horizontal overflow
+despite the normal-width and CSS-zoom proxy checks passing. The fixed
+site stylesheet now adds bounded, breakable flex/grid children and
+`overflow-wrap:anywhere` for long fictional names, navigation, section
+text and footer items. The reviewer **retains** the <=2 px overflow gate
+and publishes only bounded width/route/structural-selector geometry on
+failure, never model-generated text or raw HTML. This work remains a
+browser-laboratory proxy; actual browser UI zoom and human accessibility
+acceptance remain pending.

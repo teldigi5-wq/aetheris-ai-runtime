@@ -743,3 +743,16 @@ test('W5-J browser quality runner must measure real Chromium root text resize on
  assert(workflow.includes("resized['ownerDeviceVerified'] is False"));
  assert(workflow.includes("resized['independentWcagCertified'] is False"));
 });
+
+test('W6 200-percent reflow gate keeps fail-closed geometry diagnostics and responsive source policy',async()=>{
+ const css=await readFile(new URL('./w5a_base.css',import.meta.url),'utf8');
+ const runner=await readFile(new URL('./w5d_owner_browser_review.mjs',import.meta.url),'utf8');
+ assert(css.includes('.brand{font-weight:800;letter-spacing:-.04em;text-decoration:none;min-width:0;max-width:100%;overflow-wrap:anywhere}'));
+ assert(css.includes('.nav a{text-underline-offset:.35em;overflow-wrap:anywhere}'));
+ assert(css.includes('grid-template-columns:minmax(0,1fr)'));
+ assert(css.includes('.footer>*{min-width:0;max-width:100%;overflow-wrap:anywhere}'));
+ assert(runner.includes('E6_W5D_TEXT_RESIZE_OVERFLOW_METRIC'));
+ assert(runner.includes('structuralSelectors:resized.overflowSelectors'));
+ assert(runner.includes("refuse('TEXT_RESIZE_HORIZONTAL_OVERFLOW')"));
+ assert(!runner.includes('document.documentElement.style.overflow'));
+});
