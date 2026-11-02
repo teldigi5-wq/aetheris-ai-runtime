@@ -79,17 +79,32 @@ export async function requestLocalOllama(prompt,model,{transport=fetch,phase='de
     keep_alive:'0'};
   // The URL is fixed; never take user/model-provided hosts, ports or paths.
   // The injected transport exists solely for offline contract tests.
-  const response=await transport('http://127.0.0.1:11434/api/generate',{
-    method:'POST',headers:{'Content-Type':'application/json'},
-    redirect:'error',signal:AbortSignal.timeout(180000),body:JSON.stringify(request)
-  });
-  if(!response||response.status!==200||!response.body)fail('MODEL_UNAVAILABLE_OR_HTTP_ERROR');
-  const pieces=[];let total=0;
-  for await(const chunk of response.body){
-    const bytes=Buffer.from(chunk);total+=bytes.length;
-    if(total>48_000){await response.body.cancel?.().catch(()=>{});fail('MODEL_RESPONSE_BUDGET');}
-    pieces.push(bytes);
+  let response;
+  try {
+    response=await transport('http://127.0.0.1:11434/api/generate',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      redirect:'error',signal:AbortSignal.timeout(180000),body:JSON.stringify(request)
+    });
+  }catch(error){
+    // Transport exceptions are untrusted, even when they resemble our internal
+    // validator error codes. Never forward their messages or stack traces.
+    if(error?.name==='AbortError'||error?.name==='TimeoutError')
+      fail('PROVIDER_TIMEOUT_OR_ABORT');
+    fail('PROVIDER_TRANSPORT_FAILURE');
   }
+  if(!response||response.status!==200||!response.body)fail('MODEL_UNAVAILABLE_OR_HTTP_ERROR');
+  const pieces=[];let total=0,overBudget=false;
+  try{
+    for await(const chunk of response.body){
+      const bytes=Buffer.from(chunk);total+=bytes.length;
+      if(total>48_000){overBudget=true;break;}
+      pieces.push(bytes);
+    }
+  }catch{
+    // Do not trust stream-thrown messages that can impersonate policy errors.
+    fail('PROVIDER_STREAM_INTERRUPTED');
+  }
+  if(overBudget)fail('MODEL_RESPONSE_BUDGET');
   let envelope;
   try{envelope=JSON.parse(Buffer.concat(pieces).toString('utf8'));}
   catch{fail('INVALID_PROVIDER_JSON');}
