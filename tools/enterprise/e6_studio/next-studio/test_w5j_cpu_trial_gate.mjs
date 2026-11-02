@@ -789,7 +789,7 @@ test('W6 screenshot archive verification is required by owner CPU workflow',asyn
  const upload=workflow.indexOf('- name: Seven-day checked candidate');
  assert(browser>0&&gate>browser&&upload>gate);
  const mock=await readFile(new URL('./w5j_mock_full_pipeline_browser.mjs',import.meta.url),'utf8');
- assert(mock.includes('verifyScreenshotEvidence(evidence,batch)'));
+ assert(mock.includes('verifyScreenshotEvidence(evidence,batch,{trialRoot:trial})'));
  assert(mock.includes('screenshotTamperingRejected:true'));
 });
 
