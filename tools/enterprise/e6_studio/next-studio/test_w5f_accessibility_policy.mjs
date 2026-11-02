@@ -13,7 +13,7 @@ const page=(viewport='mobile',path='/')=>({
 });
 const keyboard=(viewport='mobile',path='/')=>({
  viewport,path,skipLinkFirstFocusable:true,skipLinkVisiblyRevealed:true,
- skipLinkEnteredMainContent:true,focusRingVisible:true,
+ skipLinkEnteredMainContent:true,skipLinkActualFocusOnMain:true,focusRingVisible:true,
  navigateByKeyboardSucceeded:true,navigationTextIsNonempty:true,
  keyboardTrapObserved:false,screenReaderVerified:false
 });
@@ -37,7 +37,7 @@ test('axe policy accepts only structurally complete zero-violation measured scan
 test('keyboard policy rejects skip-link regressions, invisible focus, failed keyboard navigation and fake screen reader',()=>{
  for(const mutate of [
  x=>{x.skipLinkFirstFocusable=false;},x=>{x.skipLinkVisiblyRevealed=false;},
- x=>{x.skipLinkEnteredMainContent=false;},x=>{x.focusRingVisible=false;},
+ x=>{x.skipLinkEnteredMainContent=false;},x=>{x.skipLinkActualFocusOnMain=false;},x=>{x.focusRingVisible=false;},
  x=>{x.navigateByKeyboardSucceeded=false;},x=>{x.keyboardTrapObserved=true;},
  x=>{x.screenReaderVerified=true;}
  ]){const v=keyboard();mutate(v);assert.throws(()=>checkKeyboardJourney(v),/KEYBOARD_A11Y_JOURNEY_BLOCKED/);}

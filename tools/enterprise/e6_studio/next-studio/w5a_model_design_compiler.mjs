@@ -109,7 +109,7 @@ export function compileModelProposedSite(brief,proposal,baseCss){
       '<a class="skip" href="#main">Skip to content</a>'+
       '<header class="header"><a class="brand" href="/">'+esc(proposal.siteName)+'</a>'+
       '<nav class="nav" aria-label="Primary">'+nav+'</nav></header>'+
-      '<main id="main" class="density--'+art.density+' motif--'+art.motif+'">'+
+      '<main id="main" tabindex="-1" class="density--'+art.density+' motif--'+art.motif+'">'+
       '<section class="hero hero--'+art.composition+'" aria-labelledby="page-title">'+
       '<div class="hero__type"><p class="eyebrow">'+esc(proposal.tagline)+'</p>'+
       '<h1 id="page-title">'+esc(page.heading)+'</h1><p class="lede">'+esc(page.lede)+'</p></div>'+

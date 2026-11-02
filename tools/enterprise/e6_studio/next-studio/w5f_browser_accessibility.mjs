@@ -54,7 +54,13 @@ async function keyboardAudit(page,viewport,path,origin){
   });
   const linkNames=await page.locator('nav a').allTextContents();
   await page.keyboard.press('Enter');
+  // Hash changes and scrolling alone are not keyboard-accessible focus.
+  // Browser must focus the actual <main id="main" tabindex="-1"> node.
   const entersMain=new URL(page.url()).hash==='#main';
+  const actualFocus=await page.waitForFunction(()=>
+    document.activeElement===document.querySelector('main#main')&&
+    document.activeElement?.getAttribute('tabindex')==='-1',null,
+    {timeout:1800}).then(()=>true,()=>false);
   await page.goto(origin+path,{waitUntil:'load'});
   const dest=path==='/'?'/approach/':'/';
   let found=false,passed=false;
@@ -80,6 +86,7 @@ async function keyboardAudit(page,viewport,path,origin){
   return {viewport,path,skipLinkFirstFocusable:skip.isSkip,
     skipLinkVisiblyRevealed:skip.visible,
     skipLinkEnteredMainContent:entersMain,
+    skipLinkActualFocusOnMain:actualFocus,
     focusRingVisible:skip.hasOutline,
     navigateByKeyboardSucceeded:found&&passed,
     navigationTextIsNonempty:linkNames.length===2&&
@@ -129,7 +136,8 @@ async function checkOne(browser,origin,brief,viewport,width,height,path,rows){
     const hash=proofSha256(sha(screenshot));
     const keyboard=await keyboardAudit(page,viewport,path,origin);
     if(!keyboard.skipLinkFirstFocusable||!keyboard.skipLinkVisiblyRevealed||
-       !keyboard.skipLinkEnteredMainContent||!keyboard.focusRingVisible||
+       !keyboard.skipLinkEnteredMainContent||!keyboard.skipLinkActualFocusOnMain||
+       !keyboard.focusRingVisible||
        !keyboard.navigateByKeyboardSucceeded||!keyboard.navigationTextIsNonempty||
        keyboard.keyboardTrapObserved)
       console.error('E6_W5F_KEYBOARD_DIAGNOSTIC '+JSON.stringify({slug:brief.projectSlug,keyboard}));

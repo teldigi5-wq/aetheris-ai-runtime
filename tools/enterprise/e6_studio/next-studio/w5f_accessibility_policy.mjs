@@ -44,6 +44,8 @@ export function checkKeyboardJourney(x){
     x.skipLinkFirstFocusable!==true||
     x.skipLinkVisiblyRevealed!==true||
     x.skipLinkEnteredMainContent!==true||
+    // A fragment URL or scroll alone is not evidence of keyboard focus.
+    x.skipLinkActualFocusOnMain!==true||
     x.focusRingVisible!==true||
     x.navigateByKeyboardSucceeded!==true||
     x.navigationTextIsNonempty!==true||
