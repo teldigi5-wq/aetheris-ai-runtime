@@ -560,3 +560,23 @@ enforces a fixed temp path. There is no network request or
 model inference. A green test verifies the CLI and synthetic
 snapshot handling, **not** that the future authenticated GitHub
 API recheck has executed in a real approved CPU run.
+
+### W5-L deterministic paired-method rehearsal (offline only)
+
+The separate `w5l_offline_paired_rehearsal.mjs` exercises the six fixed
+brief/method cells against human-authored synthetic envelopes. Compact design
+responses use the existing W5-A provider-envelope and complete-design
+validators; three-stage responses use the existing W5-K offline staged
+assembly and unchanged final W5-A validator. Fixed method order, brief
+digests and call ceilings still come from W5-L V2.
+
+The receipt explicitly identifies synthetic validation/rejection, separately
+counts the **twelve supplied synthetic envelopes**, and records **zero
+genuine model requests, zero real design-call observations and zero genuine
+acceptance observations**. Rejection messages are bounded fixed policy codes;
+neither raw content nor unverifiable measurements are emitted. This does
+not feed fake data into the V2 real research summarizer. Passing the offline
+rehearsal cannot establish model capability, cost-adjusted superiority,
+visual originality, accessibility certification, release authority, or the
+right to start a cloud CPU run. Fresh owner approval remains necessary for
+a future genuine comparison.
