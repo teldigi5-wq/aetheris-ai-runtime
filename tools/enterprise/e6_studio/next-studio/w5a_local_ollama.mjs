@@ -37,20 +37,45 @@ export function buildPrompt(brief){
     'Respect normal native scrolling, accessible static content and the fictional subject.'
   ].join('\n');
 }
-export function parseProviderEnvelope(payload,expectedModel){
+const GENERATION_POLICY=Object.freeze({
+  design:Object.freeze({num_predict:3000,num_ctx:6144}),
+  css:Object.freeze({num_predict:900,num_ctx:3072})
+});
+const policyFor=phase=>{
+  if(typeof phase!=='string'||!Object.hasOwn(GENERATION_POLICY,phase))
+    fail('UNAPPROVED_INFERENCE_PHASE');
+  return GENERATION_POLICY[phase];
+};
+export function parseProviderEnvelope(payload,expectedModel,{phase='design'}={}){
+  const budget=policyFor(phase);
   if(!payload||typeof payload!=='object'||Array.isArray(payload)||
      payload.done!==true||payload.model!==expectedModel||
      typeof payload.response!=='string'||payload.response.length>36_000||
      payload.response.length<100)fail('UNVERIFIED_PROVIDER_ENVELOPE');
+  // Ollama may report done=true even if output stopped on a token ceiling.
+  // A "length" or other non-stop reason must never count as accepted source.
+  if(Object.hasOwn(payload,'done_reason')&&payload.done_reason!=='stop')
+    fail('MODEL_GENERATION_NOT_NORMALLY_FINISHED');
+  if(Object.hasOwn(payload,'eval_count')&&
+     (!Number.isInteger(payload.eval_count)||payload.eval_count<1||
+      payload.eval_count>budget.num_predict+1))
+    fail('INVALID_GENERATION_TOKEN_COUNT');
   let design;
   try{design=JSON.parse(payload.response);}catch{fail('MODEL_JSON_PARSE_REJECTED');}
-  return {design,providerReportedModel:payload.model,rawReplySha256:sha(payload.response)};
+  return {design,providerReportedModel:payload.model,rawReplySha256:sha(payload.response),
+    providerReportedStopReason:payload.done_reason??null,
+    providerStopReasonVerified:payload.done_reason==='stop',
+    providerReportedOutputTokens:Number.isInteger(payload.eval_count)?payload.eval_count:null,
+    inferencePhase:phase,maximumOutputTokens:budget.num_predict};
 }
-export async function requestLocalOllama(prompt,model,{transport=fetch}={}){
-  if(!MODEL_PATTERN.test(model)||typeof prompt!=='string'||prompt.length>8_000)
+export async function requestLocalOllama(prompt,model,{transport=fetch,phase='design'}={}){
+  const budget=policyFor(phase);
+  if(typeof model!=='string'||!MODEL_PATTERN.test(model)||
+     typeof prompt!=='string'||!prompt||prompt.length>8_000)
     fail('INVALID_LOCAL_MODEL_REQUEST');
   const request={model,prompt,stream:false,format:'json',
-    options:{temperature:.55,num_predict:1500},keep_alive:'0'};
+    options:{temperature:.55,num_predict:budget.num_predict,num_ctx:budget.num_ctx},
+    keep_alive:'0'};
   // The URL is fixed; never take user/model-provided hosts, ports or paths.
   // The injected transport exists solely for offline contract tests.
   const response=await transport('http://127.0.0.1:11434/api/generate',{
@@ -67,7 +92,7 @@ export async function requestLocalOllama(prompt,model,{transport=fetch}={}){
   let envelope;
   try{envelope=JSON.parse(Buffer.concat(pieces).toString('utf8'));}
   catch{fail('INVALID_PROVIDER_JSON');}
-  return parseProviderEnvelope(envelope,model);
+  return parseProviderEnvelope(envelope,model,{phase});
 }
 async function writeSite({files,evidence},meta){
   const parent=join(here,'target');
