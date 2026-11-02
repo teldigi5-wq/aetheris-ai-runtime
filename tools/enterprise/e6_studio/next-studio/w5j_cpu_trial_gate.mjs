@@ -128,6 +128,27 @@ export function summarizeMissingCaseReport({sourceSha,caseReportAvailable}={}){
    humanVisualApproved:false,stage45Go:false,releaseGo:false
  };
 }
+
+ // There is a nonempty report file, but the summary attempt failed. This
+ // receipt does NOT diagnose its content or assert that any model ran.
+export function summarizeUnverifiableCaseReport({sourceSha,caseReportPresent}={}){
+ if(!hex(sourceSha)||caseReportPresent!==true)
+   fail('UNVERIFIABLE_REPORT_CONTEXT_REJECTED');
+ return {
+   kind:'E6_W5J_UNVERIFIABLE_CASE_REPORT_V1',
+   sourceCommitSha:sourceSha,
+   status:'NO_VERIFIABLE_CASE_SUMMARY',
+   observedCondition:'W5C_NONEMPTY_REPORT_SUMMARY_NOT_VERIFIED',
+   verifiedCaseReceipts:0,
+   threeHeldoutCasesAttempted:null,
+   modelRequestsObserved:null,
+   accepted:null,rejected:null,
+   modelRuntimeAttested:false,modelWeightsCryptographicallyAttested:false,
+   sourceIntegrityVerified:false,browserReviewVerified:false,
+   humanVisualApproved:false,stage45Go:false,releaseGo:false
+ };
+}
+
 export function summarizeObservedTrial(report,briefs,{sourceSha,reportRawBytes}={}){
  const reportRawFileSha256=sameReportBytes(report,reportRawBytes);
  if(!hex(sourceSha)||!Array.isArray(briefs)||briefs.length!==3||

@@ -4,7 +4,7 @@ import {readFile,mkdtemp,copyFile,mkdir,writeFile,rm,symlink} from 'node:fs/prom
 import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
-import {authorizeLabelEvent,summarizeObservedTrial,summarizeMissingCaseReport,summarizeWithSavedSourceAudit} from './w5j_cpu_trial_gate.mjs';
+import {authorizeLabelEvent,summarizeObservedTrial,summarizeMissingCaseReport,summarizeUnverifiableCaseReport,summarizeWithSavedSourceAudit} from './w5j_cpu_trial_gate.mjs';
 import {evaluateCodeHeldout} from './w5c_local_code_trial.mjs';
 import {fakeCssSourceProvider} from './w5c_test_doubles.mjs';
 import {MODEL} from './w5b_simulated_provider.mjs';
@@ -633,4 +633,86 @@ test('rejected case envelope rejects raw source and invented proof fields',async
   const v=await report(1);mutate(v.cases[1]);
   assert.throws(()=>summarize(v),/UNSAFE_REJECTED_CASE|INCONSISTENT_CASE_PROVENANCE/);
  }
+});
+
+test('nonempty unverified report receipt cannot invent case attempts or model requests',()=>{
+ const receipt=summarizeUnverifiableCaseReport({sourceSha:SHA,caseReportPresent:true});
+ assert.equal(receipt.kind,'E6_W5J_UNVERIFIABLE_CASE_REPORT_V1');
+ assert.equal(receipt.verifiedCaseReceipts,0);
+ for(const field of ['threeHeldoutCasesAttempted','modelRequestsObserved','accepted','rejected'])
+  assert.equal(receipt[field],null);
+ for(const field of ['sourceIntegrityVerified','browserReviewVerified','stage45Go','releaseGo'])
+  assert.equal(receipt[field],false);
+ assert.equal(JSON.stringify(receipt).includes('modelOutput'),false);
+ for(const context of [
+  {sourceSha:SHA,caseReportPresent:false},
+  {sourceSha:'wrong',caseReportPresent:true},{}
+ ])assert.throws(()=>summarizeUnverifiableCaseReport(context),
+   /UNVERIFIABLE_REPORT_CONTEXT_REJECTED/);
+});
+test('CLI writes write-once sanitized nonempty-report failure without parsing raw model evidence',async()=>{
+ const dir=await isolatedCli();
+ try{
+  const target=join(dir,'target'),source=join(target,'e6-w5c-local-css-research');
+  await mkdir(source,{recursive:true});
+  const secret='untrusted private model response MUST NOT LEAK';
+  await writeFile(join(source,'source-code-trial-report.json'),'{'+secret);
+  const script=join(dir,'w5j_cpu_trial_cli.mjs');
+  const first=spawnSync(process.execPath,[script,'unverified-report'],{
+   env:offlineCliEnv(),encoding:'utf8',timeout:10000
+  });
+  assert.equal(first.status,0,first.stderr);
+  const receipt=JSON.parse(await readFile(join(
+   target,'e6-w5j-cloud-cpu-review/unverifiable-case-report.json'),'utf8'));
+  assert.equal(receipt.status,'NO_VERIFIABLE_CASE_SUMMARY');
+  assert.equal(receipt.modelRequestsObserved,null);
+  assert.equal(JSON.stringify(receipt).includes(secret),false);
+  assert.equal(first.stdout.includes(secret),false);
+  const second=spawnSync(process.execPath,[script,'unverified-report'],{
+   env:offlineCliEnv(),encoding:'utf8',timeout:10000
+  });
+  assert.notEqual(second.status,0);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('unverified-report CLI refuses missing source file and a symlink source directory',async()=>{
+ const dir=await isolatedCli(),outside=await mkdtemp(join(tmpdir(),'w5j-unverified-outside-'));
+ try{
+  const script=join(dir,'w5j_cpu_trial_cli.mjs');
+  const target=join(dir,'target'),source=join(target,'e6-w5c-local-css-research');
+  await mkdir(source,{recursive:true});
+  const env=offlineCliEnv();
+  const missing=spawnSync(process.execPath,[script,'unverified-report'],{
+   env,encoding:'utf8',timeout:10000
+  });
+  assert.notEqual(missing.status,0);
+  await rm(source,{recursive:true});
+  await writeFile(join(outside,'source-code-trial-report.json'),'{}');
+  await symlink(outside,source);
+  const linked=spawnSync(process.execPath,[script,'unverified-report'],{
+   env,encoding:'utf8',timeout:10000
+  });
+  assert.notEqual(linked.status,0);
+  await assert.rejects(readFile(join(target,
+   'e6-w5j-cloud-cpu-review/unverifiable-case-report.json')));
+ }finally{
+  await rm(dir,{recursive:true,force:true});
+  await rm(outside,{recursive:true,force:true});
+ }
+});
+test('workflow archives only sanitized receipts after failed or unverified source summaries',async()=>{
+ const wf=await readFile(new URL('../../../../.github/workflows/runtime-e6-w5j-optin-heldout-cpu.yml',import.meta.url),'utf8');
+ const summary=wf.indexOf('if ! node w5j_cpu_trial_cli.mjs summarize; then');
+ const fallback=wf.indexOf('node w5j_cpu_trial_cli.mjs unverified-report');
+ const failure=wf.indexOf('E6_W5J_NONEMPTY_REPORT_SUMMARY_REJECTED_NO_RELEASE');
+ assert(summary>0&&fallback>summary&&failure>fallback);
+ const archive=wf.slice(wf.indexOf('- name: Seven-day sanitized summary'));
+ const always=archive.split('- name: Seven-day checked candidate')[0];
+ const verified=archive.slice(archive.indexOf('- name: Seven-day checked candidate'));
+ assert(always.includes('if: always()'));
+ assert(always.includes('e6-w5j-cloud-cpu-review/'));
+ assert(!always.includes('e6-w5c-local-css-research/'));
+ assert(!always.includes('e6-w5d-local-owner-browser-evidence/'));
+ assert(verified.includes('if: success()'));
+ assert(verified.includes('e6-w5c-local-css-research/'));
+ assert(verified.includes('e6-w5d-local-owner-browser-evidence/'));
 });

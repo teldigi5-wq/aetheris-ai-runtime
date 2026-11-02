@@ -145,7 +145,11 @@ jobs:
             echo 'E6_W5J_NO_VERIFIABLE_CASE_REPORT_NO_RELEASE'
             exit 1
           fi
-          node w5j_cpu_trial_cli.mjs summarize
+          if ! node w5j_cpu_trial_cli.mjs summarize; then
+            node w5j_cpu_trial_cli.mjs unverified-report
+            echo 'E6_W5J_NONEMPTY_REPORT_SUMMARY_REJECTED_NO_RELEASE'
+            exit 1
+          fi
           if [ "$inference_status" -ne 0 ]; then
             echo 'E6_W5J_GENUINE_MODEL_CASE_REJECTED; preserving sanitized evidence, NOT A RELEASE PASS'
             exit 1
@@ -185,14 +189,22 @@ jobs:
           print('E6_W5J_GENUINE_CANDIDATES_18_SCREENSHOTS_FOR_HUMAN_REVIEW_NO_RELEASE')
           PY
           echo 'E6_W5J_THREE_GENUINE_CANDIDATES_FOR_HUMAN_REVIEW_ONLY_NOT_PRODUCTION'
-      - name: Seven-day fictional candidate and rejection evidence, never model weights
+      - name: Seven-day sanitized summary even on rejection; never raw model source
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: e6-w5j-owner-approved-real-model-3-brief-cpu-review
+          name: e6-w5j-owner-approved-cpu-sanitized-receipt
           path: |
-            tools/enterprise/e6_studio/next-studio/target/e6-w5c-local-css-research/
             tools/enterprise/e6_studio/next-studio/target/e6-w5j-cloud-cpu-review/
-            tools/enterprise/e6_studio/next-studio/target/e6-w5d-local-owner-browser-evidence/
           retention-days: 7
           if-no-files-found: ignore
+      - name: Seven-day checked candidate and browser files only after complete success
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e6-w5j-owner-approved-cpu-checked-preview
+          path: |
+            tools/enterprise/e6_studio/next-studio/target/e6-w5c-local-css-research/
+            tools/enterprise/e6_studio/next-studio/target/e6-w5d-local-owner-browser-evidence/
+          retention-days: 7
+          if-no-files-found: error

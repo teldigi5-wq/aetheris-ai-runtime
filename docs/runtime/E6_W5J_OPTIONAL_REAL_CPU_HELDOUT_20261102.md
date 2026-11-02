@@ -182,3 +182,22 @@ This is a strict current-version research contract, not a public extension
 API. Future intentional schema changes require paired writer, verifier and
 adversarial-test updates. This patch adds no real model execution, owner
 approval, remote services, GPU permissions, merging or Stage45 authority.
+
+## Fail-closed nonempty summary failure (offline-tested)
+
+A nonempty W5-C source report is **not automatically verifiable**. If the
+strict W5-J report and disk-audit summary fails, the owner-labeled workflow
+now writes a **sanitized, write-once, content-free**
+`unverifiable-case-report.json`, then fails. It does not inspect the
+untrusted report bytes and never infers that Ollama ran, how many requests
+occurred, or how many cases passed or failed. Those counters remain `null`.
+Missing/empty files retain the separate existing missing-report fallback.
+Symlinked or unsafe source directory paths are refused.
+
+Only sanitized W5-J receipts upload on failed runs. The original source,
+candidate files and browser screenshots are uploaded for review **only after
+the full owner-labeled model and browser verification step succeeds**.
+Otherwise, unverified model content remains on the ephemeral runner and
+does not become a published artifact. Both artifact types retain the same
+seven-day limit. No new trigger, model execution approval, GPU allowance,
+deployment permission or Stage45 GO is introduced.
