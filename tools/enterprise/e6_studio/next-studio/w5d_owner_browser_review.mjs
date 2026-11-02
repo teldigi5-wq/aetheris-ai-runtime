@@ -37,6 +37,40 @@ async function launchLocal(site,index){
   }
   refuse('STATIC_SERVER_UNAVAILABLE');
 }
+async function verifyKeyboardFocus(page,expectedRoute){
+  // The candidate itself has JavaScript disabled. This verifies browser-native
+  // keyboard focus; a URL hash or visual scroll alone never qualifies.
+  await page.keyboard.press('Tab');
+  const skip=await page.evaluate(()=>{
+    const active=document.activeElement;
+    const rect=active?.getBoundingClientRect();
+    const style=active&&getComputedStyle(active);
+    return {
+      firstTabIsSkip:active?.matches?.('a.skip[href="#main"]')===true,
+      skipVisible:Boolean(rect&&rect.width>0&&rect.height>0&&rect.top>=0),
+      focusOutlineVisible:Boolean(style&&style.outlineStyle!=='none'&&
+        parseFloat(style.outlineWidth)>=2)
+    };
+  });
+  if(!skip.firstTabIsSkip||!skip.skipVisible||!skip.focusOutlineVisible)
+    refuse('KEYBOARD_SKIP_FOCUS_MISSING');
+  await page.keyboard.press('Enter');
+  const hashReached=new URL(page.url()).hash==='#main';
+  const mainFocused=await page.waitForFunction(()=>
+    document.activeElement===document.querySelector('main#main')&&
+    document.activeElement.getAttribute('tabindex')==='-1',null,
+    {timeout:2_000}).then(()=>true,()=>false);
+  await page.keyboard.press('Tab');
+  const focusReleased=await page.evaluate(()=>
+    document.activeElement!==document.querySelector('main#main'));
+  if(!hashReached||!mainFocused||!focusReleased||
+     new URL(page.url()).pathname!==expectedRoute)
+    refuse('KEYBOARD_MAIN_FOCUS_MISSING');
+  return {firstTabIsSkip:true,skipVisible:true,focusOutlineVisible:true,
+    hashReached:true,mainFocused:true,mainTabIndexMinusOne:true,
+    focusReleased:true,authorJavascriptEnabled:false,
+    assistiveTechnologySpeechVerified:false,wcagCertified:false};
+}
 async function visit(origin,slug,width,height){
   const ctx=await browser.newContext({
     viewport:{width,height},javaScriptEnabled:false,serviceWorkers:'block',
@@ -71,6 +105,7 @@ async function visit(origin,slug,width,height){
       h1:document.querySelector('h1')?.textContent?.trim().slice(0,120)??''
     }));
     if(ui.overflow>2||!ui.h1)refuse('MOBILE_OVERFLOW_OR_EMPTY_HEADING');
+    const homeKeyboard=await verifyKeyboardFocus(page,'/');
     // Each website has TWO routes. Do not accept nine home screenshots as
     // evidence of all 18 generated route/viewport compositions.
     await Promise.all([
@@ -92,6 +127,7 @@ async function visit(origin,slug,width,height){
     const approachFile=slug+'-approach-'+width+'x'+height+'.png';
     const approachShot=await page.screenshot({fullPage:true,animations:'disabled'});
     await writeFile(join(resultRoot,approachFile),approachShot,{flag:'wx',mode:0o600});
+    const approachKeyboard=await verifyKeyboardFocus(page,'/approach/');
     if(remote.length||errors.length)refuse('BROWSER_NETWORK_OR_EXCEPTION');
     return {projectSlug:slug,viewport:[width,height],
       screenshot:file,screenshotSha256:sha(shot),
@@ -103,6 +139,8 @@ async function visit(origin,slug,width,height){
       computedBodyBackground:ui.background,
       computedFontFamily:ui.font,homeHeading:ui.h1,
       approachHeading:approachState.heading,approachNavigationPassed:true,
+      homeKeyboard,approachKeyboard,
+      bothRoutesKeyboardFocusVerified:true,
       bothFullPageScreenshotsForHumanReview:true,
       physicalGpuFrameTimingMeasured:false,coreWebVitalsCertified:false};
   }finally{await ctx.close();}
@@ -135,6 +173,10 @@ async function main(){
     bothRoutesCapturedForAllNineProfiles:views.length===9&&
       views.every(x=>x.approachScreenshot&&x.approachScreenshotSha256),
     fullPageScreenshotCount:views.length*2,
+    bothRoutesKeyboardFocusVerified:views.length===9&&
+      views.every(v=>v.bothRoutesKeyboardFocusVerified===true&&
+        v.homeKeyboard.mainFocused===true&&
+        v.approachKeyboard.mainFocused===true),
     providerSelfReportedLoopbackOnly:true,
     independentModelAuthorshipVerified:false,
     visualQualityHumanApproved:false,
