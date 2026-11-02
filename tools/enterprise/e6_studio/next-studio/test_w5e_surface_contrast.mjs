@@ -35,7 +35,7 @@ test('control case with all four required combinations passes without loosening 
  assert(site.files.get('assets/site.css').includes('--accent:#555555'));
  assert.equal(site.evidence.stage45Go,false);
 });
-test('all pre-existing simulated candidate palettes still pass the stronger condition',()=>{
+test('all pre-existing simulated candidate palettes still pass the stronger condition',async()=>{
  const cases=[
   [briefs[0],proposalFor(briefs[0])],
   [briefs[1],proposalFor(briefs[1])]
