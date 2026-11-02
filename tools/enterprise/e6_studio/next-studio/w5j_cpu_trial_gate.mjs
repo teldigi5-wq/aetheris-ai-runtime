@@ -42,6 +42,24 @@ const outputFiles=Object.freeze(['index.html','approach/index.html','assets/site
 const exactFileHashes=x=>x&&typeof x==='object'&&!Array.isArray(x)&&
   Object.keys(x).length===outputFiles.length&&
   outputFiles.every(k=>hex(x[k]));
+
+const FAILURE_KINDS=new Set([
+ 'PROVIDER_ABORT_OR_TIMEOUT','PROVIDER_IO_OR_LIMIT','PROVIDER_PROTOCOL',
+ 'COMPILER_POLICY','MODEL_CONTENT_OR_SCHEMA','UNCLASSIFIED'
+]);
+const validPhaseReceipt=(c,accepted)=>{
+ const p=c.phaseReceipt;
+ if(!p||typeof p!=='object'||Array.isArray(p)||
+    Object.keys(p).sort().join(',')!=='compile,css,design')return false;
+ const phases=['DESIGN','CSS','COMPILE'];
+ if(accepted)return phases.every(k=>p[k.toLowerCase()]==='PASSED')&&
+    c.failurePhase===undefined&&c.failureKind===undefined;
+ const failed=phases.indexOf(c.failurePhase);
+ if(failed<0||!FAILURE_KINDS.has(c.failureKind))return false;
+ return phases.every((k,i)=>
+   p[k.toLowerCase()]===(i<failed?'PASSED':i===failed?'FAILED':'NOT_EXECUTED'));
+};
+
 const sameReportBytes=(report,bytes)=>{
   if(!(typeof bytes==='string'||Buffer.isBuffer(bytes))||
      Buffer.byteLength(bytes)<50||Buffer.byteLength(bytes)>120_000)
@@ -98,9 +116,11 @@ export function summarizeObservedTrial(report,briefs,{sourceSha,reportRawBytes}=
        !hex(c.designPromptSha256)||!hex(c.cssPromptSha256)||
        !hex(c.modelAuthoredCssCandidateSha256)||
        !hex(c.designSha256)||
-       !exactFileHashes(c.outputSha256))
+       !exactFileHashes(c.outputSha256)||
+       !validPhaseReceipt(c,true))
        fail('UNVERIFIED_ACCEPTED_CANDIDATE');
      return {projectSlug:c.projectSlug,accepted:true,
+       phaseReceipt:c.phaseReceipt,
        reviewStatus:'STATIC_SOURCE_AND_BROWSER_REVIEW_REQUIRED',
        designRequests:c.designRequestAttempts,
        cssRequests:c.cssRequestAttempts,
@@ -110,10 +130,13 @@ export function summarizeObservedTrial(report,briefs,{sourceSha,reportRawBytes}=
    if(c.accepted!==false||c.status!=='REJECTED'||
       c.codeSecurityPolicyPassed!==false||
       c.humanVisualAccepted!==false||
-      !safeRejection(c.rejectionCode))
+      !safeRejection(c.rejectionCode)||
+      !validPhaseReceipt(c,false))
      fail('UNSAFE_REJECTED_CASE');
    return {projectSlug:c.projectSlug,accepted:false,
-     rejectionCode:c.rejectionCode,reviewStatus:'REJECTED'};
+     rejectionCode:c.rejectionCode,failurePhase:c.failurePhase,
+     failureKind:c.failureKind,phaseReceipt:c.phaseReceipt,
+     reviewStatus:'REJECTED'};
  });
  if(counted!==report.accepted)fail('CASE_COUNT_MISMATCH');
  return {kind:'E6_W5J_GENUINE_PROVIDER_RESPONSE_SUMMARY_V1',
