@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {readFile,mkdtemp,copyFile,mkdir,writeFile,rm,symlink} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
-import {authorizeLabelEvent,summarizeObservedTrial,summarizeMissingCaseReport} from './w5j_cpu_trial_gate.mjs';
+import {join,dirname} from 'node:path';
+import {authorizeLabelEvent,summarizeObservedTrial,summarizeMissingCaseReport,summarizeWithSavedSourceAudit} from './w5j_cpu_trial_gate.mjs';
 import {evaluateCodeHeldout} from './w5c_local_code_trial.mjs';
 import {fakeCssSourceProvider} from './w5c_test_doubles.mjs';
 import {MODEL} from './w5b_simulated_provider.mjs';
@@ -505,4 +505,91 @@ test('oversized model response remains explicitly rejected under stream error ha
   assert.equal(c.rejectionCode,'E6_W5A_MODEL_RESPONSE_BUDGET');
   assert.equal(c.failureKind,'PROVIDER_IO_OR_LIMIT');
  }
+});
+
+async function savedMockTrial({badIndex=-1}={}){
+ const root=await mkdtemp(join(tmpdir(),'aetheris-w5j-source-audit-'));
+ try{
+  const outcome=await evaluateCodeHeldout({
+   batch,model:MODEL,baseCss:css,
+   transport:fakeCssSourceProvider({briefs:batch.briefs,badIndex})
+  });
+  outcome.report.providerWasActualLoopbackRequest=true; // offline TEST DOUBLE
+  for(const c of outcome.report.cases)if(c.accepted){
+   c.designStopReasonVerified=true;
+   c.cssStopReasonVerified=true;
+   c.designReportedStopReason='stop';
+   c.cssReportedStopReason='stop';
+  }
+  for(const [slug,site] of outcome.sites){
+   for(const [path,content] of site.files){
+    const file=join(root,slug,path);
+    await mkdir(dirname(file),{recursive:true});
+    await writeFile(file,content);
+   }
+  }
+  const reportRawBytes=JSON.stringify(outcome.report,null,2)+'\n';
+  await writeFile(join(root,'source-code-trial-report.json'),reportRawBytes);
+  return {root,report:outcome.report,reportRawBytes};
+ }catch(e){await rm(root,{recursive:true,force:true});throw e;}
+}
+test('W5-J independently verifies all three saved candidates before marking source files reviewable',async()=>{
+ const v=await savedMockTrial();
+ try{
+  const result=await summarizeWithSavedSourceAudit(v.report,batch,{
+   sourceSha:SHA,reportRawBytes:v.reportRawBytes,trialRoot:v.root
+  });
+  assert.equal(result.accepted,3);
+  assert.equal(result.savedCandidateFilesHashVerified,true);
+  assert.match(result.savedSourceAuditSha256,/^[a-f0-9]{64}$/);
+  assert.equal(result.independentModelAuthorshipVerified,false);
+  assert.equal(result.humanDesignApproved,false);
+  assert.equal(result.stage45Go,false);
+  assert.equal(result.releaseGo,false);
+ }finally{await rm(v.root,{recursive:true,force:true});}
+});
+test('W5-J rejects post-report stylesheet tampering before writing a reviewable summary',async()=>{
+ const v=await savedMockTrial();
+ try{
+  const file=join(v.root,batch.briefs[0].projectSlug,'assets/site.css');
+  await writeFile(file,(await readFile(file,'utf8'))+'\nbody{display:none}');
+  await assert.rejects(
+   summarizeWithSavedSourceAudit(v.report,batch,{
+    sourceSha:SHA,reportRawBytes:v.reportRawBytes,trialRoot:v.root
+   }),/E6_W5D_GENERATED_FILE_HASH_MISMATCH/
+  );
+ }finally{await rm(v.root,{recursive:true,force:true});}
+});
+test('W5-J refuses missing or symlinked source artifacts even with valid self-reported hashes',async()=>{
+ const v=await savedMockTrial();
+ try{
+  const file=join(v.root,batch.briefs[1].projectSlug,'assets/site.css');
+  await rm(file);
+  await symlink(join(v.root,batch.briefs[1].projectSlug,'index.html'),file);
+  await assert.rejects(
+   summarizeWithSavedSourceAudit(v.report,batch,{
+    sourceSha:SHA,reportRawBytes:v.reportRawBytes,trialRoot:v.root
+   }),/E6_W5D_UNSAFE_FILE_OR_SIZE/
+  );
+ }finally{await rm(v.root,{recursive:true,force:true});}
+});
+test('W5-J incomplete case summaries never claim all saved source files were checked',async()=>{
+ const v=await savedMockTrial({badIndex:1});
+ try{
+  const result=await summarizeWithSavedSourceAudit(v.report,batch,{
+   sourceSha:SHA,reportRawBytes:v.reportRawBytes,trialRoot:v.root
+  });
+  assert.equal(result.accepted,2);
+  assert.equal(result.savedCandidateFilesHashVerified,false);
+  assert.equal(result.savedSourceAuditSha256,null);
+  assert.equal(result.candidateStatus,'INCOMPLETE_REJECTED_OR_TRUNCATED');
+  assert.equal(result.releaseGo,false);
+ }finally{await rm(v.root,{recursive:true,force:true});}
+});
+test('W5-J real CPU summary path is wired to the actual W5-D disk audit',async()=>{
+ const source=await readFile(new URL('./w5j_cpu_trial_cli.mjs',import.meta.url),'utf8');
+ const gateSource=await readFile(new URL('./w5j_cpu_trial_gate.mjs',import.meta.url),'utf8');
+ assert(source.includes('await summarizeWithSavedSourceAudit('));
+ assert(gateSource.includes("import {inspectTrial} from './w5d_trial_integrity.mjs';"));
+ assert(source.includes("trialRoot:join(here,'target/e6-w5c-local-css-research')"));
 });
