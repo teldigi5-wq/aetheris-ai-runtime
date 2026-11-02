@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {auditedRuleTags,checkAxeResult,checkPageJourney,checkKeyboardJourney,
  checkReflowProxy,summary,proofSha256} from './w5f_accessibility_policy.mjs';
 const axe=()=>({violations:[],passes:[{id:'document-title'}],
@@ -81,4 +82,16 @@ test('screenshot evidence references must be actual 64-digit hexadecimal digests
  assert.equal(proofSha256('a'.repeat(64)),'a'.repeat(64));
  for(const invalid of ['','unknown','a'.repeat(63),'A'.repeat(64)])
   assert.throws(()=>proofSha256(invalid),/INVALID_SCREENSHOT_HASH/);
+});
+
+test('browser awaits skip fragment commit and real main focus without relaxing policy',async()=>{
+ const source=await readFile(new URL('./w5f_browser_accessibility.mjs',import.meta.url),'utf8');
+ assert(source.includes("page.waitForFunction(()=>location.hash==='#main'"));
+ assert(source.includes("document.activeElement===document.querySelector('main#main')"));
+ assert(source.includes('const [entersMain,actualFocus]=await Promise.all(['));
+ assert(!source.includes("const entersMain=new URL(page.url()).hash==='#main';"));
+ const evidence=keyboard();
+ assert.equal(checkKeyboardJourney(evidence),true);
+ evidence.skipLinkEnteredMainContent=false;
+ assert.throws(()=>checkKeyboardJourney(evidence),/KEYBOARD_A11Y_JOURNEY_BLOCKED/);
 });

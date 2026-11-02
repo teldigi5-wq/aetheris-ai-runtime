@@ -373,3 +373,21 @@ evidence of improved real-model pass rate, better artistry or W6
 acceptance. The consumed GitHub approval label was removed following
 the failed run. Do not reapply it or trigger more inference without
 a fresh, exact-head scope approval.
+
+### Browser preflight race observed in offline CI (not a model defect)
+
+After compacting the design prompt, the first CI run failed because
+a retained test-double brief marker was altered and one new test used
+an invalid fixture. The subsequent run passed all 159 Node tests but
+stopped on the final W5-F desktop keyboard journey. The diagnostic
+recorded `skipLinkActualFocusOnMain=true` but
+`skipLinkEnteredMainContent=false`. The browser runner read the
+fragment URL synchronously after pressing Enter, while waiting
+asynchronously for actual DOM focus.
+
+The reviewer now waits separately for both `location.hash === '#main'`
+and DOM focus on `<main id="main" tabindex="-1">`, each bounded to 1.8
+seconds. The independent keyboard policy still requires both, a
+visible focus ring, successful keyboard navigation and no trap.
+This is a test timing correction, not relaxed accessibility criteria
+or proof of screen-reader performance.
