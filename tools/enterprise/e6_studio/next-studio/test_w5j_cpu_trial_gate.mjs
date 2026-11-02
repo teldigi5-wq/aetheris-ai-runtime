@@ -856,8 +856,11 @@ test('GitHub SHA-1 source identity is exactly 40 hex chars, never a 64-char file
 });
 
 test('real W5-J authorize CLI accepts exact GitHub runner event and refuses forged actor, label, SHA or symlink without executing model',{
- skip:!process.env.RUNNER_TEMP?.startsWith('/home/runner/work/_temp/')
+ skip:process.env.GITHUB_ACTIONS!=='true'
 },async()=>{
+ assert(process.env.RUNNER_TEMP==='/home/runner/work/_temp'||
+   process.env.RUNNER_TEMP?.startsWith('/home/runner/work/_temp/'),
+   'GitHub runner temporary directory must match the authorized event-path policy');
  // Only run this filesystem test on the matching GitHub Linux runner.
  // It never applies a label, calls Ollama, or invokes the real CPU workflow.
  const dir=await isolatedCli();
