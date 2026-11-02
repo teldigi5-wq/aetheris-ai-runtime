@@ -88,7 +88,7 @@ jobs:
           cd tools/enterprise/e6_studio/next-studio
           python3 scripts/validate_dependency_lock.py
           npm ci --ignore-scripts --no-audit --no-fund
-          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0 @axe-core/playwright@4.14.0
           npx playwright install --with-deps chromium
       - name: Download verified Ollama v0.40.13 binary to ephemeral CPU host
         run: |
@@ -156,6 +156,15 @@ jobs:
           assert result['allNineSoftwareBrowserReviewsPassed'] is True
           assert result['bothRoutesCapturedForAllNineProfiles'] is True
           assert result['bothRoutesKeyboardFocusVerified'] is True
+          assert result['bothRoutesAutomatedAccessibilityPassed'] is True
+          assert result['automatedAccessibilityRouteScanCount'] == 18
+          for profile in result['profiles']:
+              for route in ('homeAutomatedAccessibility', 'approachAutomatedAccessibility'):
+                  scanned=profile[route]
+                  assert scanned['automatedRuleScanPassed'] is True
+                  assert scanned['violations'] == 0
+                  assert scanned['independentWcagCertified'] is False
+                  assert scanned['screenReaderVerified'] is False
           for profile in result['profiles']:
               for route in ('homeKeyboard', 'approachKeyboard'):
                   keyboard=profile[route]
