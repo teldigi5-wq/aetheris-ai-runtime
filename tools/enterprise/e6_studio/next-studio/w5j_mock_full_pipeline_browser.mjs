@@ -109,7 +109,7 @@ async function main(){
      assert.equal(scan.screenReaderVerified,false);
      assert.equal(scan.generatedAuthorJavaScript,false);
      assert.equal(scan.textResize200Percent.technique,
-       'CHROMIUM_TEST_RUNNER_ROOT_FONT_SIZE_OVERRIDE');
+       'CHROMIUM_SAME_ORIGIN_CSS_RESPONSE_ROOT_RESIZE');
      assert(scan.textResize200Percent.rootFontRatio>=1.95);
      assert(scan.textResize200Percent.bodyFontRatio>=1.95);
      assert(scan.textResize200Percent.horizontalOverflowPx<=2);

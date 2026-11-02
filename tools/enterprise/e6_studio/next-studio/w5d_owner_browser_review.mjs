@@ -101,15 +101,32 @@ async function auditCandidateRoutes(origin,width,height){
       }catch{
         refuse('GENERATED_ACCESSIBILITY_AXE_CHECK_FAILED');
       }
-      // A real Chromium CSS text-resize simulation, not browser UI zoom:
-      // temporarily enlarge the root font to 200% in the isolated axe page.
-      // This must not be misreported as physical-device WCAG certification.
+      // Preserve the candidate's CSP (style-src 'self') and saved files.
+      // An inline addStyleTag would be blocked by CSP. The isolated browser
+      // substitutes ONLY the same-origin CSS response, then restores routing.
+      // This is simulated 200% root-font resize, NOT real browser UI zoom.
       const baseline=await page.evaluate(()=>({
         root:parseFloat(getComputedStyle(document.documentElement).fontSize),
         body:parseFloat(getComputedStyle(document.body).fontSize)
       }));
-      await page.addStyleTag({content:'html {font-size:200% !important}'});
-      const resized=await page.evaluate(()=>({
+      const cssUrl=origin+'/assets/site.css';
+      await page.route(cssUrl,async route=>{
+        if(route.request().url()!==cssUrl)
+          return route.abort();
+        const response=await route.fetch({maxRedirects:0,timeout:10000});
+        const raw=await response.body();
+        if(response.status()!==200||raw.length<1||raw.length>25_000)
+          return route.abort();
+        return route.fulfill({response,
+          body:Buffer.concat([raw,Buffer.from(
+            '\\nhtml {font-size:200% !important}\\n')])});
+      });
+      let resized;
+      try{
+        const reloaded=await page.reload({waitUntil:'load',timeout:30000});
+        if(reloaded?.status()!==200||await page.locator('script').count()!==0)
+          refuse('TEXT_RESIZE_RELOAD_FAILED');
+        resized=await page.evaluate(()=>({
         root:parseFloat(getComputedStyle(document.documentElement).fontSize),
         body:parseFloat(getComputedStyle(document.body).fontSize),
         overflow:Math.max(0,document.documentElement.scrollWidth-innerWidth),
@@ -126,7 +143,10 @@ async function auditCandidateRoutes(origin,width,height){
         navigationLinksVisible:[...document.querySelectorAll('.nav a')]
           .length>=2&&[...document.querySelectorAll('.nav a')]
           .every(el=>el.getClientRects().length>0)
-      }));
+        }));
+      }finally{
+        await page.unroute(cssUrl);
+      }
       const rootRatio=resized.root/baseline.root;
       const bodyRatio=resized.body/baseline.body;
       if(!Number.isFinite(rootRatio)||!Number.isFinite(bodyRatio)||
@@ -138,7 +158,7 @@ async function auditCandidateRoutes(origin,width,height){
          !resized.navigationLinksVisible)
         refuse('TEXT_RESIZE_CONTENT_MISSING');
       const textResize200Percent={
-        technique:'CHROMIUM_TEST_RUNNER_ROOT_FONT_SIZE_OVERRIDE',
+        technique:'CHROMIUM_SAME_ORIGIN_CSS_RESPONSE_ROOT_RESIZE',
         rootFontRatio:rootRatio,bodyFontRatio:bodyRatio,
         horizontalOverflowPx:resized.overflow,
         mainVisible:true,headingVisible:true,navigationLinksVisible:true,

@@ -219,3 +219,15 @@ approval. The owner-labeled W5-J workflow requires all 18 checks to
 pass before optional checked-candidate artifacts can be uploaded.
 Normal PR CI uses a deliberately synthetic source fixture and a real
 Chromium test browser only; it cannot replace human acceptance or release.
+
+### CSP-preserving Chromium text-resize correction
+
+The first W6 preflight implementation used an inline
+`page.addStyleTag`; the generated candidate's deliberately strict
+`style-src 'self'` Content Security Policy blocks that technique.
+The reviewer now re-requests the candidate's **same-origin**
+`/assets/site.css` in an isolated browser context, adding the 200%
+root-font rule only to the temporary test response, not to saved files
+or production markup. It validates a bounded CSS response, forbids
+redirects, and removes the test interception after the measurement.
+No CSP weakening, remote resource, or owner-device claim is allowed.

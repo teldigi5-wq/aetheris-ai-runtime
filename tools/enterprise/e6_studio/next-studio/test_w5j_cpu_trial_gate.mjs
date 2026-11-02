@@ -722,7 +722,10 @@ test('workflow archives only sanitized receipts after failed or unverified sourc
 test('W5-J browser quality runner must measure real Chromium root text resize on both routes',async()=>{
  const file=new URL('./w5d_owner_browser_review.mjs',import.meta.url);
  const content=await readFile(file,'utf8');
- assert(content.includes("await page.addStyleTag({content:'html {font-size:200% !important}'}"));
+ assert(content.includes("await page.route(cssUrl,async route=>{"));
+ assert(content.includes("route.fetch({maxRedirects:0,timeout:10000})"));
+ assert(content.includes("await page.unroute(cssUrl)"));
+ assert(!content.includes('page.addStyleTag('));
  for(const failure of [
    'TEXT_RESIZE_SCALE_FAILED',
    'TEXT_RESIZE_HORIZONTAL_OVERFLOW',

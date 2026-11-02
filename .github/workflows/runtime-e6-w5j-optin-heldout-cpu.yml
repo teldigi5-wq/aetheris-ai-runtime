@@ -176,7 +176,7 @@ jobs:
                   assert scanned['independentWcagCertified'] is False
                   assert scanned['screenReaderVerified'] is False
                   resized=scanned['textResize200Percent']
-                  assert resized['technique'] == 'CHROMIUM_TEST_RUNNER_ROOT_FONT_SIZE_OVERRIDE'
+                  assert resized['technique'] == 'CHROMIUM_SAME_ORIGIN_CSS_RESPONSE_ROOT_RESIZE'
                   assert 1.95 <= resized['rootFontRatio'] <= 2.05
                   assert 1.95 <= resized['bodyFontRatio'] <= 2.05
                   assert resized['horizontalOverflowPx'] <= 2
