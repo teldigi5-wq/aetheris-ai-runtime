@@ -60,7 +60,7 @@ test('provider response must be JSON and contain positive token count',async()=>
 });
 test('model provider must return the exact harmless JSON schema and no HTML or URLs',async()=>{
   const examples=[
-    '{}',
+    '{"research_status":null}',
     '{"other":"fictional study only"}',
     '{"research_status":"fine","extra":"unapproved"}',
     '{"research_status":"https://example.com/exfiltrate"}',
