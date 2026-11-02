@@ -172,7 +172,10 @@ test('opt-in real-model workflow is always owner-labeled and validates all 18 pa
   "num_gpu",
   "result['fullPageScreenshotCount'] == 18",
   "result['bothRoutesCapturedForAllNineProfiles'] is True",
-  "result['releaseGo'] is False"
+  "result['releaseGo'] is False",
+  "result['bothRoutesAutomatedAccessibilityPassed'] is True",
+  "result['automatedAccessibilityRouteScanCount'] == 18",
+  "@axe-core/playwright@4.14.0"
  ]){
   // num_gpu is enforced in the adapter, not the workflow itself.
   if(required==='num_gpu')continue;
