@@ -391,3 +391,23 @@ seconds. The independent keyboard policy still requires both, a
 visible focus ring, successful keyboard navigation and no trap.
 This is a test timing correction, not relaxed accessibility criteria
 or proof of screen-reader performance.
+
+
+## W5-K: isolated segmented-design research spike
+
+The first real 0.5B CPU trial rejected all three full-design responses.
+W5-K tests whether splitting an overlarge two-page JSON response into
+three smaller model-shaped JSON objects (original identity/art, original
+home page, original approach page) preserves the complete W5-A final
+validator, four color-contrast checks, source identities and page routes.
+
+This is OFFLINE-ONLY: the entrypoint accepts an explicit injected
+synthetic transport; it does not have a CLI, default fetch, disk writes,
+production hooks or integration with the owner-labeled CPU workflow.
+A fake-response suite exercises all three held-out briefs and rejects
+extra keys, swapped identities, incorrect routes, unsafe markup,
+insufficient contrast and abnormal provider completion. Tests do not
+establish real-model capability, performance or premium design quality.
+Staging requires three calls versus one initial design request, which
+could increase cost and failure rates. Real-model activation requires a
+separate, exact-head authorization and evidence review.
