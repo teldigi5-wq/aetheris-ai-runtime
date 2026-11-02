@@ -38,7 +38,22 @@ export function authorizeLabelEvent(event,{actor,repository,expectedPr,headSha}=
 }
 const safeRejection=x=>typeof x==='string'&&
   /^E6_W5[ABCH]_[A-Z0-9_]{1,96}$/.test(x);
-export function summarizeObservedTrial(report,briefs,{sourceSha}={}){
+const outputFiles=Object.freeze(['index.html','approach/index.html','assets/site.css']);
+const exactFileHashes=x=>x&&typeof x==='object'&&!Array.isArray(x)&&
+  Object.keys(x).length===outputFiles.length&&
+  outputFiles.every(k=>hex(x[k]));
+const sameReportBytes=(report,bytes)=>{
+  if(!(typeof bytes==='string'||Buffer.isBuffer(bytes))||
+     Buffer.byteLength(bytes)<50||Buffer.byteLength(bytes)>120_000)
+    fail('REPORT_RAW_BYTES_REQUIRED');
+  let parsed;
+  try{parsed=JSON.parse(bytes.toString());}catch{fail('REPORT_RAW_JSON_REJECTED');}
+  if(JSON.stringify(parsed)!==JSON.stringify(report))
+    fail('REPORT_BYTES_DO_NOT_MATCH_STRUCTURED_EVIDENCE');
+  return sha(bytes);
+};
+export function summarizeObservedTrial(report,briefs,{sourceSha,reportRawBytes}={}){
+ const reportRawFileSha256=sameReportBytes(report,reportRawBytes);
  if(!hex(sourceSha)||!Array.isArray(briefs)||briefs.length!==3||
     briefs.some(x=>!x||typeof x.projectSlug!=='string')||
     new Set(briefs.map(x=>x.projectSlug)).size!==3)
@@ -59,6 +74,7 @@ export function summarizeObservedTrial(report,briefs,{sourceSha}={}){
  let counted=0;
  const cases=report.cases.map((c,i)=>{
    if(!c||c.projectSlug!==briefs[i].projectSlug||
+      c.briefSha256!==sha(JSON.stringify(briefs[i]))||
       c.modelReportedName!==report.runtime.reportedModelName||
       c.modelRuntimeAttested!==false||c.releaseGo!==false)
      fail('INCONSISTENT_CASE_PROVENANCE');
@@ -81,7 +97,8 @@ export function summarizeObservedTrial(report,briefs,{sourceSha}={}){
        !hex(c.designRawReplySha256)||!hex(c.cssRawReplySha256)||
        !hex(c.designPromptSha256)||!hex(c.cssPromptSha256)||
        !hex(c.modelAuthoredCssCandidateSha256)||
-       typeof c.outputSha256!=='object')
+       !hex(c.designSha256)||
+       !exactFileHashes(c.outputSha256))
        fail('UNVERIFIED_ACCEPTED_CANDIDATE');
      return {projectSlug:c.projectSlug,accepted:true,
        reviewStatus:'STATIC_SOURCE_AND_BROWSER_REVIEW_REQUIRED',
@@ -104,7 +121,9 @@ export function summarizeObservedTrial(report,briefs,{sourceSha}={}){
    modelReportedName:report.runtime.reportedModelName,
    modelDigestReportedByProvider:report.runtime.reportedModelDigest,
    threeHeldoutCasesAttempted:true,accepted:counted,rejected:3-counted,
-   cases,reportSha256:sha(JSON.stringify(report)),
+   cases,
+   reportSha256:sha(JSON.stringify(report)),
+   reportRawFileSha256,
    candidateStatus:counted===3?'ALL_THREE_SOURCE_CANDIDATES_FOR_REVIEW':'INCOMPLETE_REJECTED_OR_TRUNCATED',
    providerSelfReportedLoopback:true,modelWeightsCryptographicallyAttested:false,
    independentModelAuthorshipVerified:false,independentRightsAudited:false,
