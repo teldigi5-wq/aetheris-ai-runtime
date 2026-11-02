@@ -964,3 +964,86 @@ test('owner CPU workflow must recheck live label before downloads and real infer
  assert.equal((source.match(/https:\/\/api\.github\.com\/repos\/teldigi5-wq\/aetheris-ai-runtime\/pulls\/275/g)||[]).length,2);
  assert(source.includes('pull-requests: read'));
 });
+
+test('actual live-approval CLI rechecks a runner-style GitHub PR snapshot without model, network, or writes',{
+ skip:process.env.GITHUB_ACTIONS!=='true'
+},async()=>{
+ assert(process.env.RUNNER_TEMP==='/home/runner/work/_temp'||
+   process.env.RUNNER_TEMP?.startsWith('/home/runner/work/_temp/'),
+   'Authorized GitHub Linux runner temp path required for CLI integration');
+ const dir=await isolatedCli();
+ const runnerDir=await mkdtemp(join(process.env.RUNNER_TEMP,'w5j-live-approval-fixture-'));
+ const snapshotPath=join(runnerDir,'w5j-live-owner-pr.json');
+ const script=join(dir,'w5j_cpu_trial_cli.mjs');
+ const approved=()=>({
+   number:PR,state:'open',draft:true,merged_at:null,
+   user:{login:OWNER},
+   head:{sha:SHA,repo:{full_name:'teldigi5-wq/aetheris-ai-runtime'}},
+   base:{ref:'feat/e6-w5i-local-inference-completion-20261102',
+     repo:{full_name:'teldigi5-wq/aetheris-ai-runtime'}},
+   labels:[{name:'e6-w5j-three-brief-cpu-approved'}]
+ });
+ const env={
+   ...offlineCliEnv(),
+   RUNNER_TEMP:runnerDir,
+   GITHUB_ACTOR:OWNER,
+   E6_W5J_APPROVED_PR_NUMBER:String(PR),
+   E6_W5C_ALLOW_LOCAL_INFERENCE:'NO',
+   GITHUB_TOKEN:'',
+   GH_READ_TOKEN:''
+ };
+ const run=(options=env)=>spawnSync(process.execPath,[script,'live-approval'],{
+   env:options,encoding:'utf8',timeout:10000
+ });
+ const assertDenied=result=>{
+   assert.notEqual(result.status,0,'revoked/invalid live approval wrongly passed');
+   assert(!result.stdout.includes('E6_W5J_LIVE_OWNER_LABEL_AND_HEAD_STILL_APPROVED'));
+   assert(!result.stdout.includes('ownerApproved":true'));
+ };
+ try{
+   await writeFile(snapshotPath,JSON.stringify(approved()));
+   const success=run();
+   assert.equal(success.status,0,success.stderr);
+   assert.match(success.stdout,/E6_W5J_LIVE_OWNER_LABEL_AND_HEAD_STILL_APPROVED/);
+   assert(success.stdout.includes(SHA));
+   assert(success.stdout.includes('"gpuAuthorized":false'));
+   assert(success.stdout.includes('"releaseGo":false'));
+   assert(!success.stdout.includes('e6-w5j-three-brief-cpu-approved'),
+     'do not echo user-provided label payload');
+   for(const change of [
+     x=>{x.labels=[];},
+     x=>{x.labels[0].name='revoked';},
+     x=>{x.head.sha='f'.repeat(40);},
+     x=>{x.state='closed';},
+     x=>{x.draft=false;},
+     x=>{x.merged_at='2026-11-02T00:00:00Z';},
+     x=>{x.head.repo.full_name='outside/fork';},
+     x=>{x.base.ref='main';}
+   ]){
+     const payload=approved();change(payload);
+     await writeFile(snapshotPath,JSON.stringify(payload));
+     assertDenied(run());
+   }
+   await writeFile(snapshotPath,JSON.stringify(approved()));
+   for(const change of [
+     {GITHUB_ACTOR:'nonowner'},
+     {E6_W5J_CHECKED_OUT_PR_HEAD:'b'.repeat(64)},
+     {E6_W5J_ENABLE_OWNER_LABELED_CPU_TRIAL:'NO'},
+     {GITHUB_EVENT_NAME:'workflow_dispatch'},
+     {RUNNER_TEMP:dir},
+     {E6_W5J_APPROVED_PR_NUMBER:'274'}
+   ])assertDenied(run({...env,...change}));
+   await writeFile(snapshotPath,'{not-json');
+   assertDenied(run());
+   await writeFile(snapshotPath,'x'.repeat(200001));
+   assertDenied(run());
+   await rm(snapshotPath);
+   assertDenied(run());
+   await symlink(script,snapshotPath);
+   assertDenied(run());
+   await assert.rejects(readFile(join(dir,'target/e6-w5c-local-css-research/source-code-trial-report.json')));
+ }finally{
+   await rm(dir,{recursive:true,force:true});
+   await rm(runnerDir,{recursive:true,force:true});
+ }
+});

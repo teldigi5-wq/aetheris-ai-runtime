@@ -543,3 +543,20 @@ gates remain unchanged. No model inference was authorized or run.
 ### W5-J live owner approval revocation rechecks
 
 The earlier owner-only GitHub CPU workflow trusted a historical labeled event throughout the queued job. Its current form will additionally read the live PR #275 snapshot before any dependencies or model downloads, and again immediately before inference. It requires a still-present approval label, unchanged exact approved head, same owner and repository, and open unmerged draft status. Absent labels, closed or changed PRs, API failures and malformed read-only responses stop the run. GitHub tokens never reach model prompts or inference and the API response remains temporary. Model-free synthetic tests verify this policy and step ordering. This is not continuous cancellation of a model request already running: the owner must cancel an active job in GitHub Actions. No fresh owner approval, merge or deployment is implied.
+
+
+### 2 November — live-approval CLI subprocess proof (no network/model)
+
+The owner-only W5-J live-approval recheck is now exercised at its
+**real Node CLI entrypoint** using an isolated synthetic GitHub runner
+temp directory and a local fake REST response file. The regression
+spawns the actual CLI for an approved snapshot, then verifies
+fail-closed behavior for label revocation, changed SHA, nondraft,
+closed/merged state, wrong repositories, malicious environment,
+malformed/oversized JSON, missing files and symlinks. The test
+also confirms no generated source report appears. It is enabled
+only on the matching GitHub Actions Linux runner, where the CLI
+enforces a fixed temp path. There is no network request or
+model inference. A green test verifies the CLI and synthetic
+snapshot handling, **not** that the future authenticated GitHub
+API recheck has executed in a real approved CPU run.
