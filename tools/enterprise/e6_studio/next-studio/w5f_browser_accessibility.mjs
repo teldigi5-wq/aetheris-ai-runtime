@@ -119,6 +119,11 @@ async function checkOne(browser,origin,brief,viewport,width,height,path,rows){
     await writeFile(join(target,name),screenshot,{flag:'wx'});
     const hash=proofSha256(sha(screenshot));
     const keyboard=await keyboardAudit(page,viewport,path,origin);
+    if(!keyboard.skipLinkFirstFocusable||!keyboard.skipLinkVisiblyRevealed||
+       !keyboard.skipLinkEnteredMainContent||!keyboard.focusRingVisible||
+       !keyboard.navigateByKeyboardSucceeded||!keyboard.navigationTextIsNonempty||
+       keyboard.keyboardTrapObserved)
+      console.error('E6_W5F_KEYBOARD_DIAGNOSTIC '+JSON.stringify({slug:brief.projectSlug,keyboard}));
     checkKeyboardJourney(keyboard);
     await page.goto(origin+path,{waitUntil:'load'});
     await page.evaluate(()=>{document.documentElement.style.zoom='2';});
