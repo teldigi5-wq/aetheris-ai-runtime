@@ -140,3 +140,20 @@ test('gate code uses no inference, network, writing or secrets',async()=>{
   'process.env.GH_READ_TOKEN','model-download','exec('])
   assert(!source.includes(prohibited),prohibited);
 });
+
+test('W5-L artifact upload is restricted to the single validated JSON filename',async()=>{
+ const source=await readFile(
+  new URL('../../../../.github/workflows/runtime-e6-w5l-optin-paired-cpu.yml',import.meta.url),'utf8');
+ const validation=source.indexOf('id: w5l_artifact_validation');
+ const upload=source.indexOf('uses: actions/upload-artifact@');
+ assert(validation>=0&&upload>validation);
+ const step=source.slice(source.lastIndexOf('      - name:',upload));
+ assert.match(step,/if: \$\{\{ always\(\) && steps\.w5l_artifact_validation\.outcome == 'success' \}\}/);
+ assert.match(step,/path: tools\/enterprise\/e6_studio\/next-studio\/target\/e6-w5l-owner-cpu-review\/paired-design-metadata\.json(?:\r?\n|$)/);
+ assert(!step.includes('path: |'));
+ assert(!step.includes('path: >'));
+ assert(!step.includes('**'));
+ assert(!step.includes('paired-design-metadata.json,'));
+ assert.equal((source.match(/uses: actions\/upload-artifact@/g)||[]).length,1);
+ assert(source.includes('node w5l_sanitized_metadata_gate.mjs'));
+});

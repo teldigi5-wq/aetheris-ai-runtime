@@ -166,7 +166,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: e6-w5l-owner-approved-six-cell-sanitized-metadata
-          path: |
-            tools/enterprise/e6_studio/next-studio/target/e6-w5l-owner-cpu-review/
+          # One allowlisted file, never an upload-directory glob.
+          path: tools/enterprise/e6_studio/next-studio/target/e6-w5l-owner-cpu-review/paired-design-metadata.json
           retention-days: 7
           if-no-files-found: ignore

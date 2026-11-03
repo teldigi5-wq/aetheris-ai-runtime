@@ -123,3 +123,21 @@ or make model provenance independently attested. Only synthetic
 GitHub events and CLI subprocesses are exercised in normal CI.
 
 Stage 45 remains NO_GO; the real CPU run remains unapproved.
+
+## Artifact-upload file-path minimization
+
+The W5-L workflow formerly uploaded the validated evidence directory.
+Although the independent upload gate checks that the directory
+contains only one JSON file when it runs, a directory-level artifact
+path would widen the upload scope if an extra file were added before
+the upload action executes. The upload action now names **only**
+`target/e6-w5l-owner-cpu-review/paired-design-metadata.json`,
+rather than a directory or glob. Normal CI statically verifies the
+validation step, required successful outcome and exact allowlisted
+upload path. The on-run schema gate remains mandatory.
+
+This narrows publication scope but does not eliminate an adversarial
+same-file change between validation and upload; the ephemeral runner
+and lack of untrusted concurrent writers remain part of the trust
+boundary. Schema passing still does not attest genuine model execution
+or confer owner/production approval. Stage 45 remains NO_GO.
