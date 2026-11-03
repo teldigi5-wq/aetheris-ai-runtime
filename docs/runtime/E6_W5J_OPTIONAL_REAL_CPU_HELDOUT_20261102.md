@@ -580,3 +580,21 @@ rehearsal cannot establish model capability, cost-adjusted superiority,
 visual originality, accessibility certification, release authority, or the
 right to start a cloud CPU run. Fresh owner approval remains necessary for
 a future genuine comparison.
+
+### W5-L V3: independently pinned metadata-receipt verification (offline only)
+
+`w5l_research_receipt.mjs` emits a deterministic SHA-256 receipt that binds
+the exact W5-L protocol/brief digest, source commit and six validated
+**researcher-supplied** design-only observations. The verifier requires a
+**separately retained trusted receipt digest** and **expected checkout commit
+SHA**; a checksum self-declared inside a modified report does not establish
+integrity. It rejects extra fields, injected approval claims, forged outcomes,
+changed source commits, altered budgets and missing or incomplete cells.
+
+These are **unattested metadata checks**. Hashes are not digital signatures:
+a party able to replace both the receipt and the externally trusted digest
+can still fabricate results. Future real-run authorization, provenance,
+immutable storage/trusted publication of the digest, provider evidence,
+human creative review, and Stage 45 attestations remain separate. The
+ordinary PR CI executes only synthetic and NOT_RUN examples; this module
+has no inference transport, network access, file writes, label, or approval.
