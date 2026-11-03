@@ -122,7 +122,7 @@ test('separate W5-L workflow can only run on explicit new owner label',async()=>
  const positions=steps.map(x=>wf.indexOf(x));
  assert(positions.every(x=>x>=0));
  assert.deepEqual(positions,[...positions].sort((a,b)=>a-b));
- assert.equal((wf.match(/node w5l_owner_cpu_cli\.mjs live-approval/g)||[]).length,2);
+ assert.equal((wf.match(/node w5l_owner_cpu_cli\.mjs live-approval/g)||[]).length,3);
  assert.equal((wf.match(/node w5l_owner_cpu_cli\.mjs run/g)||[]).length,1);
  assert(wf.includes('target/e6-w5l-owner-cpu-review/'));
  assert(!wf.includes('target/e6-w5c-local-css-research/'));
@@ -444,4 +444,26 @@ test('every label-triggered CPU workflow for PR275 is inventoried and legacy dis
  assert(otherExperiment);
  assert(otherExperiment.includes("github.event.pull_request.number == 269"));
  assert(!otherExperiment.includes("github.event.pull_request.number == 275"));
+});
+test('model-weight download rechecks live owner approval after CPU runtime setup',async()=>{
+ const wf=await readFile(new URL('../../../../.github/workflows/runtime-e6-w5l-optin-paired-cpu.yml',import.meta.url),'utf8');
+ const first=wf.indexOf('      - name: Pull exactly one research model on CPU and verify the published tag prefix');
+ const next=wf.indexOf('      - name: Recheck LIVE owner approval again immediately before paired inference');
+ assert(first>=0&&next>first);
+ const step=wf.slice(first,next);
+ assert(step.includes('GH_READ_TOKEN: ' + '$' + '{{ github.token }}'));
+ const daemon=step.indexOf('env -u GH_READ_TOKEN "$RUNNER_TEMP/w5l-ollama-bin/bin/ollama" serve');
+ const ready=step.indexOf("curl --fail --silent --max-time 5 'http://127.0.0.1:11434/api/version'");
+ const live=step.indexOf('aetheris-w5l-before-weights');
+ const authorize=step.indexOf('node w5l_owner_cpu_cli.mjs live-approval');
+ const pull=step.indexOf('env -u GH_READ_TOKEN timeout --signal=TERM --kill-after=10s 600s');
+ assert(daemon>=0&&ready>daemon&&live>ready&&authorize>live&&pull>authorize);
+ assert(step.includes('test "$(git rev-parse HEAD)" = "$E6_W5L_CHECKED_OUT_PR_HEAD"'));
+ assert(step.includes('https://api.github.com/repos/teldigi5-wq/aetheris-ai-runtime/pulls/275'));
+ assert(step.includes('-o "$RUNNER_TEMP/w5l-live-owner-pr.json"'));
+ assert(step.includes('( cd tools/enterprise/e6_studio/next-studio && node w5l_owner_cpu_cli.mjs live-approval )'));
+ assert.equal((step.match(/node w5l_owner_cpu_cli\.mjs live-approval/g)||[]).length,1);
+ assert.equal((step.match(/ollama" pull "\$MODEL_TAG"/g)||[]).length,1);
+ assert(!step.includes('          "$RUNNER_TEMP/w5l-ollama-bin/bin/ollama" serve'));
+ assert(!step.includes('          timeout --signal=TERM --kill-after=10s 600s'));
 });

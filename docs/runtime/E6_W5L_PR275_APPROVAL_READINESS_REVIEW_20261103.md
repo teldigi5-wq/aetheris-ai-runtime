@@ -141,3 +141,27 @@ same-file change between validation and upload; the ephemeral runner
 and lack of untrusted concurrent writers remain part of the trust
 boundary. Schema passing still does not attest genuine model execution
 or confer owner/production approval. Stage 45 remains NO_GO.
+
+## Owner approval refreshed immediately before model-weight pull
+
+The W5-L live owner-label check previously preceded downloading and
+extracting the Ollama CPU runtime. If authorization was withdrawn
+during that work, model weights could still begin downloading.
+
+The workflow now performs a fresh GitHub PR #275 read after the
+loopback Ollama server reports ready and immediately before calling
+`ollama pull qwen2.5:0.5b`. The strict owner CLI `live-approval`
+validates the returned open draft PR, exact source SHA and approval
+label. Revoked approval or failed GitHub reads abort the step **before**
+any model-weight download. The read-only GitHub token is scoped to
+that workflow step and removed from the Ollama server and pull
+process environments using `env -u GH_READ_TOKEN`.
+
+Model-free CI checks the sequence and token exclusion. This reduces
+the revocation gap but does **not** interrupt a download already
+in flight; withdrawal during the pull requires cancelling the GitHub
+Actions job. Additional checks before inference and every individual
+model request remain active.
+
+Neither actual model download nor GitHub label-triggered W5-L
+execution has been verified. Stage 45 remains NO_GO.
