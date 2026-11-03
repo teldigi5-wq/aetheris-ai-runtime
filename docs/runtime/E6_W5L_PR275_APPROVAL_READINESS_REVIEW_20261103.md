@@ -74,3 +74,29 @@ protected main, deploy, or claim Stage 45 GO.
 
 **This document is a pre-approval risk record, not approval, verification
 of real inference, source certification, or a release attestation.**
+
+## W5-L independent artifact-upload admission gate
+
+An additional cross-boundary review identified that the W5-L owner-only
+workflow previously uploaded its output directory with `if: always()`
+without independently checking the complete saved artifact immediately
+before upload. The new `w5l_sanitized_metadata_gate.mjs` is a read-only
+admission control. It rejects extra files, symbolic links, files over
+40 KB, malformed or noncanonical JSON (including duplicate JSON keys),
+source/run identity drift, unauthorized fields and raw model text.
+
+A completed receipt must exactly match the canonical six-cell protocol,
+source-pinned observation receipt, summarized comparison and reported
+capture count. An interrupted experiment can upload only the canonical
+unverifiable-attempt receipt with unknown counts. No result can assert
+human approval, genuine provider attestation or production readiness.
+
+Workflow artifact upload now occurs only if this independent schema
+step succeeds. The verifier runs even when model inference fails so
+legitimate sanitized failure evidence remains recoverable. The
+model-free CLI subprocess rehearsal also checks both success and
+failure artifacts against the same upload validator.
+
+This is schema and consistency checking, not independent inference
+provenance, cryptographic attestation of model execution or a release
+decision. It does not authorize the W5-L experiment. Stage 45 NO_GO.

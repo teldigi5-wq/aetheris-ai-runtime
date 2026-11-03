@@ -59,8 +59,9 @@ jobs:
           node --check w5l_owner_cpu_gate.mjs
           node --check w5l_owner_cpu_cli.mjs
           node --check w5l_live_capture_adapter.mjs
+          node --check w5l_sanitized_metadata_gate.mjs
           node w5l_owner_cpu_cli.mjs authorize
-          node --test test_w5l_owner_cpu_gate.mjs
+          node --test test_w5l_owner_cpu_gate.mjs test_w5l_sanitized_metadata_gate.mjs
           echo E6_W5L_NEW_LABEL_EXACT_SHA_VERIFIED_NO_INFERENCE_YET
       - name: Demand successful model-free CI on exactly the labeled commit
         env:
@@ -149,8 +150,15 @@ jobs:
           node w5l_owner_cpu_cli.mjs run
           test -s target/e6-w5l-owner-cpu-review/paired-design-metadata.json
           echo E6_W5L_DESIGN_ONLY_UNATTESTED_HUMAN_REVIEW_REQUIRED_NO_RELEASE
-      - name: Preserve only sanitized evidence for seven days even on rejection
+      - name: Reject any noncanonical or raw owner CPU evidence before upload
+        id: w5l_artifact_validation
         if: always()
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          node w5l_sanitized_metadata_gate.mjs
+      - name: Preserve only sanitized evidence for seven days even on rejection
+        if: ${{ always() && steps.w5l_artifact_validation.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: e6-w5l-owner-approved-six-cell-sanitized-metadata

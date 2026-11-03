@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,mkdtemp,mkdir,writeFile,rm,symlink,readdir,copyFile,stat} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
-import {join} from 'node:path';
+import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {CPU_LABEL,authorizePairedCpuLabelEvent,authorizeLivePairedCpuPr,makeUnverifiablePairedCpuAttempt} from './w5l_owner_cpu_gate.mjs';
+import {inspectSanitizedCpuArtifact} from './w5l_sanitized_metadata_gate.mjs';
 const SHA='a'.repeat(40),REPO='teldigi5-wq/aetheris-ai-runtime';
 const BASE='feat/e6-w5i-local-inference-completion-20261102';
 const pr=()=>({number:275,state:'open',draft:true,merged_at:null,
@@ -201,6 +202,7 @@ test('actual W5-L CLI rehearses revoked, partially failed and completed six-cell
 },async()=>{
  const base=await mkdtemp(join(runner,'w5l-cli-isolated-rehearsal-'));
  const sourceDir=fileURLToPath(new URL('.',import.meta.url));
+ const canonicalBriefs=JSON.parse(await readFile(new URL('./w5b_heldout_briefs.json',import.meta.url),'utf8')).briefs;
  const canary='MODEL_PRIVATE_CANARY_MUST_NEVER_APPEAR';
  const fakePreload=String.raw`
 import {readFile} from 'node:fs/promises';
@@ -295,6 +297,10 @@ globalThis.fetch=async(url,options)=>{
   assert.equal(denied.status,1,denied.stderr);
   assert.match(denied.stderr,/LIVE_PAIRED_CPU_APPROVAL_REVOKED_OR_HEAD_CHANGED/);
   await assert.rejects(readFile(deniedSnapshot.resultFile),{code:'ENOENT'});
+  await assert.rejects(inspectSanitizedCpuArtifact({
+   directory:dirname(deniedSnapshot.resultFile),sourceCommitSha:SHA,
+   githubRunId:'41630752655',briefs:canonicalBriefs
+  }));
   await writeFile(livePath,JSON.stringify(pr()),{mode:0o600});
   const failedSnapshot=await clone('partial');
   const failed=invoke(failedSnapshot,'partial');
@@ -314,6 +320,11 @@ globalThis.fetch=async(url,options)=>{
   assert.equal(fallback.notRun,null);
   assert.equal(fallback.releaseGo,false);
   assert.equal((await stat(failedSnapshot.resultFile)).mode&0o777,0o600);
+  const checkedFailure=await inspectSanitizedCpuArtifact({
+   directory:dirname(failedSnapshot.resultFile),sourceCommitSha:SHA,
+   githubRunId:'41630752655',briefs:canonicalBriefs
+  });
+  assert.equal(checkedFailure.completeSixCells,false);
   const revokedMidSnapshot=await clone('revoked-mid-run');
   const revokedMid=invoke(revokedMidSnapshot,'revoke-after-one');
   assert.equal(revokedMid.status,1,revokedMid.stderr);
@@ -342,6 +353,12 @@ globalThis.fetch=async(url,options)=>{
   assert.equal(full.stage45Go,false);
   assert.equal(full.releaseGo,false);
   assert.equal((await stat(successSnapshot.resultFile)).mode&0o777,0o600);
+  const checkedComplete=await inspectSanitizedCpuArtifact({
+   directory:dirname(successSnapshot.resultFile),sourceCommitSha:SHA,
+   githubRunId:'41630752655',briefs:canonicalBriefs
+  });
+  assert.equal(checkedComplete.completeSixCells,true);
+  assert.equal(checkedComplete.schemaOnlyNotAuthenticity,true);
  }finally{await rm(base,{recursive:true,force:true});}
 });
 
