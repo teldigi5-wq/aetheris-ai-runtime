@@ -138,3 +138,28 @@ test('no approval callback denies before any model request',async()=>{
  }),/EXPLICIT_TRANSPORT_APPROVAL_AND_CLOCK_REQUIRED/);
  assert.equal(fake.requests.length,0);
 });
+
+test('approval network latency cannot bias per-method response elapsed time',async()=>{
+ const fake=stub();
+ let elapsed=0;
+ const output=await collectBoundedPairedDesign({
+  briefs,sourceCommitSha:SHA,clock:()=>elapsed,
+  beforeRequest:async()=>{elapsed+=700;return true;},
+  transport:async(url,opts)=>{
+   elapsed+=120;
+   return fake.transport(url,opts);
+  }
+ });
+ assert.equal(fake.requests.length,12);
+ assert.deepEqual(output.comparison.methods.map(m=>m.reportedElapsedMs),[360,1080]);
+ assert.equal(output.comparison.cumulativeReportedElapsedMs,1440);
+ assert.equal(elapsed,9840);
+ let launched=0,clock=0;
+ const bounded=stub();
+ await assert.rejects(collectBoundedPairedDesign({
+  briefs,sourceCommitSha:SHA,clock:()=>clock,
+  beforeRequest:async()=>{clock+=3_300_000;return true;},
+  transport:async(url,opts)=>{launched++;return bounded.transport(url,opts);}
+ }),/TOTAL_RESEARCH_TIME_EXCEEDED/);
+ assert.equal(launched,0);
+});

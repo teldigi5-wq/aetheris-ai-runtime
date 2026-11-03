@@ -96,7 +96,10 @@ export async function collectBoundedPairedDesign({
  const start=now();
  for(let index=0;index<protocol.planned.length;index++){
    const plan=protocol.planned[index],brief=briefs[Math.floor(index/2)];
-   const cellStart=now(),attempts=[];
+   const attempts=[];
+   // Sum bounded model transport and parsing, excluding authorization latency.
+   // The absolute 55-minute deadline still includes ALL elapsed time.
+   let modelRequestElapsedMs=0;
    let identity,home,accepted=false,rejected=false,retryCode=null;
    const stages=plan.mode==='three_stage'?['identity','home','approach']:['design','design'];
    for(let i=0;i<stages.length;i++){
@@ -110,9 +113,12 @@ export async function collectBoundedPairedDesign({
      // model request, including an allowed compact-design retry.
      if(await beforeRequest()!==true)fail('MODEL_REQUEST_APPROVAL_REVOKED');
      if(now()-start>=LIMIT_MS)fail('TOTAL_RESEARCH_TIME_EXCEEDED');
+     const modelRequestStarted=now();
      const observed=await captureOne(prompt,model,transport);
+     const modelRequestFinished=now();
+     modelRequestElapsedMs+=Math.ceil(modelRequestFinished-modelRequestStarted);
      attempts.push({phase,promptSha256:sha(prompt),envelope:observed.envelope});
-     if(now()-start>LIMIT_MS)fail('TOTAL_RESEARCH_TIME_EXCEEDED');
+     if(modelRequestFinished-start>LIMIT_MS)fail('TOTAL_RESEARCH_TIME_EXCEEDED');
      if(observed.terminal){rejected=true;break;}
      try{
        const value=observed.result.design;
@@ -138,7 +144,7 @@ export async function collectBoundedPairedDesign({
    }
    if(!accepted&&!rejected)fail('INCOMPLETE_PHASE_SEQUENCE');
    captures.push({projectSlug:plan.projectSlug,mode:plan.mode,
-     reportedElapsedMs:Math.ceil(now()-cellStart),attempts});
+     reportedElapsedMs:modelRequestElapsedMs,attempts});
  }
  const assessed=evaluateCapturedPairedDesign({briefs,sourceCommitSha,captures});
  return Object.freeze({

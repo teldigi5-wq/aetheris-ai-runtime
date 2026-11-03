@@ -751,3 +751,22 @@ including revocation after one fake model call. **No actual inference or
 model download is performed by CI.** Revocation is checked between calls,
 not while an in-flight request executes; a running owner trial should
 also be canceled in GitHub Actions when permission is withdrawn.
+
+### W5-L timing separation: provider response time versus authorization overhead
+
+An execution-path audit found that per-cell elapsed time included the
+fresh GitHub owner-approval lookup before each model request. Because
+the staged method makes three calls and compact usually makes one,
+that overhead could bias reported timing in favor of the compact method.
+
+The live capture adapter now reports only the elapsed time inside the
+bounded model-response transport and parsing for each attempted call.
+The absolute 55-minute wall-clock ceiling still includes authorization,
+prompt preparation, validation and all other overhead. A deterministic
+synthetic-clock regression proves that authorization latency is excluded
+from per-cell timing but still enforced by the total job cutoff.
+
+This remains design-only, not a hardware benchmark or independently
+proven model-only generation latency. The arms have unequal request
+budgets, so comparableBudget remains false; human design quality and
+Stage 45 production readiness are not established.
