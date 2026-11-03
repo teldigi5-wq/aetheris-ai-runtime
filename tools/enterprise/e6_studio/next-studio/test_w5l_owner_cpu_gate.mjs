@@ -361,3 +361,40 @@ test('consumed W5-J label can never start the historical weaker CPU runner',asyn
  assert(!next.includes('      false &&\n'));
  assert(next.includes("github.event.label.name == 'e6-w5l-six-cell-cpu-approved'"));
 });
+
+test('every label-triggered CPU workflow for PR275 is inventoried and legacy disabled',async()=>{
+ const folder=new URL('../../../../.github/workflows/',import.meta.url);
+ const filenames=(await readdir(folder)).filter(x=>/\.ya?ml$/.test(x)).sort();
+ assert(filenames.length>=75,'workflow discovery unexpectedly incomplete');
+ const eligible=[];
+ let otherExperiment=null;
+ for(const filename of filenames){
+  const raw=await readFile(new URL(filename,folder),'utf8');
+  // A labeled PR event is necessary, but never sufficient for CPU approval.
+  if(!/^on:\s*\n  pull_request:\s*\n    types:\s*\n      - labeled/m.test(raw))
+   continue;
+  const src=raw.replace(/^\s*#.*$/gm,'');
+  if(filename==='runtime-e6-w5d-cpu-optin.yml')
+   otherExperiment=src;
+  if(!/github\.event\.pull_request\.number\s*==\s*275/.test(src))
+   continue;
+  const usesCpu=/OLLAMA_HOST:|ollama.*pull|E6_W5[DJL]_.*CPU/.test(src);
+  if(usesCpu)eligible.push({filename,src});
+ }
+ assert.deepEqual(eligible.map(x=>x.filename),[
+  'runtime-e6-w5j-optin-heldout-cpu.yml',
+  'runtime-e6-w5l-optin-paired-cpu.yml'
+ ]);
+ const old=eligible[0].src,next=eligible[1].src;
+ assert(old.includes("    if: >-\n      false &&\n      github.event.label.name == 'e6-w5j-three-brief-cpu-approved'"));
+ assert(next.includes("    if: >-\n      github.event.label.name == 'e6-w5l-six-cell-cpu-approved'"));
+ assert(next.includes("github.actor == 'teldigi5-wq'"));
+ assert(next.includes("github.event.pull_request.head.repo.full_name == github.repository"));
+ assert(next.includes("checks: read"));
+ assert(next.includes("pull-requests: read"));
+ assert(next.includes("persist-credentials: false"));
+ assert(!next.includes("      false &&"));
+ assert(otherExperiment);
+ assert(otherExperiment.includes("github.event.pull_request.number == 269"));
+ assert(!otherExperiment.includes("github.event.pull_request.number == 275"));
+});
