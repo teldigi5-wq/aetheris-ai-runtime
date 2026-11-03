@@ -24,7 +24,11 @@ const terminalProvider=new Set([
  'E6_W5A_MODEL_GENERATION_NOT_NORMALLY_FINISHED',
  'E6_W5A_MODEL_JSON_PARSE_REJECTED'
 ]);
-const LIMIT_MS=55*60*1000,MAX_ENVELOPE_BYTES=48_000;
+// This live capture starts AFTER checkout, runner setup and model downloads.
+// The job has a 55-minute TOTAL budget, so the collector must stop early
+// enough for the sanitized failure receipt and gated artifact upload.
+// A single in-flight request may take another 180 seconds.
+const LIMIT_MS=21*60*1000,MAX_ENVELOPE_BYTES=48_000;
 function assertPart(brief,part,phase){
  if(phase==='identity'){
    validateModelIdentity(brief,part);return;
@@ -98,7 +102,7 @@ export async function collectBoundedPairedDesign({
    const plan=protocol.planned[index],brief=briefs[Math.floor(index/2)];
    const attempts=[];
    // Sum bounded model transport and parsing, excluding authorization latency.
-   // The absolute 55-minute deadline still includes ALL elapsed time.
+   // The 21-minute collector deadline still includes ALL local elapsed time.
    let modelRequestElapsedMs=0;
    let identity,home,accepted=false,rejected=false,retryCode=null;
    const stages=plan.mode==='three_stage'?['identity','home','approach']:['design','design'];

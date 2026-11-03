@@ -789,3 +789,26 @@ require new independent review and a new explicit authorization.
 This is a bounded cross-file finding, not a full security certification.
 The W5-L labeled trigger and real-model path remain unexecuted and
 Stage 45 remains NO_GO.
+
+### W5-L research timeout correction (2026-11-03; supersedes earlier live 55-minute collector statements)
+
+Older W5-L narrative in this document described a live 55-minute
+collector observation deadline. That equals the full owner-only GitHub
+job timeout and is not a safe operational reserve after checkout,
+Ollama installation, and weights download. The current implementation
+uses a **21-minute live collector deadline**, with an existing
+180-second maximum per request, a **29-minute inference-step backstop**
+and the original **55-minute whole-job** ceiling. The pinned runtime
+archive download now has a **510-second whole-retry** limit and the
+model pull remains limited to **600 seconds**.
+
+The research receipt/protocol's historical 55-minute maximum remains
+a general validation upper bound, not the duration currently allowed
+for owner-approved W5-L live generation. The live adapter applies
+the tighter deadline before each request and after its response.
+
+An external GitHub timeout, cancellation or a failed setup can still
+produce no receipt; such a run is UNVERIFIED and is not counted as
+six completed or rejected observations. The experimental workflow
+has not been run, and all results from normal PR CI are synthetic.
+Stage 45 remains NO_GO.

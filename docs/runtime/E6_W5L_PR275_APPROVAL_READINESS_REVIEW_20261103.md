@@ -183,3 +183,29 @@ only; no real CPU inference, merge or deployment is authorized.
 
 Stage 45 remains NO_GO.
 
+## Whole-job versus model-capture timeout budget
+
+Independent review identified an avoidable failure mode: the previous
+collector allowed 55 minutes *after* runner setup, Ollama installation
+and model-weight download, but the GitHub job itself also had a 55-minute
+total deadline. Thus GitHub could terminate the job before the CLI
+writes its sanitized error receipt or the artifact gate runs.
+
+The approved W5-L CPU design now conservatively caps **live capture
+at 21 minutes**, with up to 180 seconds for the last in-flight model
+request, while retaining the 55-minute maximum job time. A 29-minute
+step-level backstop bounds any unexpected CLI stall. The archive
+download is bounded to 510 seconds over all retries, while the model
+pull remains limited to 600 seconds. The stricter deadlines preserve
+a practical margin for setup and the final allowlisted artifact upload.
+
+These timings are safety ceilings, not measured runtime benchmarks.
+Slow hosting, GitHub cancellation, failed downloads, or extra runner
+overhead can still prevent *any* receipt from being written. A missing
+receipt must be treated as **UNVERIFIED**, never as a completed or
+rejected six-case trial. CI verifies the deadline and ordering with
+synthetic clocks and static workflow assertions only; no weights were
+downloaded and the real workflow activation remains unverified.
+
+Stage 45 remains NO_GO.
+

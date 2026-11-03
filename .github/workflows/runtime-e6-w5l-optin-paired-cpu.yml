@@ -101,7 +101,8 @@ jobs:
       - name: Download SHA-pinned CPU-only Ollama v0.40.13 into ephemeral runner
         run: |
           set -euo pipefail
-          curl --fail --location --retry 2 --connect-timeout 20 --max-time 480 --max-filesize 1600000000 'https://github.com/ollama/ollama/releases/download/v0.40.13/ollama-linux-amd64.tar.zst' -o "$RUNNER_TEMP/w5l-ollama-linux-amd64.tar.zst"
+          # Bound the entire retry sequence, not just each individual curl attempt.
+          timeout --signal=TERM --kill-after=10s 510s curl --fail --location --retry 2 --connect-timeout 20 --max-time 480 --max-filesize 1600000000 'https://github.com/ollama/ollama/releases/download/v0.40.13/ollama-linux-amd64.tar.zst' -o "$RUNNER_TEMP/w5l-ollama-linux-amd64.tar.zst"
           echo 'c9490e0f520be21271d969e6703f012268b1d39f8b70dd58854e5bfef7a75bb6  '"$RUNNER_TEMP/w5l-ollama-linux-amd64.tar.zst" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/w5l-ollama-bin" "$RUNNER_TEMP/w5l-ollama-models"
           tar --zstd -xf "$RUNNER_TEMP/w5l-ollama-linux-amd64.tar.zst" -C "$RUNNER_TEMP/w5l-ollama-bin"
@@ -154,6 +155,9 @@ jobs:
           cd tools/enterprise/e6_studio/next-studio
           node w5l_owner_cpu_cli.mjs live-approval
       - name: Attempt exactly three held-out compact-versus-staged pairs on CPU
+        # Backstop only: the 21-minute collector deadline is responsible
+        # for graceful failure receipts before this external kill limit.
+        timeout-minutes: 29
         env:
           GH_READ_TOKEN: ${{ github.token }}
         run: |

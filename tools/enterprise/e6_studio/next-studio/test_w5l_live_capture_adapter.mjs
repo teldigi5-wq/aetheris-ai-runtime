@@ -89,7 +89,7 @@ test('no explicit injected transport, invalid clock or fixed job cap fail closed
  let ticks=0;const bounded=stub();
  await assert.rejects(collectBoundedPairedDesign({
   briefs,sourceCommitSha:SHA,transport:bounded.transport,beforeRequest:async()=>true,
-  clock:()=>{ticks+=1;return ticks>3?3_300_100:ticks;}
+  clock:()=>{ticks+=1;return ticks>3?1_260_100:ticks;}
  }),/TOTAL_RESEARCH_TIME_EXCEEDED/);
  assert(bounded.requests.length<=1);
 });
@@ -158,8 +158,29 @@ test('approval network latency cannot bias per-method response elapsed time',asy
  const bounded=stub();
  await assert.rejects(collectBoundedPairedDesign({
   briefs,sourceCommitSha:SHA,clock:()=>clock,
-  beforeRequest:async()=>{clock+=3_300_000;return true;},
+  beforeRequest:async()=>{clock+=1_260_000;return true;},
   transport:async(url,opts)=>{launched++;return bounded.transport(url,opts);}
  }),/TOTAL_RESEARCH_TIME_EXCEEDED/);
  assert.equal(launched,0);
+});
+test('owner study hard-stops at 21m before the 55m workflow timeout',async()=>{
+ const source=await readFile(new URL('./w5l_live_capture_adapter.mjs',import.meta.url),'utf8');
+ assert(source.includes('const LIMIT_MS=21*60*1000'));
+ const fake=stub();
+ let millis=0;
+ await assert.rejects(collectBoundedPairedDesign({
+  briefs,sourceCommitSha:SHA,clock:()=>millis,
+  beforeRequest:async()=>{millis=21*60*1000;return true;},
+  transport:fake.transport
+ }),/TOTAL_RESEARCH_TIME_EXCEEDED/);
+ assert.equal(fake.requests.length,0);
+});
+test('owner workflow bounds archive retries and leaves a timeout cushion for evidence',async()=>{
+ const wf=await readFile(new URL('../../../../.github/workflows/runtime-e6-w5l-optin-paired-cpu.yml',import.meta.url),'utf8');
+ assert(wf.includes('timeout-minutes: 55'));
+ assert(wf.includes('timeout --signal=TERM --kill-after=10s 510s curl --fail --location --retry 2'));
+ assert(wf.includes('timeout --signal=TERM --kill-after=10s 600s'));
+ const trial=wf.slice(wf.indexOf('      - name: Attempt exactly three held-out compact-versus-staged pairs on CPU'));
+ assert(trial.includes('timeout-minutes: 29'));
+ assert(trial.indexOf('timeout-minutes: 29')<trial.indexOf('node w5l_owner_cpu_cli.mjs run'));
 });
