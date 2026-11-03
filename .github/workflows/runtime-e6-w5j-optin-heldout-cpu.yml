@@ -1,0 +1,269 @@
+name: Enterprise E6 W5-J Real Three-Brief Cloud CPU Trial - Explicit Owner Label Only
+on:
+  pull_request:
+    types:
+      - labeled
+    branches:
+      - feat/e6-w5i-local-inference-completion-20261102
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: e6-w5j-owner-approval-pilot
+  cancel-in-progress: false
+jobs:
+  owner-approved-three-brief-cloud-cpu:
+    # RETIRED: old W5-J approval was consumed; execution must remain impossible.
+    # Historical implementation retained for audit; W5-L is a separate experiment.
+    if: >-
+      false &&
+      github.event.label.name == 'e6-w5j-three-brief-cpu-approved' &&
+      github.event.pull_request.number == 275 &&
+      github.event.pull_request.draft == true &&
+      github.event.pull_request.state == 'open' &&
+      github.event.pull_request.user.login == 'teldigi5-wq' &&
+      github.actor == 'teldigi5-wq' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == 'feat/e6-w5i-local-inference-completion-20261102'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      OLLAMA_HOST: 127.0.0.1:11434
+      OLLAMA_LLM_LIBRARY: cpu
+      OLLAMA_NUM_PARALLEL: '1'
+      CUDA_VISIBLE_DEVICES: '-1'
+      HIP_VISIBLE_DEVICES: '-1'
+      E6_W5J_ENABLE_OWNER_LABELED_CPU_TRIAL: 'YES'
+      E6_W5J_APPROVED_PR_NUMBER: '275'
+      E6_W5J_CHECKED_OUT_PR_HEAD: ${{ github.event.pull_request.head.sha }}
+      MODEL_TAG: qwen2.5:0.5b
+    steps:
+      - name: Checkout exact approved research head with no saved credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Set up pinned Node 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Verify explicit owner label and immutable exact-source identity BEFORE downloads
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          test "$(uname -m)" = 'x86_64'
+          cd tools/enterprise/e6_studio/next-studio
+          node --check w5j_cpu_trial_cli.mjs
+          node --check w5j_cpu_trial_gate.mjs
+          node w5j_cpu_trial_cli.mjs authorize
+          node --test test_w5j_cpu_trial_gate.mjs
+          echo 'E6_W5J_EXPLICIT_OWNER_CLOUD_CPU_TRIAL_ONLY_NO_GPU_NO_DEPLOY'
+      - name: Require successful model-free exact-head research CI before cloud downloads
+        env:
+          W5J_APPROVED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$W5J_APPROVED_HEAD"
+          curl --fail --silent --show-error --location --retry 2 \
+            --connect-timeout 12 --max-time 35 \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'User-Agent: aetheris-w5j-exact-head-gate' \
+            "https://api.github.com/repos/teldigi5-wq/aetheris-ai-runtime/commits/$W5J_APPROVED_HEAD/check-runs?per_page=100" \
+            --output "$RUNNER_TEMP/w5j-preflight-checks.json"
+          python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          sha=os.environ['W5J_APPROVED_HEAD']
+          assert re.fullmatch(r'[a-f0-9]{40}',sha)
+          checks=json.loads((Path(os.environ['RUNNER_TEMP'])/'w5j-preflight-checks.json').read_text())
+          assert isinstance(checks,dict) and checks.get('total_count',101)<=100
+          matches=[c for c in checks.get('check_runs',[]) if
+                   c.get('name')=='bounded-model-proposal-and-simulated-browser-only']
+          assert len(matches)==1,'exact-head model-free preflight absent or ambiguous'
+          c=matches[0]
+          assert c.get('head_sha')==sha
+          assert c.get('status')=='completed' and c.get('conclusion')=='success'
+          assert c.get('app',{}).get('slug')=='github-actions'
+          print('E6_W5J_PINNED_HEAD_NORMAL_CI_SUCCESS_REQUIRED_BEFORE_DOWNLOAD')
+          PY
+      - name: Revalidate current owner approval before research dependencies and model downloads
+        env:
+          GH_READ_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$E6_W5J_CHECKED_OUT_PR_HEAD"
+          curl --fail --silent --show-error --location --retry 2 \
+            --connect-timeout 12 --max-time 35 --max-filesize 200000 \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer $GH_READ_TOKEN" \
+            -H 'User-Agent: aetheris-w5j-live-approval-recheck' \
+            'https://api.github.com/repos/teldigi5-wq/aetheris-ai-runtime/pulls/275' \
+            --output "$RUNNER_TEMP/w5j-live-owner-pr.json"
+          cd tools/enterprise/e6_studio/next-studio
+          node w5j_cpu_trial_cli.mjs live-approval
+      - name: Install locked build dependencies and test-only Chromium on isolated runner
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          python3 scripts/validate_dependency_lock.py
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0 @axe-core/playwright@4.14.0
+          npx playwright install --with-deps chromium
+      - name: Download verified Ollama v0.40.13 binary to ephemeral CPU host
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 2 --connect-timeout 20 --max-time 480 --max-filesize 1600000000 \
+            'https://github.com/ollama/ollama/releases/download/v0.40.13/ollama-linux-amd64.tar.zst' \
+            --output "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
+          echo 'c9490e0f520be21271d969e6703f012268b1d39f8b70dd58854e5bfef7a75bb6  '"$RUNNER_TEMP/ollama-linux-amd64.tar.zst" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/ollama-bin" "$RUNNER_TEMP/ollama-models"
+          tar --zstd -xf "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" -C "$RUNNER_TEMP/ollama-bin"
+          test -x "$RUNNER_TEMP/ollama-bin/bin/ollama"
+          echo "$RUNNER_TEMP/ollama-bin/bin" >> "$GITHUB_PATH"
+          echo "OLLAMA_MODELS=$RUNNER_TEMP/ollama-models" >> "$GITHUB_ENV"
+      - name: Start CPU-only local Ollama and fetch one limited research model
+        run: |
+          set -euo pipefail
+          export OLLAMA_MODELS="$RUNNER_TEMP/ollama-models"
+          "$RUNNER_TEMP/ollama-bin/bin/ollama" serve > "$RUNNER_TEMP/ollama-server-private.log" 2>&1 &
+          for n in $(seq 1 100); do
+            if curl --silent --fail --max-time 2 'http://127.0.0.1:11434/api/version' > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent --max-time 5 'http://127.0.0.1:11434/api/version' > /dev/null
+          "$RUNNER_TEMP/ollama-bin/bin/ollama" pull "$MODEL_TAG"
+          # Official Ollama tag ID prefix catches accidental manifest drift.
+          # This is NOT independently verified execution of immutable model weights.
+          curl --fail --silent --show-error --max-time 15             'http://127.0.0.1:11434/api/tags'             --output "$RUNNER_TEMP/w5j-installed-model-tags.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          data=json.loads((Path(os.environ['RUNNER_TEMP'])/'w5j-installed-model-tags.json').read_text())
+          entries=[v for v in data.get('models',[]) if isinstance(v,dict) and
+                   (v.get('name')=='qwen2.5:0.5b' or v.get('model')=='qwen2.5:0.5b')]
+          assert len(entries)==1,'expected model was not installed unambiguously'
+          digest=entries[0].get('digest','')
+          assert isinstance(digest,str)
+          model_id=digest.removeprefix('sha256:').lower()
+          assert len(model_id)==64 and model_id.startswith('a8b0c5157701'),(
+            'installed tag differs from documented research model'
+          )
+          print('E6_W5J_VENDOR_TAG_PREFIX_DRIFT_CHECK_NOT_WEIGHTS_ATTESTATION')
+          PY
+          echo 'E6_W5J_ONE_REAL_MODEL_DOWNLOADED_EPHEMERAL_CPU_RESEARCH_ONLY'
+      - name: Revalidate current owner approval immediately before model inference
+        env:
+          GH_READ_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$E6_W5J_CHECKED_OUT_PR_HEAD"
+          curl --fail --silent --show-error --location --retry 2 \
+            --connect-timeout 12 --max-time 35 --max-filesize 200000 \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer $GH_READ_TOKEN" \
+            -H 'User-Agent: aetheris-w5j-live-approval-recheck' \
+            'https://api.github.com/repos/teldigi5-wq/aetheris-ai-runtime/pulls/275' \
+            --output "$RUNNER_TEMP/w5j-live-owner-pr.json"
+          cd tools/enterprise/e6_studio/next-studio
+          node w5j_cpu_trial_cli.mjs live-approval
+      - name: Attempt genuine model authored design and restricted CSS for all 3 fixed briefs
+        run: |
+          set -euo pipefail
+          cd tools/enterprise/e6_studio/next-studio
+          set +e
+          E6_W5C_ALLOW_LOCAL_INFERENCE=YES E6_W5C_MODEL="$MODEL_TAG" node w5c_local_code_trial.mjs
+          inference_status=$?
+          set -e
+          if [ ! -s target/e6-w5c-local-css-research/source-code-trial-report.json ]; then
+            node w5j_cpu_trial_cli.mjs missing-report
+            echo 'E6_W5J_NO_VERIFIABLE_CASE_REPORT_NO_RELEASE'
+            exit 1
+          fi
+          if ! node w5j_cpu_trial_cli.mjs summarize; then
+            node w5j_cpu_trial_cli.mjs unverified-report
+            echo 'E6_W5J_NONEMPTY_REPORT_SUMMARY_REJECTED_NO_RELEASE'
+            exit 1
+          fi
+          if [ "$inference_status" -ne 0 ]; then
+            echo 'E6_W5J_GENUINE_MODEL_CASE_REJECTED; preserving sanitized evidence, NOT A RELEASE PASS'
+            exit 1
+          fi
+          node w5d_owner_browser_review.mjs
+          test -s target/e6-w5d-local-owner-browser-evidence/review-report.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('target/e6-w5d-local-owner-browser-evidence')
+          result=json.loads((root/'review-report.json').read_text())
+          assert result['allNineSoftwareBrowserReviewsPassed'] is True
+          assert result['bothRoutesCapturedForAllNineProfiles'] is True
+          assert result['bothRoutesKeyboardFocusVerified'] is True
+          assert result['bothRoutesAutomatedAccessibilityPassed'] is True
+          assert result['automatedAccessibilityRouteScanCount'] == 18
+          assert result['localNavigationLabRouteCount'] == 18
+          assert result['localNavigationLabBudgetsPassed'] is True
+          assert result['textResize200PercentRouteScanCount'] == 18
+          assert result['bothRoutesTextResizePassed'] is True
+          for profile in result['profiles']:
+              for route in ('homeAutomatedAccessibility', 'approachAutomatedAccessibility'):
+                  scanned=profile[route]
+                  assert scanned['automatedRuleScanPassed'] is True
+                  assert scanned['violations'] == 0
+                  assert scanned['independentWcagCertified'] is False
+                  assert scanned['screenReaderVerified'] is False
+                  nav=scanned['localNavigation']
+                  assert nav['technique'] == 'ACTUAL_LOCAL_CHROMIUM_NAVIGATION_AND_STATIC_BYTES'
+                  assert nav['sameOriginLocalOnly'] is True
+                  assert 500 <= nav['htmlDocumentBytes'] <= 50_000
+                  assert 1000 <= nav['cssStylesheetBytes'] <= 25_000
+                  assert 0 <= nav['responseEndMs'] <= nav['domContentLoadedMs'] <= nav['loadEventEndMs'] <= 30_000
+                  assert nav['fieldCoreWebVitalsMeasured'] is False
+                  assert nav['physicalDevicePerformanceMeasured'] is False
+                  assert nav['productionPerformanceCertified'] is False
+                  resized=scanned['textResize200Percent']
+                  assert resized['technique'] == 'CHROMIUM_SAME_ORIGIN_CSS_RESPONSE_ROOT_RESIZE'
+                  assert 1.95 <= resized['rootFontRatio'] <= 2.05
+                  assert 1.95 <= resized['bodyFontRatio'] <= 2.05
+                  assert resized['horizontalOverflowPx'] <= 2
+                  assert resized['mainVisible'] is True
+                  assert resized['headingVisible'] is True
+                  assert resized['navigationLinksVisible'] is True
+                  assert resized['browserUiZoomVerified'] is False
+                  assert resized['ownerDeviceVerified'] is False
+                  assert resized['independentWcagCertified'] is False
+          for profile in result['profiles']:
+              for route in ('homeKeyboard', 'approachKeyboard'):
+                  keyboard=profile[route]
+                  assert keyboard['firstTabIsSkip'] is True
+                  assert keyboard['focusOutlineVisible'] is True
+                  assert keyboard['mainFocused'] is True
+                  assert keyboard['focusReleased'] is True
+                  assert keyboard['authorJavascriptEnabled'] is False
+          assert result['fullPageScreenshotCount'] == 18
+          assert len(result['profiles']) == 9
+          assert len(list(root.glob('*.png'))) == 18
+          assert result['visualQualityHumanApproved'] is False
+          assert result['releaseGo'] is False and result['stage45Go'] is False
+          print('E6_W5J_GENUINE_CANDIDATES_18_SCREENSHOTS_FOR_HUMAN_REVIEW_NO_RELEASE')
+          PY
+          node w6_screenshot_integrity_gate.mjs
+          echo 'E6_W5J_THREE_GENUINE_CANDIDATES_FOR_HUMAN_REVIEW_ONLY_NOT_PRODUCTION'
+      - name: Seven-day sanitized summary even on rejection; never raw model source
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e6-w5j-owner-approved-cpu-sanitized-receipt
+          path: |
+            tools/enterprise/e6_studio/next-studio/target/e6-w5j-cloud-cpu-review/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Seven-day checked candidate and browser files only after complete success
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e6-w5j-owner-approved-cpu-checked-preview
+          path: |
+            tools/enterprise/e6_studio/next-studio/target/e6-w5c-local-css-research/
+            tools/enterprise/e6_studio/next-studio/target/e6-w5d-local-owner-browser-evidence/
+          retention-days: 7
+          if-no-files-found: error

@@ -56,11 +56,16 @@ async function keyboardAudit(page,viewport,path,origin){
   await page.keyboard.press('Enter');
   // Hash changes and scrolling alone are not keyboard-accessible focus.
   // Browser must focus the actual <main id="main" tabindex="-1"> node.
-  const entersMain=new URL(page.url()).hash==='#main';
-  const actualFocus=await page.waitForFunction(()=>
-    document.activeElement===document.querySelector('main#main')&&
-    document.activeElement?.getAttribute('tabindex')==='-1',null,
-    {timeout:1800}).then(()=>true,()=>false);
+  // Hash navigation and actual focus can settle on different browser turns.
+  // Both remain mandatory and are measured independently after Enter.
+  const [entersMain,actualFocus]=await Promise.all([
+    page.waitForFunction(()=>location.hash==='#main',null,
+      {timeout:1800}).then(()=>true,()=>false),
+    page.waitForFunction(()=>
+      document.activeElement===document.querySelector('main#main')&&
+      document.activeElement?.getAttribute('tabindex')==='-1',null,
+      {timeout:1800}).then(()=>true,()=>false)
+  ]);
   await page.goto(origin+path,{waitUntil:'load'});
   const dest=path==='/'?'/approach/':'/';
   let found=false,passed=false;

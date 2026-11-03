@@ -45,6 +45,54 @@ export function parseCodeProposal(raw,expectedSlug){
      typeof raw.cssSource!=='string')fail('INVALID_MODEL_CODE_ENVELOPE');
   return raw.cssSource;
 }
+
+const VALIDATION_CODES=new Set([
+ 'E6_W5A_MODEL_SCHEMA_OR_CONTRAST_REJECTED','E6_W5A_INVALID_PAGE_ARCHITECTURE',
+ 'E6_W5A_UNTRUSTED_PAGE_CONTENT','E6_W5A_INCOMPLETE_PAGE_IDENTITY',
+ 'E6_W5C_INVALID_MODEL_CODE_ENVELOPE','E6_W5C_INVALID_OR_UNSAFE_SOURCE',
+ 'E6_W5C_UNSUPPORTED_CSS_GRAMMAR','E6_W5C_SELECTOR_DENIED_OR_DUPLICATED',
+ 'E6_W5C_DECLARATION_COUNT_DENIED','E6_W5C_MALFORMED_DECLARATION',
+ 'E6_W5C_PROPERTY_OR_VALUE_DENIED','E6_W5C_RULE_COUNT_DENIED',
+ 'E6_W5C_TOO_FEW_RULES','E6_W5H_VALIDATION_REJECTED_AFTER_ONE_SAFE_RETRY',
+ 'E6_W5A_MODEL_JSON_PARSE_REJECTED'
+]);
+const PROTOCOL_CODES=new Set([
+ 'E6_W5A_INVALID_PROVIDER_JSON','E6_W5A_UNVERIFIED_PROVIDER_ENVELOPE',
+ 'E6_W5A_MODEL_GENERATION_NOT_NORMALLY_FINISHED',
+ 'E6_W5A_INVALID_GENERATION_TOKEN_COUNT'
+]);
+// Only publish known deterministic source codes. An injected provider error
+// matching the old E6_W5* regex must never be treated as trusted evidence.
+const SAFE_REJECTIONS=new Set([
+ ...VALIDATION_CODES,...PROTOCOL_CODES,
+ 'E6_W5A_MODEL_UNAVAILABLE_OR_HTTP_ERROR',
+ 'E6_W5A_MODEL_RESPONSE_BUDGET',
+ 'E6_W5A_PROVIDER_TIMEOUT_OR_ABORT',
+ 'E6_W5A_PROVIDER_TRANSPORT_FAILURE',
+ 'E6_W5A_PROVIDER_STREAM_INTERRUPTED',
+ 'E6_W5A_INVALID_LOCAL_MODEL_REQUEST',
+ 'E6_W5A_UNAPPROVED_INFERENCE_PHASE',
+ 'E6_W5H_REPAIR_PROMPT_BUDGET',
+ 'E6_W5H_INVALID_ATTEMPT_CONTRACT',
+ 'E6_W5C_COMPILED_CSS_SIZE_BUDGET'
+]);
+// Fixed codes only: never publish rejected source or arbitrary exception messages.
+const failureKind=(code,error,phase)=>{
+ if((phase==='DESIGN'||phase==='CSS')&&
+    ['AbortError','TimeoutError'].includes(error?.name))
+   return 'PROVIDER_ABORT_OR_TIMEOUT';
+ if(code==='E6_W5A_PROVIDER_TIMEOUT_OR_ABORT')
+   return 'PROVIDER_ABORT_OR_TIMEOUT';
+ if(code==='E6_W5A_MODEL_UNAVAILABLE_OR_HTTP_ERROR'||
+    code==='E6_W5A_MODEL_RESPONSE_BUDGET'||
+    code==='E6_W5A_PROVIDER_TRANSPORT_FAILURE'||
+    code==='E6_W5A_PROVIDER_STREAM_INTERRUPTED')return 'PROVIDER_IO_OR_LIMIT';
+ if(PROTOCOL_CODES.has(code))return 'PROVIDER_PROTOCOL';
+ if(VALIDATION_CODES.has(code))
+   return phase==='COMPILE'?'COMPILER_POLICY':'MODEL_CONTENT_OR_SCHEMA';
+ return 'UNCLASSIFIED';
+};
+
 export async function evaluateCodeHeldout({batch,model,baseCss,transport=fetch}){
   if(typeof model!=='string'||!MODEL_NAME.test(model)||typeof baseCss!=='string')
     fail('INVALID_REQUEST');
@@ -54,14 +102,25 @@ export async function evaluateCodeHeldout({batch,model,baseCss,transport=fetch})
   for(const brief of briefs){
     const base={projectSlug:brief.projectSlug,briefSha256:sha(JSON.stringify(brief)),
       modelReportedName:model};
+    const phaseReceipt={design:'NOT_EXECUTED',css:'NOT_EXECUTED',compile:'NOT_EXECUTED'};
+    let failurePhase='DESIGN';
     try{
+      phaseReceipt.design='ENTERED';
       const designPrompt=buildPrompt(brief);
       const first=await requestValidatedDesign(brief,model,{transport});
+      phaseReceipt.design='PASSED';
+      failurePhase='CSS';
+      phaseReceipt.css='ENTERED';
       const codePrompt=buildCssCodePrompt(brief,first.value);
       const second=await requestValidatedCss(brief,first.value,model,{transport});
+      phaseReceipt.css='PASSED';
+      failurePhase='COMPILE';
+      phaseReceipt.compile='ENTERED';
       const result=compileAuthoredSite(brief,first.value,second.value,baseCss);
+      phaseReceipt.compile='PASSED';
       sites.set(brief.projectSlug,result);
-      cases.push({...base,accepted:true,status:'HUMAN_REVIEW_REQUIRED',
+      cases.push({...base,phaseReceipt:{...phaseReceipt},
+        accepted:true,status:'HUMAN_REVIEW_REQUIRED',
         designPromptSha256:first.attemptedPromptSha256,
         cssPromptSha256:second.attemptedPromptSha256,
         initialDesignPromptSha256:first.initialPromptSha256,
@@ -88,8 +147,11 @@ export async function evaluateCodeHeldout({batch,model,baseCss,transport=fetch})
         codeSecurityPolicyPassed:true,humanVisualAccepted:false,releaseGo:false});
     }catch(error){
       const code=String(error?.message||'');
+      phaseReceipt[failurePhase.toLowerCase()]='FAILED';
       cases.push({...base,accepted:false,status:'REJECTED',
-        rejectionCode:/^E6_W5[ABCH]_[A-Z0-9_]+$/.test(code)?code:'E6_W5C_PROVIDER_OR_SCHEMA_REJECTED',
+        rejectionCode:SAFE_REJECTIONS.has(code)?code:'E6_W5C_UNCLASSIFIED_FAILURE',
+        failurePhase,failureKind:failureKind(code,error,failurePhase),
+        phaseReceipt:{...phaseReceipt},
         modelRuntimeAttested:false,codeSecurityPolicyPassed:false,
         humanVisualAccepted:false,releaseGo:false});
     }

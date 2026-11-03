@@ -42,9 +42,9 @@ export function validateOwnerBrief(b){
     fail('INVALID_OR_NONFICTIONAL_BRIEF');
   return b;
 }
-export function validateModelProposal(b,d){
+export function validateModelIdentity(b,d){
   validateOwnerBrief(b);
-  if(!rec(d,['version','projectSlug','siteName','tagline','description','art','pages'])||
+  if(!rec(d,['version','projectSlug','siteName','tagline','description','art'])||
     d.version!==1||d.projectSlug!==b.projectSlug||
     !plain(d.siteName,3,70)||!plain(d.tagline,8,100)||
     !plain(d.description,25,240)||
@@ -55,24 +55,35 @@ export function validateModelProposal(b,d){
     contrast(d.art.paper,d.art.ink)<4.5||
     contrast(d.art.paper,d.art.accent)<4.5||
     contrast(d.art.surface,d.art.ink)<4.5||
-    // .eyebrow uses accent on both the page and alternate section surface.
-    // Accepting only accent-on-paper would allow unreadable section labels.
-    contrast(d.art.surface,d.art.accent)<4.5||
+    contrast(d.art.surface,d.art.accent)<4.5)
+    fail('MODEL_SCHEMA_OR_CONTRAST_REJECTED');
+  return d;
+}
+export function validateModelPage(p){
+  if(!rec(p,['path','navLabel','heading','lede','sections'])||
+    !['/','/approach'].includes(p.path)||
+    !plain(p.navLabel,3,24)||!plain(p.heading,8,95)||
+    !plain(p.lede,35,260)||!arr(p.sections,2,3))
+    fail('INVALID_PAGE_ARCHITECTURE');
+  for(const sec of p.sections){
+    if(!rec(sec,['eyebrow','title','body','alignment'])||
+      !plain(sec.eyebrow,3,42)||!plain(sec.title,8,100)||
+      !plain(sec.body,40,400)||
+      !['left','center','right'].includes(sec.alignment))
+      fail('UNTRUSTED_PAGE_CONTENT');
+  }
+  return p;
+}
+export function validateModelProposal(b,d){
+  validateOwnerBrief(b);
+  if(!rec(d,['version','projectSlug','siteName','tagline','description','art','pages'])||
     !arr(d.pages,2,2))fail('MODEL_SCHEMA_OR_CONTRAST_REJECTED');
+  const {pages,...identity}=d;
+  validateModelIdentity(b,identity);
   const byPath=new Map();
   for(const p of d.pages){
-    if(!rec(p,['path','navLabel','heading','lede','sections'])||
-      !['/','/approach'].includes(p.path)||byPath.has(p.path)||
-      !plain(p.navLabel,3,24)||!plain(p.heading,8,95)||
-      !plain(p.lede,35,260)||!arr(p.sections,2,3))
-      fail('INVALID_PAGE_ARCHITECTURE');
-    for(const sec of p.sections){
-      if(!rec(sec,['eyebrow','title','body','alignment'])||
-        !plain(sec.eyebrow,3,42)||!plain(sec.title,8,100)||
-        !plain(sec.body,40,400)||
-        !['left','center','right'].includes(sec.alignment))
-        fail('UNTRUSTED_PAGE_CONTENT');
-    }
+    validateModelPage(p);
+    if(byPath.has(p.path))fail('INVALID_PAGE_ARCHITECTURE');
     byPath.set(p.path,p);
   }
   if(!byPath.has('/')||!byPath.has('/approach')||

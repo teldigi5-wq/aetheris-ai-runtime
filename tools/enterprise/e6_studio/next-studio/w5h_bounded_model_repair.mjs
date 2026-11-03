@@ -49,6 +49,12 @@ const repairText=(original,code)=>{
   if(prompt.length>8000)fail('REPAIR_PROMPT_BUDGET');
   return prompt;
 };
+// Expose the exact production retry prompt only for deterministic, offline
+// comparison of captured response metadata. No model call occurs here.
+export function buildDesignRepairPrompt(brief,code){
+ if(!designErrors.has(code))fail('UNAPPROVED_DESIGN_REPAIR_CODE');
+ return repairText(buildPrompt(brief),code);
+}
 async function tryValidated({basePrompt,model,transport,validator,allowed,phase}){
   if(typeof basePrompt!=='string'||!basePrompt||
      typeof validator!=='function'||!(allowed instanceof Set)||
