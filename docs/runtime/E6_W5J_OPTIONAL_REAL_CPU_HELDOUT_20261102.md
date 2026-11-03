@@ -619,3 +619,24 @@ Prompt hashes and provider-reported metrics in externally supplied captures
 remain unverified until they are tied to an authorized execution with
 independent evidence. Passing synthetic CI neither proves design quality
 nor authorizes model downloads, merge, deployment or Stage 45 GO.
+
+### W5-L next step: transport-injected bounded collector (not activated)
+
+`w5l_live_capture_adapter.mjs` now supplies the missing serial capture
+orchestrator for the fixed 3-brief × 2-method protocol. It makes model calls
+**only if a caller explicitly injects a transport**, via the existing W5-A
+loopback request/CPU-only/180-second timeout policy. It uses the same W5-H
+single sanitized compact retry and the W5-K three-stage prompts/validators.
+The returned artifact contains only derived design-only observations,
+classification and source-bound digests. Untrusted full responses remain
+ephemeral in memory and are never returned or logged. The adapter enforces
+a monotonic 55-minute overall observation ceiling in addition to the
+existing per-request budget and W5-L aggregate observation validation.
+
+The module has no command-line entrypoint, owner-approval grant, workflow
+trigger, default network transport, model download, or deployment action.
+CI uses injected human-authored response fixtures ONLY. A later separate
+owner-authorized CPU workflow must provide live approval, an exact
+source-head check, trusted digest publication, evidence retention and a
+hard job timeout before enabling any real transport. These tests neither
+prove genuine inference nor establish output originality or Stage 45 GO.
