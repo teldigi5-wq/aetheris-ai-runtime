@@ -640,3 +640,33 @@ owner-authorized CPU workflow must provide live approval, an exact
 source-head check, trusted digest publication, evidence retention and a
 hard job timeout before enabling any real transport. These tests neither
 prove genuine inference nor establish output originality or Stage 45 GO.
+ 
+### W5-L: separate, fresh-label owner-approved six-cell CPU workflow (not activated)
+
+The **new** experimental workflow
+`.github/workflows/runtime-e6-w5l-optin-paired-cpu.yml` listens only to
+the PR #275 `labeled` event for
+`e6-w5l-six-cell-cpu-approved` **by the repository owner**, while the PR
+remains an open draft at a fixed head SHA on the W5-I base. The consumed
+W5-J approval label is neither reused nor accepted. No label is applied by
+the code and this workflow is not invoked by the normal CI push.
+
+It requires successful **exact-head model-free CI**, rechecks the live
+GitHub PR/label before dependency or model download and again before
+inference, pins the CPU-only runner, Ollama binary hash and model tag,
+and limits the job to 55 minutes. The independently bounded W5-L
+transport-injected adapter performs three compact/staged brief pairs only
+after that authorization. The command creates an exclusive private
+directory and a **sanitized design-only summary/receipt**, not provider
+raw responses, prompts, screenshots, or actual site builds. The separate
+seven-day artifact contains no arbitrary model text. Missing/invalid
+outputs remain **UNVERIFIED** rather than being invented as rejections.
+
+Source-head checks, label checks, and SHA-256 integrity are authorization
+and tamper-detection measures, **not** attestation of weights, provider
+execution, genuine originality, budget fairness, real-site quality, or
+WCAG accessibility. Never treat a future green research job as Stage 45 GO
+or a deployment grant. A fresh deliberate owner label on the reviewed
+exact commit is required, and the owner must cancel an active job if
+approval is revoked after inference begins. The existing W5-J workflow
+remains separate and unchanged.

@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/runtime-e6-w5j-preflight.yml'
       - '.github/workflows/runtime-e6-w5j-optin-heldout-cpu.yml'
+      - '.github/workflows/runtime-e6-w5l-optin-paired-cpu.yml'
       - 'tools/enterprise/e6_studio/next-studio/w5j_*'
       - 'tools/enterprise/e6_studio/next-studio/w5d_owner_browser_review.mjs'
       - 'tools/enterprise/e6_studio/next-studio/w5a_model_design_compiler.mjs'
@@ -92,6 +93,9 @@ jobs:
           node --check test_w5l_captured_design_evaluator.mjs
           node --check w5l_live_capture_adapter.mjs
           node --check test_w5l_live_capture_adapter.mjs
+          node --check w5l_owner_cpu_gate.mjs
+          node --check w5l_owner_cpu_cli.mjs
+          node --check test_w5l_owner_cpu_gate.mjs
           test -s w5b_heldout_briefs.json
           test -s w5a_base.css
           test -s w5a_fictional_owner_brief.json
@@ -104,7 +108,7 @@ jobs:
         run: |
           set -euo pipefail
           cd tools/enterprise/e6_studio/next-studio
-          node --test test_experience_contract.mjs test_w2_compiler.mjs test_w2b_curated_compiler.mjs test_w2c_narrative_compiler.mjs test_w5a_model_contract.mjs test_w5b_heldout_evaluation.mjs test_w5c_css_code_gate.mjs test_w5d_trial_integrity.mjs test_w5d_cpu_smoke.mjs test_w5e_surface_contrast.mjs test_w5f_accessibility_policy.mjs test_w5g_skip_focus.mjs test_w5h_bounded_model_repair.mjs test_w5i_inference_completion.mjs test_w5j_cpu_trial_gate.mjs test_w5k_staged_design_research.mjs test_w5l_paired_evaluation_protocol.mjs test_w5l_offline_paired_rehearsal.mjs test_w5l_research_receipt.mjs test_w5l_captured_design_evaluator.mjs test_w5l_live_capture_adapter.mjs
+          node --test test_experience_contract.mjs test_w2_compiler.mjs test_w2b_curated_compiler.mjs test_w2c_narrative_compiler.mjs test_w5a_model_contract.mjs test_w5b_heldout_evaluation.mjs test_w5c_css_code_gate.mjs test_w5d_trial_integrity.mjs test_w5d_cpu_smoke.mjs test_w5e_surface_contrast.mjs test_w5f_accessibility_policy.mjs test_w5g_skip_focus.mjs test_w5h_bounded_model_repair.mjs test_w5i_inference_completion.mjs test_w5j_cpu_trial_gate.mjs test_w5k_staged_design_research.mjs test_w5l_paired_evaluation_protocol.mjs test_w5l_offline_paired_rehearsal.mjs test_w5l_research_receipt.mjs test_w5l_captured_design_evaluator.mjs test_w5l_live_capture_adapter.mjs test_w5l_owner_cpu_gate.mjs
           node w2c_generate_preview.mjs
           echo E6_W5J_OWNER_GATE_TESTS_ARE_MOCKS_ONLY
       - name: Preserve dependency lock integrity and Next static build
