@@ -15,6 +15,7 @@ export function authorizePairedCpuRunnerAttempt({actor,triggeringActor,runAttemp
 const OWNER='teldigi5-wq';
 const REPO='teldigi5-wq/aetheris-ai-runtime';
 const BASE='feat/e6-w5i-local-inference-completion-20261102';
+const BASE_SHA='d1abab54b80af1ec63ede7360869c4d9308441e5';
 const SHA=s=>typeof s==='string'&&/^[a-f0-9]{40}$/.test(s);
 const approvedLabels=labels=>Array.isArray(labels)&&labels.length<=100&&
  labels.filter(x=>x&&typeof x==='object'&&x.name===CPU_LABEL).length===1;
@@ -24,7 +25,8 @@ const validPr=(pr,headSha)=>pr&&typeof pr==='object'&&!Array.isArray(pr)&&
  pr.number===275&&pr.state==='open'&&pr.draft===true&&
  pr.merged_at===null&&pr.user?.login===OWNER&&
  pr.head?.sha===headSha&&pr.head?.repo?.full_name===REPO&&
- pr.base?.ref===BASE&&pr.base?.repo?.full_name===REPO;
+ pr.base?.ref===BASE&&pr.base?.sha===BASE_SHA&&
+ pr.base?.repo?.full_name===REPO;
 export function authorizePairedCpuLabelEvent(event,context={}){
  if(!validContext(context)||!event||typeof event!=='object'||
     Array.isArray(event)||event.action!=='labeled'||

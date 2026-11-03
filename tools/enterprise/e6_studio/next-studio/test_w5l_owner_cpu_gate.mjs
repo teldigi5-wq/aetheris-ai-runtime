@@ -8,10 +8,11 @@ import {CPU_LABEL,authorizePairedCpuLabelEvent,authorizeLivePairedCpuPr,makeUnve
 import {inspectSanitizedCpuArtifact} from './w5l_sanitized_metadata_gate.mjs';
 const SHA='a'.repeat(40),REPO='teldigi5-wq/aetheris-ai-runtime';
 const BASE='feat/e6-w5i-local-inference-completion-20261102';
+const BASE_SHA='d1abab54b80af1ec63ede7360869c4d9308441e5';
 const pr=()=>({number:275,state:'open',draft:true,merged_at:null,
  user:{login:'teldigi5-wq'},
  head:{sha:SHA,repo:{full_name:REPO}},
- base:{ref:BASE,repo:{full_name:REPO}},
+ base:{ref:BASE,sha:BASE_SHA,repo:{full_name:REPO}},
  labels:[{name:CPU_LABEL}]});
 const event=()=>({action:'labeled',label:{name:CPU_LABEL},pull_request:pr()});
 const ctx=()=>({actor:'teldigi5-wq',repository:REPO,expectedPr:275,headSha:SHA});
@@ -49,6 +50,8 @@ test('new owner-only approval event is not W5-J and does not grant release',()=>
    x=>{x.pull_request.head.sha='b'.repeat(40);},
    x=>{x.pull_request.head.repo.full_name='outsider/fork';},
    x=>{x.pull_request.base.ref='main';},
+   x=>{x.pull_request.base.sha='b'.repeat(40);},
+   x=>{delete x.pull_request.base.sha;},
    x=>{x.pull_request.base.repo.full_name='outsider/fork';},
    x=>{x.pull_request.user.login='not-owner';},
    x=>{x.pull_request.merged_at='2026-01-01T00:00:00Z';},
@@ -77,6 +80,8 @@ test('current PR approval recheck fails on revoked label, head change or merge',
   x=>{x.head.sha='b'.repeat(40);},
   x=>{x.head.repo.full_name='outsider/fork';},
   x=>{x.base.ref='main';},
+  x=>{x.base.sha='b'.repeat(40);},
+  x=>{delete x.base.sha;},
   x=>{x.draft=false;},
   x=>{x.state='closed';},
   x=>{x.merged_at='2026-11-03T12:00:00Z';}
@@ -96,6 +101,7 @@ test('separate W5-L workflow can only run on explicit new owner label',async()=>
  assert(wf.includes("test \"$GITHUB_RUN_ATTEMPT\" = '1'"));
  assert(wf.includes("test \"$GITHUB_TRIGGERING_ACTOR\" = 'teldigi5-wq'"));
  assert(wf.includes("github.event.pull_request.number == 275"));
+ assert(wf.includes("github.event.pull_request.base.sha == 'd1abab54b80af1ec63ede7360869c4d9308441e5'"));
  assert(wf.includes('persist-credentials: false'));
  assert(wf.includes('timeout-minutes: 55'));
  assert(wf.includes('OLLAMA_LLM_LIBRARY: cpu'));
@@ -249,6 +255,7 @@ globalThis.fetch=async(url,options)=>{
    head:{sha:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     repo:{full_name:'teldigi5-wq/aetheris-ai-runtime'}},
    base:{ref:'feat/e6-w5i-local-inference-completion-20261102',
+    sha:'d1abab54b80af1ec63ede7360869c4d9308441e5',
     repo:{full_name:'teldigi5-wq/aetheris-ai-runtime'}},
    labels:revoked?[]:[{name:'e6-w5l-six-cell-cpu-approved'}]
   }),{status:200});

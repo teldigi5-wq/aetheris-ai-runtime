@@ -8,7 +8,8 @@ const context={actor:'teldigi5-wq',repository:repo,expectedPr:275,headSha:SHA};
 const token='mock-test-only-token-not-authentication';
 const body=()=>({number:275,state:'open',draft:true,merged_at:null,
  user:{login:'teldigi5-wq'},head:{sha:SHA,repo:{full_name:repo}},
- base:{ref:'feat/e6-w5i-local-inference-completion-20261102',repo:{full_name:repo}},
+ base:{ref:'feat/e6-w5i-local-inference-completion-20261102',
+ sha:'d1abab54b80af1ec63ede7360869c4d9308441e5',repo:{full_name:repo}},
  labels:[{name:CPU_LABEL}]});
 const reply=(data,status=200)=>new Response(JSON.stringify(data),{status});
 const go=(transport,other={})=>requireCurrentOwnerApprovalForRequest({
@@ -35,6 +36,8 @@ test('label removal, reused W5-J label, head drift and closed draft fail closed'
   p=>{p.labels=[{name:'e6-w5j-three-brief-cpu-approved'}];},
   p=>{p.labels.push({name:CPU_LABEL});},
   p=>{p.head.sha='b'.repeat(40);},
+  p=>{p.base.sha='b'.repeat(40);},
+  p=>{delete p.base.sha;},
   p=>{p.draft=false;},p=>{p.state='closed';}
  ]){
   const pr=body();edit(pr);

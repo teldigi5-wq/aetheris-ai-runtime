@@ -24,7 +24,8 @@ jobs:
       github.triggering_actor == 'teldigi5-wq' &&
       github.run_attempt == '1' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.base.ref == 'feat/e6-w5i-local-inference-completion-20261102'
+      github.event.pull_request.base.ref == 'feat/e6-w5i-local-inference-completion-20261102' &&
+      github.event.pull_request.base.sha == 'd1abab54b80af1ec63ede7360869c4d9308441e5'
     runs-on: ubuntu-24.04
     timeout-minutes: 55
     env:

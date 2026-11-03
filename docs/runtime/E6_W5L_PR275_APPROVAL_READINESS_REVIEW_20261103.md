@@ -165,3 +165,21 @@ model request remain active.
 
 Neither actual model download nor GitHub label-triggered W5-L
 execution has been verified. Stage 45 remains NO_GO.
+
+## W5-L exact base-commit authorization
+
+The W5-L reviewer-approved diff depends on both the head and base
+commits, not only the head SHA and base branch name. Previously a
+base branch update could change the review target while the head
+and owner CPU label remained unchanged.
+
+The owner-label workflow condition, event verifier and per-request
+live PR verifier now require the base SHA
+`d1abab54b80af1ec63ede7360869c4d9308441e5` in addition to the source head, owner and
+repository checks. Missing or altered base SHAs fail closed.
+Legitimate base movement requires explicit re-review and an
+intentional pin update. Simulated tests demonstrate policy behavior
+only; no real CPU inference, merge or deployment is authorized.
+
+Stage 45 remains NO_GO.
+
