@@ -43,7 +43,7 @@ function stub({invalidFirst=false,abnormalFirst=false}={}){
  }};
 }
 const run=transport=>collectBoundedPairedDesign({
- briefs,sourceCommitSha:SHA,transport
+ briefs,sourceCommitSha:SHA,transport,beforeRequest:async()=>true
 });
 test('injected fake only: 3 pairs and 12 bounded calls, sanitized output only',async()=>{
  const fake=stub(),s=await run(fake.transport);
@@ -80,15 +80,15 @@ test('provider abnormal completion ends first cell with no unauthorized retry',a
 test('no explicit injected transport, invalid clock or fixed job cap fail closed',async()=>{
  await assert.rejects(collectBoundedPairedDesign({
    briefs,sourceCommitSha:SHA
- }),/EXPLICIT_TRANSPORT_AND_CLOCK_REQUIRED/);
+ }),/EXPLICIT_TRANSPORT_APPROVAL_AND_CLOCK_REQUIRED/);
  const fake=stub();
  await assert.rejects(collectBoundedPairedDesign({
-  briefs,sourceCommitSha:SHA,transport:fake.transport,clock:()=>NaN
+  briefs,sourceCommitSha:SHA,transport:fake.transport,beforeRequest:async()=>true,clock:()=>NaN
  }),/NONMONOTONIC_CAPTURE_CLOCK/);
  assert.equal(fake.requests.length,0);
  let ticks=0;const bounded=stub();
  await assert.rejects(collectBoundedPairedDesign({
-  briefs,sourceCommitSha:SHA,transport:bounded.transport,
+  briefs,sourceCommitSha:SHA,transport:bounded.transport,beforeRequest:async()=>true,
   clock:()=>{ticks+=1;return ticks>3?3_300_100:ticks;}
  }),/TOTAL_RESEARCH_TIME_EXCEEDED/);
  assert(bounded.requests.length<=1);
@@ -96,7 +96,7 @@ test('no explicit injected transport, invalid clock or fixed job cap fail closed
 test('bad provider shape, HTTP failures and untrusted byte sizes abort, not fabricate',async()=>{
  const bad=(body,status=200)=>async()=>new Response(body,{status});
  const ctx=fn=>collectBoundedPairedDesign({
-   briefs,sourceCommitSha:SHA,transport:fn
+   briefs,sourceCommitSha:SHA,transport:fn,beforeRequest:async()=>true
  });
  await assert.rejects(ctx(bad('server error',503)),/E6_W5A_/);
  // The canonical W5-A transport boundary deliberately masks exceptions
@@ -115,4 +115,26 @@ test('adapter has no implicit execution, network imports, logs or filesystem wri
     assert(!src.includes(forbidden),forbidden);
  assert(src.includes('modelRequestsIndependentlyVerified:false'));
  assert(src.includes('ownerExperimentApproved:false'));
+});
+
+test('approval revoked after first response prevents next model request and repair',async()=>{
+ const f=stub();let checks=0;
+ await assert.rejects(collectBoundedPairedDesign({
+  briefs,sourceCommitSha:SHA,transport:f.transport,
+  beforeRequest:async()=>++checks===1
+ }),/MODEL_REQUEST_APPROVAL_REVOKED/);
+ assert.equal(checks,2);assert.equal(f.requests.length,1);
+ const retry=stub({invalidFirst:true});let trials=0;
+ await assert.rejects(collectBoundedPairedDesign({
+  briefs,sourceCommitSha:SHA,transport:retry.transport,
+  beforeRequest:async()=>++trials===1
+ }),/MODEL_REQUEST_APPROVAL_REVOKED/);
+ assert.equal(trials,2);assert.equal(retry.requests.length,1);
+});
+test('no approval callback denies before any model request',async()=>{
+ const fake=stub();
+ await assert.rejects(collectBoundedPairedDesign({
+  briefs,sourceCommitSha:SHA,transport:fake.transport
+ }),/EXPLICIT_TRANSPORT_APPROVAL_AND_CLOCK_REQUIRED/);
+ assert.equal(fake.requests.length,0);
 });

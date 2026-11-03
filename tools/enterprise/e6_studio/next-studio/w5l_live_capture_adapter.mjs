@@ -79,10 +79,11 @@ async function captureOne(prompt,model,transport){
  * function with a fake transport produces NO model inference evidence.
  */
 export async function collectBoundedPairedDesign({
- briefs,sourceCommitSha,transport,clock=()=>performance.now()
+ briefs,sourceCommitSha,transport,beforeRequest,clock=()=>performance.now()
 }={}){
- if(typeof transport!=='function'||typeof clock!=='function')
-   fail('EXPLICIT_TRANSPORT_AND_CLOCK_REQUIRED');
+ if(typeof transport!=='function'||typeof beforeRequest!=='function'||
+    typeof clock!=='function')
+   fail('EXPLICIT_TRANSPORT_APPROVAL_AND_CLOCK_REQUIRED');
  const protocol=buildPairedEvaluationProtocol({briefs,sourceCommitSha});
  const model=protocol.modelTag,captures=[];
  let previous=-1;
@@ -105,6 +106,10 @@ export async function collectBoundedPairedDesign({
        (i===0?buildPrompt(brief):buildDesignRepairPrompt(brief,retryCode)):
        buildStagedDesignPrompt(brief,phase,{identity,home});
      if(prompt.length>8000)fail('PROMPT_TOO_LARGE');
+     // The owner-approved caller must revalidate the live PR before every
+     // model request, including an allowed compact-design retry.
+     if(await beforeRequest()!==true)fail('MODEL_REQUEST_APPROVAL_REVOKED');
+     if(now()-start>=LIMIT_MS)fail('TOTAL_RESEARCH_TIME_EXCEEDED');
      const observed=await captureOne(prompt,model,transport);
      attempts.push({phase,promptSha256:sha(prompt),envelope:observed.envelope});
      if(now()-start>LIMIT_MS)fail('TOTAL_RESEARCH_TIME_EXCEEDED');

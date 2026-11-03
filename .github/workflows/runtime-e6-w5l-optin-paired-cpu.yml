@@ -140,6 +140,8 @@ jobs:
           cd tools/enterprise/e6_studio/next-studio
           node w5l_owner_cpu_cli.mjs live-approval
       - name: Attempt exactly three held-out compact-versus-staged pairs on CPU
+        env:
+          GH_READ_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$E6_W5L_CHECKED_OUT_PR_HEAD"

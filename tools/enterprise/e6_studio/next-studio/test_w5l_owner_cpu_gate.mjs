@@ -79,6 +79,7 @@ test('separate W5-L workflow can only run on explicit new owner label',async()=>
  assert(wf.includes("HIP_VISIBLE_DEVICES: '-1'"));
  assert(wf.includes('MODEL_TAG: qwen2.5:0.5b'));
  assert(wf.includes('checks: read'));
+ assert(wf.includes('GH_READ_TOKEN: ${{ github.token }}'));
  assert(!wf.includes('permissions: write'));
  assert(!wf.includes('pull_request_target:'));
  assert(!wf.includes('workflow_dispatch:'));
@@ -143,6 +144,9 @@ test('CPU CLI error strings, owned artifacts and fixed paths avoid raw provider 
  assert(code.includes('authorizePairedCpuLabelEvent(event,context)'));
  assert(code.includes('authorizeLivePairedCpuPr('));
  assert(code.includes('transport:fetch'));
+ assert(code.includes('beforeRequest'));
+ assert(code.includes('requireCurrentOwnerApprovalForRequest'));
+ assert(code.includes('PER_REQUEST_GITHUB_APPROVAL_TOKEN_REQUIRED'));
  assert(code.includes('constants.O_NOFOLLOW'));
  assert(code.includes('flag:\'wx\''));
  assert(code.includes('mode:0o600'));
@@ -150,7 +154,7 @@ test('CPU CLI error strings, owned artifacts and fixed paths avoid raw provider 
  assert(code.includes("process.env.MODEL_TAG!=='qwen2.5:0.5b'"));
  for(const unsafe of ['console.log(assessed','JSON.stringify(batch)',
  'JSON.stringify(event)','writeFile(join(dest,\'raw',
- 'process.env.GITHUB_TOKEN','process.env.GH_READ_TOKEN'])
+ 'process.env.GITHUB_TOKEN'])
   assert(!code.includes(unsafe),unsafe);
 });
 
@@ -204,6 +208,20 @@ import {syntheticDesign} from './w5b_simulated_provider.mjs';
 const briefs=JSON.parse(await readFile(new URL('./w5b_heldout_briefs.json',import.meta.url),'utf8')).briefs;
 let requestCount=0;
 globalThis.fetch=async(url,options)=>{
+ if(url==='https://api.github.com/repos/teldigi5-wq/aetheris-ai-runtime/pulls/275'){
+  if(options.method!=='GET'||options.cache!=='no-store')
+   throw Error('INVALID_GITHUB_APPROVAL_LOOKUP');
+  const revoked=process.env.E6_W5L_TEST_SCENARIO==='revoke-after-one'&&requestCount>=1;
+  return new Response(JSON.stringify({
+   number:275,state:'open',draft:true,merged_at:null,
+   user:{login:'teldigi5-wq'},
+   head:{sha:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    repo:{full_name:'teldigi5-wq/aetheris-ai-runtime'}},
+   base:{ref:'feat/e6-w5i-local-inference-completion-20261102',
+    repo:{full_name:'teldigi5-wq/aetheris-ai-runtime'}},
+   labels:revoked?[]:[{name:'e6-w5l-six-cell-cpu-approved'}]
+  }),{status:200});
+ }
  if(url!=='http://127.0.0.1:11434/api/generate'||options.method!=='POST')
   throw Error('FORBIDDEN_NON_LOOPBACK_TRANSPORT');
  const request=JSON.parse(options.body);
@@ -247,7 +265,8 @@ globalThis.fetch=async(url,options)=>{
    OLLAMA_LLM_LIBRARY:'cpu',OLLAMA_NUM_PARALLEL:'1',
    OLLAMA_MAX_LOADED_MODELS:'1',
    CUDA_VISIBLE_DEVICES:'-1',HIP_VISIBLE_DEVICES:'-1',
-   MODEL_TAG:'qwen2.5:0.5b'
+   MODEL_TAG:'qwen2.5:0.5b',
+   GH_READ_TOKEN:'mock-test-only-github-read-token'
   };
   // Copy source into disposable, source-pinned fixtures so the real CLI
   // writes no files under the checkout and cannot overwrite user data.
@@ -295,6 +314,16 @@ globalThis.fetch=async(url,options)=>{
   assert.equal(fallback.notRun,null);
   assert.equal(fallback.releaseGo,false);
   assert.equal((await stat(failedSnapshot.resultFile)).mode&0o777,0o600);
+  const revokedMidSnapshot=await clone('revoked-mid-run');
+  const revokedMid=invoke(revokedMidSnapshot,'revoke-after-one');
+  assert.equal(revokedMid.status,1,revokedMid.stderr);
+  assert.match(revokedMid.stderr,/NO_COMPLETE_VERIFIABLE_SIX_CELL_RECEIPT/);
+  const revokedRaw=await readFile(revokedMidSnapshot.resultFile,'utf8');
+  const revokedReceipt=JSON.parse(revokedRaw);
+  assert.equal(revokedReceipt.kind,'E6_W5L_UNVERIFIABLE_CPU_ATTEMPT_V1');
+  assert.equal(revokedReceipt.attemptedModelRequests,null);
+  assert.equal(revokedReceipt.completedCells,null);
+  assert.equal(revokedReceipt.releaseGo,false);
   const successSnapshot=await clone('complete');
   const succeeded=invoke(successSnapshot,'success');
   assert.equal(succeeded.status,0,succeeded.stderr);

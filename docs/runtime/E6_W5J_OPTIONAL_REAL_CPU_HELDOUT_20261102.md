@@ -730,3 +730,24 @@ Normal PR CI tests the verifier with **tiny synthetic files only**;
 it does not download model blobs or run model inference. If the official
 tag/manifest changes, the owner trial must fail closed and undergo a
 freshly reviewed pin update, not silently accept substituted weights.
+
+### W5-L revocation safety: per-request approval recheck
+
+An independent execution review identified that one pre-run owner-label
+check did not stop later model requests if the approval was revoked
+during a six-cell experiment. The adapter now **requires** an explicit
+authorization callback before *every* provider request, including
+compact-design retries. The owner-only CLI performs a fresh uncached
+GitHub API GET for PR #275 using a minimal read-only, step-scoped token.
+Each response is size bounded and verifies the same exact-head owner,
+same-repository base, open draft status and unique W5-L label. Revocation,
+network failures, malformed API data and missing credentials fail
+closed before the next model request. If a run has already started,
+its existing sanitized failure receipt records unknown attempted/result
+counts and a nonzero job conclusion.
+
+Normal PR CI uses synthetic owner responses and fake Ollama transports,
+including revocation after one fake model call. **No actual inference or
+model download is performed by CI.** Revocation is checked between calls,
+not while an in-flight request executes; a running owner trial should
+also be canceled in GitHub Actions when permission is withdrawn.

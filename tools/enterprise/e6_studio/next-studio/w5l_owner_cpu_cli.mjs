@@ -9,6 +9,7 @@ import {fileURLToPath} from 'node:url';
 import {authorizePairedCpuLabelEvent,authorizeLivePairedCpuPr,makeUnverifiablePairedCpuAttempt} from './w5l_owner_cpu_gate.mjs';
 import {buildPairedEvaluationProtocol} from './w5l_paired_evaluation_protocol.mjs';
 import {collectBoundedPairedDesign} from './w5l_live_capture_adapter.mjs';
+import {requireCurrentOwnerApprovalForRequest} from './w5l_request_approval.mjs';
 const here=dirname(fileURLToPath(import.meta.url));
 const ROOT='/home/runner/work/_temp';
 const fail=x=>{throw Error('E6_W5L_'+x);};
@@ -116,12 +117,21 @@ async function main(){
  });
  if(manifest.modelTag!==process.env.MODEL_TAG||manifest.planned.length!==6)
    fail('SOURCE_MODEL_OR_MATRIX_CHANGED');
+ // The scoped token is supplied only inside the owner-approved CPU run step.
+ // Every model request requires a fresh uncached GitHub PR owner-label check.
+ const token=process.env.GH_READ_TOKEN;
+ if(typeof token!=='string'||token.length<10)
+   fail('PER_REQUEST_GITHUB_APPROVAL_TOKEN_REQUIRED');
+ const beforeRequest=()=>requireCurrentOwnerApprovalForRequest({
+  context,token,transport:fetch
+ });
  // fetch is deliberately supplied here and nowhere in normal PR CI.
  // The fixed W5-A API is loopback and num_gpu=0 for every request.
  let assessed;
  try{
   assessed=await collectBoundedPairedDesign({
-   briefs:batch.briefs,sourceCommitSha:context.headSha,transport:fetch
+   briefs:batch.briefs,sourceCommitSha:context.headSha,
+   transport:fetch,beforeRequest
   });
   if(assessed.comparison.allSixCellsReported!==true)
     fail('INCOMPLETE_PAIRED_MODEL_OBSERVATIONS');
