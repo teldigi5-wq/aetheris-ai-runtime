@@ -209,3 +209,20 @@ downloaded and the real workflow activation remains unverified.
 
 Stage 45 remains NO_GO.
 
+## Fail-closed artifact upload when validated file is absent
+
+The GitHub Actions W5-L upload action previously configured
+`if-no-files-found: ignore`. This could silently pass if the
+allowlisted JSON disappeared after its separate schema validation
+and before the upload action read it. That must not be interpreted
+as preserved research evidence.
+
+The upload action now uses `if-no-files-found: error`, while retaining
+the existing single validated filename, only-after-success condition,
+seven-day retention and sanitized failure-receipt policy. Its static
+model-free regression rejects silent missing-file success and explicit
+`continue-on-error` on the upload step.
+
+This does not guarantee successful upload under runner cancellation,
+network loss, or an external timeout. Absent evidence is UNVERIFIED;
+no model inference is authorized, and Stage 45 remains NO_GO.

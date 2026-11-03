@@ -156,4 +156,7 @@ test('W5-L artifact upload is restricted to the single validated JSON filename',
  assert(!step.includes('paired-design-metadata.json,'));
  assert.equal((source.match(/uses: actions\/upload-artifact@/g)||[]).length,1);
  assert(source.includes('node w5l_sanitized_metadata_gate.mjs'));
+ assert.match(step,/if-no-files-found: error(?:\r?\n|$)/);
+ assert(!step.includes('if-no-files-found: ignore'));
+ assert(!step.includes('continue-on-error: true'));
 });
