@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile,mkdtemp,mkdir,writeFile,rm,symlink} from 'node:fs/promises';
+import {readFile,mkdtemp,mkdir,writeFile,rm,symlink,readdir,copyFile,stat} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -191,4 +191,127 @@ test('owner CPU CLI writes a redacted failure receipt only after authorized run 
  assert(source.includes('attemptedModelRequests:null')===false);
  assert(source.includes('await saveSanitized(makeUnverifiablePairedCpuAttempt({'));
  assert(!source.includes('JSON.stringify(error)'));
+});
+test('actual W5-L CLI rehearses revoked, partially failed and completed six-cell paths offline', {
+ skip:!(typeof runner==='string'&&runner.startsWith('/home/runner/work/_temp'))
+},async()=>{
+ const base=await mkdtemp(join(runner,'w5l-cli-isolated-rehearsal-'));
+ const sourceDir=fileURLToPath(new URL('.',import.meta.url));
+ const canary='MODEL_PRIVATE_CANARY_MUST_NEVER_APPEAR';
+ const fakePreload=String.raw`
+import {readFile} from 'node:fs/promises';
+import {syntheticDesign} from './w5b_simulated_provider.mjs';
+const briefs=JSON.parse(await readFile(new URL('./w5b_heldout_briefs.json',import.meta.url),'utf8')).briefs;
+let requestCount=0;
+globalThis.fetch=async(url,options)=>{
+ if(url!=='http://127.0.0.1:11434/api/generate'||options.method!=='POST')
+  throw Error('FORBIDDEN_NON_LOOPBACK_TRANSPORT');
+ const request=JSON.parse(options.body);
+ if(request.model!=='qwen2.5:0.5b'||request.options.num_gpu!==0||
+    request.stream!==false||request.format!=='json')
+  throw Error('UNSAFE_MODEL_REQUEST');
+ const briefIndex=briefs.findIndex(b=>request.prompt.includes(JSON.stringify(b)));
+ if(briefIndex<0)throw Error('UNRECOGNIZED_PINNED_BRIEF');
+ requestCount++;
+ if(process.env.E6_W5L_TEST_SCENARIO==='partial'&&requestCount===2)
+  throw Error('MODEL_PRIVATE_CANARY_MUST_NEVER_APPEAR');
+ const design=syntheticDesign(briefs[briefIndex],briefIndex);
+ const {pages,...identity}=design;
+ let proposal=design;
+ if(request.prompt.includes('Return ONLY brand identity:'))proposal=identity;
+ else if(request.prompt.includes('page.path="/approach"'))
+  proposal={version:1,projectSlug:briefs[briefIndex].projectSlug,page:pages[1]};
+ else if(request.prompt.includes('page.path="/"'))
+  proposal={version:1,projectSlug:briefs[briefIndex].projectSlug,page:pages[0]};
+ return new Response(JSON.stringify({
+  model:'qwen2.5:0.5b',done:true,done_reason:'stop',
+  eval_count:150,response:JSON.stringify(proposal)
+ }),{status:200});
+};
+`;
+ try{
+  const eventPath=join(base,'event.json');
+  const livePath=join(base,'w5l-live-owner-pr.json');
+  await writeFile(eventPath,JSON.stringify(event()),{mode:0o600});
+  await writeFile(livePath,JSON.stringify({...pr(),labels:[]}),{mode:0o600});
+  const baseEnv={
+   PATH:process.env.PATH||'',HOME:process.env.HOME||'',
+   GITHUB_EVENT_NAME:'pull_request',
+   GITHUB_REPOSITORY:REPO,GITHUB_ACTOR:'teldigi5-wq',
+   GITHUB_EVENT_PATH:eventPath,RUNNER_TEMP:base,
+   E6_W5L_ENABLE_OWNER_LABELED_CPU_TRIAL:'YES',
+   E6_W5L_APPROVED_PR_NUMBER:'275',
+   E6_W5L_CHECKED_OUT_PR_HEAD:SHA,
+   GITHUB_RUN_ID:'41630752655',
+   OLLAMA_HOST:'127.0.0.1:11434',
+   OLLAMA_LLM_LIBRARY:'cpu',OLLAMA_NUM_PARALLEL:'1',
+   OLLAMA_MAX_LOADED_MODELS:'1',
+   CUDA_VISIBLE_DEVICES:'-1',HIP_VISIBLE_DEVICES:'-1',
+   MODEL_TAG:'qwen2.5:0.5b'
+  };
+  // Copy source into disposable, source-pinned fixtures so the real CLI
+  // writes no files under the checkout and cannot overwrite user data.
+  const available=await readdir(sourceDir);
+  const sourceFiles=available.filter(x=>x.endsWith('.mjs')||
+    x==='w5b_heldout_briefs.json');
+  assert(sourceFiles.includes('w5l_owner_cpu_cli.mjs'));
+  assert(sourceFiles.includes('w5b_heldout_briefs.json'));
+  const clone=async name=>{
+   const snapshot=join(base,name);
+   await mkdir(snapshot,{mode:0o700});
+   for(const f of sourceFiles)
+    await copyFile(join(sourceDir,f),join(snapshot,f));
+   const preload=join(snapshot,'offline-only-preload.mjs');
+   await writeFile(preload,fakePreload,{mode:0o600});
+   const cli=join(snapshot,'w5l_owner_cpu_cli.mjs');
+   const resultFile=join(snapshot,'target','e6-w5l-owner-cpu-review','paired-design-metadata.json');
+   return {preload,cli,resultFile};
+  };
+  const invoke=(snapshot,scenario)=>spawnSync(process.execPath,[
+    '--import',snapshot.preload,snapshot.cli,'run'
+  ],{env:{...baseEnv,E6_W5L_TEST_SCENARIO:scenario},
+      encoding:'utf8',timeout:12000,maxBuffer:128*1024});
+  const deniedSnapshot=await clone('revoked');
+  const denied=invoke(deniedSnapshot,'success');
+  assert.equal(denied.status,1,denied.stderr);
+  assert.match(denied.stderr,/LIVE_PAIRED_CPU_APPROVAL_REVOKED_OR_HEAD_CHANGED/);
+  await assert.rejects(readFile(deniedSnapshot.resultFile),{code:'ENOENT'});
+  await writeFile(livePath,JSON.stringify(pr()),{mode:0o600});
+  const failedSnapshot=await clone('partial');
+  const failed=invoke(failedSnapshot,'partial');
+  assert.equal(failed.status,1,failed.stderr);
+  assert.match(failed.stderr,/NO_COMPLETE_VERIFIABLE_SIX_CELL_RECEIPT/);
+  assert(!failed.stderr.includes(canary));
+  assert(!failed.stdout.includes(canary));
+  const fallbackRaw=await readFile(failedSnapshot.resultFile,'utf8');
+  assert(!fallbackRaw.includes(canary));
+  const fallback=JSON.parse(fallbackRaw);
+  assert.equal(fallback.kind,'E6_W5L_UNVERIFIABLE_CPU_ATTEMPT_V1');
+  assert.equal(fallback.attemptedModelRequests,null);
+  assert.equal(fallback.attemptedCells,null);
+  assert.equal(fallback.completedCells,null);
+  assert.equal(fallback.accepted,null);
+  assert.equal(fallback.rejected,null);
+  assert.equal(fallback.notRun,null);
+  assert.equal(fallback.releaseGo,false);
+  assert.equal((await stat(failedSnapshot.resultFile)).mode&0o777,0o600);
+  const successSnapshot=await clone('complete');
+  const succeeded=invoke(successSnapshot,'success');
+  assert.equal(succeeded.status,0,succeeded.stderr);
+  assert.match(succeeded.stdout,/E6_W5L_PAIRED_CPU_SANITIZED_RESULT_ONLY/);
+  assert(!succeeded.stdout.includes(canary));
+  const fullRaw=await readFile(successSnapshot.resultFile,'utf8');
+  assert(!fullRaw.includes('The warmth of an imagined reading object'));
+  const full=JSON.parse(fullRaw);
+  assert.equal(full.kind,'E6_W5L_OWNER_CPU_UNATTESTED_METADATA_V1');
+  assert.equal(full.sourceCommitSha,SHA);
+  assert.equal(full.captureCount,12);
+  assert.equal(full.receipt.observations.length,6);
+  assert.deepEqual(full.comparison.methods.map(m=>m.accepted),[3,3]);
+  assert.equal(full.providerResponsesIndependentlyAuthenticated,false);
+  assert.equal(full.modelWeightsAttested,false);
+  assert.equal(full.stage45Go,false);
+  assert.equal(full.releaseGo,false);
+  assert.equal((await stat(successSnapshot.resultFile)).mode&0o777,0o600);
+ }finally{await rm(base,{recursive:true,force:true});}
 });

@@ -689,3 +689,19 @@ cannot be mistaken for a completed six-cell comparison; the workflow's
 existing `if: always()` artifact step can upload the bounded fallback
 for the same seven-day retention. Failed approval or malformed source
 preflight does **not** produce an experiment receipt.
+
+### W5-L isolated CLI rehearsal — no live model calls
+
+The next regression executes the **actual owner-gated CLI** in three
+separate disposable source snapshots using Node's test-only
+`--import` preload to replace `fetch` with a loopback-only, human-authored
+fixture. It tests (1) revoked live approval creates **no** evidence file;
+(2) the first complete compact design followed by a simulated provider
+failure creates a nonzero-status **unverifiable** receipt with null counts
+and no raw error text; and (3) all six synthetically accepted cells create
+only a sanitized, explicitly **unattested** receipt. The test checks
+private file modes and deletes its own scratch tree. The production
+CLI and owner-only CPU workflow are unchanged and do not import this
+preload. This verifies subprocess control flow and output containment,
+**not** real model execution, real owner approval, model quality, or
+Stage 45 readiness.
