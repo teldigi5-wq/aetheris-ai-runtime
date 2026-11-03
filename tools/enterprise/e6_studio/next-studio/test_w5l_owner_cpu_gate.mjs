@@ -4,7 +4,7 @@ import {readFile,mkdtemp,mkdir,writeFile,rm,symlink} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {CPU_LABEL,authorizePairedCpuLabelEvent,authorizeLivePairedCpuPr} from './w5l_owner_cpu_gate.mjs';
+import {CPU_LABEL,authorizePairedCpuLabelEvent,authorizeLivePairedCpuPr,makeUnverifiablePairedCpuAttempt} from './w5l_owner_cpu_gate.mjs';
 const SHA='a'.repeat(40),REPO='teldigi5-wq/aetheris-ai-runtime';
 const BASE='feat/e6-w5i-local-inference-completion-20261102';
 const pr=()=>({number:275,state:'open',draft:true,merged_at:null,
@@ -152,4 +152,43 @@ test('CPU CLI error strings, owned artifacts and fixed paths avoid raw provider 
  'JSON.stringify(event)','writeFile(join(dest,\'raw',
  'process.env.GITHUB_TOKEN','process.env.GH_READ_TOKEN'])
   assert(!code.includes(unsafe),unsafe);
+});
+
+test('aborted CPU experiment produces a strictly non-claiming immutable status',()=>{
+ const report=makeUnverifiablePairedCpuAttempt({
+  sourceCommitSha:SHA,reportedGithubRunId:'41629454997'
+ });
+ assert(Object.isFrozen(report));
+ assert.equal(report.kind,'E6_W5L_UNVERIFIABLE_CPU_ATTEMPT_V1');
+ assert.equal(report.status,'NO_COMPLETE_VERIFIABLE_SIX_CELL_RECEIPT');
+ assert.equal(report.independentlyVerifiedCaseReceipts,0);
+ for(const name of ['attemptedModelRequests','attemptedCells','completedCells',
+  'accepted','rejected','notRun'])assert.equal(report[name],null);
+ for(const name of ['actualModelExecutionAttested','modelWeightsAttested',
+  'ownerExperimentApproved','originalDesignQualityVerified','stage45Go','releaseGo'])
+   assert.equal(report[name],false);
+ assert(!JSON.stringify(report).includes('error'));
+ assert.throws(()=>{report.accepted=6;},TypeError);
+ assert.throws(()=>makeUnverifiablePairedCpuAttempt({
+  sourceCommitSha:'bad',reportedGithubRunId:'41629454997'
+ }),/UNVERIFIABLE_ATTEMPT_CONTEXT_INVALID/);
+ assert.throws(()=>makeUnverifiablePairedCpuAttempt({
+  sourceCommitSha:SHA,reportedGithubRunId:'run; unsafe'
+ }),/UNVERIFIABLE_ATTEMPT_CONTEXT_INVALID/);
+});
+
+test('owner CPU CLI writes a redacted failure receipt only after authorized run starts',async()=>{
+ const source=await readFile(new URL('./w5l_owner_cpu_cli.mjs',import.meta.url),'utf8');
+ const approval=source.indexOf("context=await verifyApproval(mode!=='authorize')");
+ const run=source.indexOf('const assessed=await collectBoundedPairedDesign(');
+ const captured=source.indexOf('assessed=await collectBoundedPairedDesign(');
+ const redacted=source.indexOf('makeUnverifiablePairedCpuAttempt({');
+ assert(approval>=0);
+ assert.equal(run,-1);
+ assert(captured>approval);
+ assert(redacted>captured);
+ assert(source.includes('fail(\'NO_COMPLETE_VERIFIABLE_SIX_CELL_RECEIPT\')'));
+ assert(source.includes('attemptedModelRequests:null')===false);
+ assert(source.includes('await saveSanitized(makeUnverifiablePairedCpuAttempt({'));
+ assert(!source.includes('JSON.stringify(error)'));
 });

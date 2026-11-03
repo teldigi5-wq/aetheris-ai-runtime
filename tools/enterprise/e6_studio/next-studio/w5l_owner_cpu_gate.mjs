@@ -42,3 +42,26 @@ export function authorizeLivePairedCpuPr(live,context={}){
    productionAuthorized:false,stage45Go:false,releaseGo:false
  });
 }
+
+/** An aborted study provides no independently checked case observations.
+ * Never infer all six cases were attempted, nor count missing results as FAIL.
+ * This status has no model/runtime attestation, regardless of error source.
+ */
+export function makeUnverifiablePairedCpuAttempt({sourceCommitSha,reportedGithubRunId}={}){
+ if(!SHA(sourceCommitSha)||typeof reportedGithubRunId!=='string'||
+    !/^[0-9]{1,24}$/.test(reportedGithubRunId))
+   fail('UNVERIFIABLE_ATTEMPT_CONTEXT_INVALID');
+ return Object.freeze({
+   kind:'E6_W5L_UNVERIFIABLE_CPU_ATTEMPT_V1',
+   sourceCommitSha,reportedGithubRunId,
+   status:'NO_COMPLETE_VERIFIABLE_SIX_CELL_RECEIPT',
+   attemptedModelRequests:null,attemptedCells:null,
+   completedCells:null,accepted:null,rejected:null,notRun:null,
+   independentlyVerifiedCaseReceipts:0,
+   actualModelExecutionAttested:false,
+   modelWeightsAttested:false,
+   ownerExperimentApproved:false,
+   originalDesignQualityVerified:false,
+   stage45Go:false,releaseGo:false
+ });
+}

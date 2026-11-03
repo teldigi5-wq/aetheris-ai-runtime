@@ -670,3 +670,22 @@ or a deployment grant. A fresh deliberate owner label on the reviewed
 exact commit is required, and the owner must cancel an active job if
 approval is revoked after inference begins. The existing W5-J workflow
 remains separate and unchanged.
+
+### W5-L independent failure-path review: no invented model outcomes
+
+Review of the not-yet-run owner CPU workflow identified an evidence gap:
+the CLI previously emitted no sanitized case-status artifact if inference
+or capture validation failed before all six observations were available.
+It now writes an exclusive `E6_W5L_UNVERIFIABLE_CPU_ATTEMPT_V1` receipt
+**only after the separate event and live-owner approval checks**, when
+a paired-run attempt aborts before a complete result exists.
+
+The fallback records the source commit, GitHub run ID and an explicit
+unverifiable status. Attempted requests, attempted/completed cells,
+accepted/rejected/not-run counts remain `null`, not invented.
+No raw model text, provider errors, prompts, stack traces or credentials
+are serialized. The CLI still exits nonzero so that a failed research job
+cannot be mistaken for a completed six-cell comparison; the workflow's
+existing `if: always()` artifact step can upload the bounded fallback
+for the same seven-day retention. Failed approval or malformed source
+preflight does **not** produce an experiment receipt.

@@ -6,7 +6,7 @@ import {open,lstat,mkdir,writeFile,realpath} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {authorizePairedCpuLabelEvent,authorizeLivePairedCpuPr} from './w5l_owner_cpu_gate.mjs';
+import {authorizePairedCpuLabelEvent,authorizeLivePairedCpuPr,makeUnverifiablePairedCpuAttempt} from './w5l_owner_cpu_gate.mjs';
 import {buildPairedEvaluationProtocol} from './w5l_paired_evaluation_protocol.mjs';
 import {collectBoundedPairedDesign} from './w5l_live_capture_adapter.mjs';
 const here=dirname(fileURLToPath(import.meta.url));
@@ -118,11 +118,23 @@ async function main(){
    fail('SOURCE_MODEL_OR_MATRIX_CHANGED');
  // fetch is deliberately supplied here and nowhere in normal PR CI.
  // The fixed W5-A API is loopback and num_gpu=0 for every request.
- const assessed=await collectBoundedPairedDesign({
-  briefs:batch.briefs,sourceCommitSha:context.headSha,transport:fetch
- });
- if(assessed.comparison.allSixCellsReported!==true)
-   fail('INCOMPLETE_PAIRED_MODEL_OBSERVATIONS');
+ let assessed;
+ try{
+  assessed=await collectBoundedPairedDesign({
+   briefs:batch.briefs,sourceCommitSha:context.headSha,transport:fetch
+  });
+  if(assessed.comparison.allSixCellsReported!==true)
+    fail('INCOMPLETE_PAIRED_MODEL_OBSERVATIONS');
+ }catch{
+  // The error may contain untrusted model/provider text or a partial run.
+  // Deliberately record no error string, request count or per-case outcome.
+  // Missing observations are UNKNOWN, not six fabricated rejections.
+  await saveSanitized(makeUnverifiablePairedCpuAttempt({
+   sourceCommitSha:context.headSha,
+   reportedGithubRunId:process.env.GITHUB_RUN_ID
+  }));
+  fail('NO_COMPLETE_VERIFIABLE_SIX_CELL_RECEIPT');
+ }
  const artifact={
   kind:'E6_W5L_OWNER_CPU_UNATTESTED_METADATA_V1',
   sourceCommitSha:context.headSha,
