@@ -4,7 +4,7 @@ import {readFile,mkdtemp,mkdir,writeFile,rm,symlink,readdir,copyFile,stat} from 
 import {spawnSync} from 'node:child_process';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {CPU_LABEL,authorizePairedCpuLabelEvent,authorizeLivePairedCpuPr,makeUnverifiablePairedCpuAttempt} from './w5l_owner_cpu_gate.mjs';
+import {CPU_LABEL,authorizePairedCpuLabelEvent,authorizeLivePairedCpuPr,makeUnverifiablePairedCpuAttempt,authorizePairedCpuRunnerAttempt} from './w5l_owner_cpu_gate.mjs';
 import {inspectSanitizedCpuArtifact} from './w5l_sanitized_metadata_gate.mjs';
 const SHA='a'.repeat(40),REPO='teldigi5-wq/aetheris-ai-runtime';
 const BASE='feat/e6-w5i-local-inference-completion-20261102';
@@ -16,6 +16,25 @@ const pr=()=>({number:275,state:'open',draft:true,merged_at:null,
 const event=()=>({action:'labeled',label:{name:CPU_LABEL},pull_request:pr()});
 const ctx=()=>({actor:'teldigi5-wq',repository:REPO,expectedPr:275,headSha:SHA});
 const reject=fn=>assert.throws(fn,/E6_W5L_/);
+test('one owner-label event only authorizes the first owner-triggered Actions attempt',()=>{
+ const valid={actor:'teldigi5-wq',triggeringActor:'teldigi5-wq',runAttempt:'1'};
+ const result=authorizePairedCpuRunnerAttempt(valid);
+ assert.equal(result.firstRunAttempt,true);
+ assert.equal(result.ownerInitiated,true);
+ assert.equal(result.releaseGo,false);
+ for(const modify of [
+  x=>{x.runAttempt='2';},x=>{x.runAttempt='3';},
+  x=>{x.runAttempt='0';},x=>{x.runAttempt='01';},
+  x=>{delete x.runAttempt;},x=>{x.triggeringActor='collaborator';},
+  x=>{delete x.triggeringActor;},x=>{x.actor='collaborator';}
+ ]){
+  const bad={...valid};modify(bad);
+  assert.throws(()=>authorizePairedCpuRunnerAttempt(bad),
+   /FIRST_OWNER_TRIGGERED_CPU_ATTEMPT_ONLY/);
+ }
+ assert.throws(()=>authorizePairedCpuRunnerAttempt(),
+  /FIRST_OWNER_TRIGGERED_CPU_ATTEMPT_ONLY/);
+});
 test('new owner-only approval event is not W5-J and does not grant release',()=>{
  assert.notEqual(CPU_LABEL,'e6-w5j-three-brief-cpu-approved');
  const accepted=authorizePairedCpuLabelEvent(event(),ctx());
@@ -72,6 +91,10 @@ test('separate W5-L workflow can only run on explicit new owner label',async()=>
  assert(wf.includes('types:\n      - labeled'));
  assert(wf.includes("github.event.label.name == 'e6-w5l-six-cell-cpu-approved'"));
  assert(wf.includes("github.actor == 'teldigi5-wq'"));
+ assert(wf.includes("github.triggering_actor == 'teldigi5-wq'"));
+ assert(wf.includes("github.run_attempt == '1'"));
+ assert(wf.includes("test \"$GITHUB_RUN_ATTEMPT\" = '1'"));
+ assert(wf.includes("test \"$GITHUB_TRIGGERING_ACTOR\" = 'teldigi5-wq'"));
  assert(wf.includes("github.event.pull_request.number == 275"));
  assert(wf.includes('persist-credentials: false'));
  assert(wf.includes('timeout-minutes: 55'));
@@ -116,6 +139,7 @@ test('real CLI accepts synthetic exact-head label and live PR; refuses revoked a
   await writeFile(lp,JSON.stringify(pr()),{mode:0o600});
   const env={...process.env,GITHUB_EVENT_NAME:'pull_request',
    GITHUB_REPOSITORY:REPO,GITHUB_ACTOR:'teldigi5-wq',
+   GITHUB_TRIGGERING_ACTOR:'teldigi5-wq',GITHUB_RUN_ATTEMPT:'1',
    GITHUB_EVENT_PATH:ep,RUNNER_TEMP:base,
    E6_W5L_ENABLE_OWNER_LABELED_CPU_TRIAL:'YES',
    E6_W5L_APPROVED_PR_NUMBER:'275',
@@ -127,6 +151,10 @@ test('real CLI accepts synthetic exact-head label and live PR; refuses revoked a
   assert.equal(invoke('authorize').status,0);
   assert.equal(invoke('live-approval').status,0);
   assert.equal(invoke('authorize',{...env,GITHUB_ACTOR:'outsider'}).status,1);
+   // A re-run keeps the original owner actor, but may be started by a different user.
+   assert.equal(invoke('authorize',{...env,GITHUB_RUN_ATTEMPT:'2'}).status,1);
+   assert.equal(invoke('authorize',{...env,GITHUB_TRIGGERING_ACTOR:'collaborator'}).status,1);
+   assert.equal(invoke('authorize',{...env,GITHUB_TRIGGERING_ACTOR:''}).status,1);
   assert.equal(invoke('authorize',{...env,E6_W5L_CHECKED_OUT_PR_HEAD:'b'.repeat(40)}).status,1);
   await writeFile(lp,JSON.stringify({...pr(),labels:[]}),{mode:0o600});
   assert.equal(invoke('live-approval').status,1);
@@ -147,6 +175,7 @@ test('CPU CLI error strings, owned artifacts and fixed paths avoid raw provider 
  assert(code.includes('transport:fetch'));
  assert(code.includes('beforeRequest'));
  assert(code.includes('requireCurrentOwnerApprovalForRequest'));
+ assert(code.includes('authorizePairedCpuRunnerAttempt'));
  assert(code.includes('PER_REQUEST_GITHUB_APPROVAL_TOKEN_REQUIRED'));
  assert(code.includes('constants.O_NOFOLLOW'));
  assert(code.includes('flag:\'wx\''));
@@ -258,6 +287,7 @@ globalThis.fetch=async(url,options)=>{
    PATH:process.env.PATH||'',HOME:process.env.HOME||'',
    GITHUB_EVENT_NAME:'pull_request',
    GITHUB_REPOSITORY:REPO,GITHUB_ACTOR:'teldigi5-wq',
+   GITHUB_TRIGGERING_ACTOR:'teldigi5-wq',GITHUB_RUN_ATTEMPT:'1',
    GITHUB_EVENT_PATH:eventPath,RUNNER_TEMP:base,
    E6_W5L_ENABLE_OWNER_LABELED_CPU_TRIAL:'YES',
    E6_W5L_APPROVED_PR_NUMBER:'275',

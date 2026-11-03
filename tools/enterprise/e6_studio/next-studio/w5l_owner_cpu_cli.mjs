@@ -6,7 +6,7 @@ import {open,lstat,mkdir,writeFile,realpath} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {authorizePairedCpuLabelEvent,authorizeLivePairedCpuPr,makeUnverifiablePairedCpuAttempt} from './w5l_owner_cpu_gate.mjs';
+import {authorizePairedCpuLabelEvent,authorizeLivePairedCpuPr,makeUnverifiablePairedCpuAttempt,authorizePairedCpuRunnerAttempt} from './w5l_owner_cpu_gate.mjs';
 import {buildPairedEvaluationProtocol} from './w5l_paired_evaluation_protocol.mjs';
 import {collectBoundedPairedDesign} from './w5l_live_capture_adapter.mjs';
 import {requireCurrentOwnerApprovalForRequest} from './w5l_request_approval.mjs';
@@ -54,6 +54,13 @@ const ctx=()=>{
     process.env.E6_W5L_APPROVED_PR_NUMBER!=='275'||
     !/^[a-f0-9]{40}$/.test(process.env.E6_W5L_CHECKED_OUT_PR_HEAD||''))
    fail('OWNER_GITHUB_CPU_CONTEXT_REQUIRED');
+ // Deny re-runs: GitHub preserves GITHUB_ACTOR and the original privilege.
+ // GITHUB_TRIGGERING_ACTOR identifies the user who actually ran this attempt.
+ authorizePairedCpuRunnerAttempt({
+  actor:process.env.GITHUB_ACTOR,
+  triggeringActor:process.env.GITHUB_TRIGGERING_ACTOR,
+  runAttempt:process.env.GITHUB_RUN_ATTEMPT
+ });
  return {actor:process.env.GITHUB_ACTOR,
   repository:process.env.GITHUB_REPOSITORY,expectedPr:275,
   headSha:process.env.E6_W5L_CHECKED_OUT_PR_HEAD};

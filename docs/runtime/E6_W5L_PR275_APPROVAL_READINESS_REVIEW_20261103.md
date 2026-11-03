@@ -100,3 +100,26 @@ failure artifacts against the same upload validator.
 This is schema and consistency checking, not independent inference
 provenance, cryptographic attestation of model execution or a release
 decision. It does not authorize the W5-L experiment. Stage 45 NO_GO.
+
+## W5-L re-run and triggering-actor control
+
+GitHub Actions keeps the original `GITHUB_ACTOR` identity and associated
+permissions on a workflow re-run, even if another user triggers the
+re-run. Consequently, an exact-owner check against that field alone
+does not authorize a second attempt or prove the re-run initiator.
+
+The W5-L job now requires `github.run_attempt == '1'` and
+`github.triggering_actor == 'teldigi5-wq'`, with a redundant initial
+shell check before downloads. The owner CPU CLI requires exact
+`GITHUB_RUN_ATTEMPT=1` and `GITHUB_TRIGGERING_ACTOR=teldigi5-wq`
+in addition to the original event, exact-commit SHA, current PR label
+and no-GPU checks. Re-runs fail closed. A failed CPU run cannot simply
+be retried using the original approval: a fresh label event and source
+review would be required.
+
+This prevents same-workflow re-runs but does not claim to detect
+transient label revocations followed by an immediate re-application
+or make model provenance independently attested. Only synthetic
+GitHub events and CLI subprocesses are exercised in normal CI.
+
+Stage 45 remains NO_GO; the real CPU run remains unapproved.

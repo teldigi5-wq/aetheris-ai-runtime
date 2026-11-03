@@ -3,6 +3,15 @@
  */
 const fail=code=>{throw Error('E6_W5L_'+code);};
 export const CPU_LABEL='e6-w5l-six-cell-cpu-approved';
+// A GitHub re-run inherits the ORIGINAL actor's credentials even when
+// initiated by a different user. One label does not authorize new reruns.
+export function authorizePairedCpuRunnerAttempt({actor,triggeringActor,runAttempt}={}){
+ if(actor!=='teldigi5-wq'||triggeringActor!=='teldigi5-wq'||runAttempt!=='1')
+  fail('FIRST_OWNER_TRIGGERED_CPU_ATTEMPT_ONLY');
+ return Object.freeze({kind:'E6_W5L_FIRST_OWNER_RUN_ATTEMPT_V1',
+  ownerInitiated:true,firstRunAttempt:true,
+  releaseGo:false,stage45Go:false});
+}
 const OWNER='teldigi5-wq';
 const REPO='teldigi5-wq/aetheris-ai-runtime';
 const BASE='feat/e6-w5i-local-inference-completion-20261102';
