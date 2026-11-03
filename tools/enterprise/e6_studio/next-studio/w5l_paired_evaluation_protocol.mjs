@@ -51,7 +51,9 @@ function pairs(briefs){
 }
 export function buildPairedEvaluationProtocol({briefs,sourceCommitSha}={}){
  if(!commit(sourceCommitSha))fail('SOURCE_SHA_NOT_GIT_COMMIT');
- const planned=pairs(briefs);
+ // Freeze the matrix as well as its individual cells: a caller must not
+ // reorder a validated research plan after its digest has been generated.
+ const planned=Object.freeze(pairs(briefs));
  const briefSetSha256=sha(JSON.stringify(briefs));
  const protocol={
    kind:'E6_W5L_OFFLINE_PAIRED_PROTOCOL_V2',
@@ -178,8 +180,10 @@ export function summarizePairedResearch(protocol,observations){
    plannedPairs:3,
    executionOrder:protocol.executionOrder,
    cumulativeReportedElapsedMs,
-   methods:totals,
-   observations:rows,
+   // Validated observations are in-memory immutable, not cryptographic
+   // attestations. Serialized reports still require independent provenance.
+   methods:Object.freeze(totals.map(row=>Object.freeze(row))),
+   observations:Object.freeze(rows.map(row=>Object.freeze(row))),
    allSixCellsReported:complete,
    comparableBudget:false,
    // Accepted observations do NOT prove model inference or human approval.

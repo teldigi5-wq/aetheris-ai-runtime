@@ -217,3 +217,41 @@ test('forged acceptance scope rejected even when protocol is rehashed',()=>{
  p.protocolSha256=createHash('sha256').update(JSON.stringify(payload)).digest('hex');
  assert.throws(()=>summarizePairedResearch(p,empty(p)),/PROTOCOL_NOT_ACCEPTED/);
 });
+
+test('the fixed paired plan cannot be reordered or rewritten after digesting',()=>{
+ const p=manifest();
+ assert(Object.isFrozen(p));
+ assert(Object.isFrozen(p.methods));
+ assert(Object.isFrozen(p.planned));
+ assert(p.planned.every(Object.isFrozen));
+ assert(p.methods.every(Object.isFrozen));
+ const before=p.planned.map(row=>row.projectSlug+':'+row.mode);
+ assert.throws(()=>p.planned.reverse(),TypeError);
+ assert.throws(()=>p.planned.push({...p.planned[0]}),TypeError);
+ assert.throws(()=>{p.planned[0].mode='forged-mode';},TypeError);
+ assert.deepEqual(p.planned.map(row=>row.projectSlug+':'+row.mode),before);
+ assert.equal(p.protocolSha256,manifest().protocolSha256);
+});
+
+test('verified-in-memory research rows cannot be changed into a false accepted result',()=>{
+ const p=manifest(),obs=empty(p);
+ obs[0]={...obs[0],outcome:'REJECTED',failureCode:'DESIGN_SCHEMA_REJECTED',
+  reportedDesignCalls:1,reportedOutputTokens:50,reportedElapsedMs:200};
+ const summary=summarizePairedResearch(p,obs);
+ assert(Object.isFrozen(summary));
+ assert(Object.isFrozen(summary.methods));
+ assert(Object.isFrozen(summary.observations));
+ assert(summary.methods.every(Object.isFrozen));
+ assert(summary.observations.every(Object.isFrozen));
+ assert.equal(summary.methods[0].accepted,0);
+ assert.equal(summary.observations[0].outcome,'REJECTED');
+ assert.throws(()=>{summary.methods[0].accepted=3;},TypeError);
+ assert.throws(()=>{summary.methods[0].reportedDesignCalls=99;},TypeError);
+ assert.throws(()=>{summary.observations[0].outcome='ACCEPTED';},TypeError);
+ assert.throws(()=>summary.observations.pop(),TypeError);
+ assert.throws(()=>summary.methods.reverse(),TypeError);
+ assert.equal(summary.methods[0].accepted,0);
+ assert.equal(summary.observations[0].outcome,'REJECTED');
+ assert.equal(summary.realProviderEvidenceVerified,false);
+ assert.equal(summary.releaseGo,false);
+});
