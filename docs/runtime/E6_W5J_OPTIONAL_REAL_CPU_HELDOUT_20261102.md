@@ -598,3 +598,24 @@ immutable storage/trusted publication of the digest, provider evidence,
 human creative review, and Stage 45 attestations remain separate. The
 ordinary PR CI executes only synthetic and NOT_RUN examples; this module
 has no inference transport, network access, file writes, label, or approval.
+
+### W5-L captured-response design evaluator — no model execution
+
+`w5l_captured_design_evaluator.mjs` now derives six
+design-only `ACCEPTED`/`REJECTED`/`NOT_RUN` observations from externally
+supplied and strictly bounded response envelopes rather than trusting
+hand-entered outcomes. It verifies per-phase prompt SHA-256 against the
+existing W5-A compact and W5-K staged prompts, and uses the original W5-H
+allowlisted schema-retry prompt only after a validator rejection. It
+rejects unwanted retries, unexpected phases, altered briefs/models,
+unbounded token or elapsed-time claims, and injected fields; the existing
+W5-L 55-minute **aggregate** ceiling remains enforced.
+
+The evaluator returns sanitized counts, the existing researcher-supplied
+receipt, and a clearly **unattested** design-only comparison. It does
+not write or return raw model content; does not call Ollama, the network,
+a clock, or GitHub; and is not attached to the owner-only real CPU workflow.
+Prompt hashes and provider-reported metrics in externally supplied captures
+remain unverified until they are tied to an authorized execution with
+independent evidence. Passing synthetic CI neither proves design quality
+nor authorizes model downloads, merge, deployment or Stage 45 GO.
