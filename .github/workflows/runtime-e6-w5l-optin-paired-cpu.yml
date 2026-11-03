@@ -112,7 +112,7 @@ jobs:
             sleep 1
           done
           curl --fail --silent --max-time 5 'http://127.0.0.1:11434/api/version' > /dev/null
-          "$RUNNER_TEMP/w5l-ollama-bin/bin/ollama" pull "$MODEL_TAG"
+          timeout --signal=TERM --kill-after=10s 600s "$RUNNER_TEMP/w5l-ollama-bin/bin/ollama" pull "$MODEL_TAG"
           curl --fail --silent --show-error --max-time 15 'http://127.0.0.1:11434/api/tags' -o "$RUNNER_TEMP/w5l-model-tags.json"
           python3 - <<'PY'
           import json,os
@@ -125,6 +125,11 @@ jobs:
           assert digest.removeprefix('sha256:').lower().startswith('a8b0c5157701')
           print('E6_W5L_VENDOR_TAG_PREFIX_CHECK_NOT_MODEL_WEIGHTS_ATTESTATION')
           PY
+          # The 12-digit tag prefix alone cannot prove the actual file bytes.
+          # Require the published exact GGUF hash, byte size and all four
+          # accompanying system/template/license/config blob digests.
+          cd tools/enterprise/e6_studio/next-studio
+          python3 w5l_model_blob_integrity.py
       - name: Recheck LIVE owner approval again immediately before paired inference
         env:
           GH_READ_TOKEN: ${{ github.token }}

@@ -705,3 +705,28 @@ CLI and owner-only CPU workflow are unchanged and do not import this
 preload. This verifies subprocess control flow and output containment,
 **not** real model execution, real owner approval, model quality, or
 Stage 45 readiness.
+
+### W5-L model file integrity and bounded CPU pull (no inference in PR CI)
+
+The owner-only workflow now limits the `ollama pull qwen2.5:0.5b`
+command to 600 seconds (with termination/kill) inside the existing
+55-minute GitHub job ceiling. Before **any** inference it executes
+`w5l_model_blob_integrity.py`: a read-only verification of the
+model's manifest descriptors, exact file size and full SHA-256 of all
+five locally stored Ollama blobs (Q4_K_M GGUF, config, system, template,
+license). The 397,807,936-byte GGUF is pinned to SHA-256
+`c5396e06af294bd101b30dce59131a76d2b773e76950acc870eda801d3ab0515`
+rather than relying on the short manifest/tag ID `a8b0c5157701`.
+The verifier refuses missing/truncated/changed files, symlinked blob
+paths, duplicate JSON keys, manifest substitutions and injected model
+roots. The local blob hashes are reproducible **integrity checks**;
+they do not attest which weights an engine actually executed.
+
+References for expected manifest layers and model digest:
+https://speakerdeck.com/adriancole/practical-genai-with-go-gophercon-singapore-3e5a0b44-b096-4001-8a57-a2475ad280d1
+and the independent GGUF copy at
+https://huggingface.co/purdue-ie336/qwen2.5-0.5b-instruct-GGUF.
+Normal PR CI tests the verifier with **tiny synthetic files only**;
+it does not download model blobs or run model inference. If the official
+tag/manifest changes, the owner trial must fail closed and undergo a
+freshly reviewed pin update, not silently accept substituted weights.
