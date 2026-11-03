@@ -344,3 +344,20 @@ globalThis.fetch=async(url,options)=>{
   assert.equal((await stat(successSnapshot.resultFile)).mode&0o777,0o600);
  }finally{await rm(base,{recursive:true,force:true});}
 });
+
+test('consumed W5-J label can never start the historical weaker CPU runner',async()=>{
+ const old=await readFile(new URL('../../../../.github/workflows/runtime-e6-w5j-optin-heldout-cpu.yml',import.meta.url),'utf8');
+ const next=await readFile(new URL('../../../../.github/workflows/runtime-e6-w5l-optin-paired-cpu.yml',import.meta.url),'utf8');
+ const index=old.indexOf('\njobs:\n');
+ assert(index>0);
+ const body=old.slice(index+7);
+ const job='  owner-approved-three-brief-cloud-cpu:\n';
+ assert(body.startsWith(job));
+ const guard=body.slice(0,body.indexOf('\n    runs-on:'));
+ assert(guard.includes("    if: >-\n      false &&\n      github.event.label.name == 'e6-w5j-three-brief-cpu-approved' &&"));
+ assert.equal((body.match(/^  [a-zA-Z][a-zA-Z0-9-]*:\s*$/gm)||[]).length,1);
+ for(const unwanted of ['workflow_dispatch:','pull_request_target:','schedule:'])
+  assert(!old.includes(unwanted),unwanted);
+ assert(!next.includes('      false &&\n'));
+ assert(next.includes("github.event.label.name == 'e6-w5l-six-cell-cpu-approved'"));
+});

@@ -770,3 +770,22 @@ This remains design-only, not a hardware benchmark or independently
 proven model-only generation latency. The arms have unequal request
 budgets, so comparableBudget remains false; human design quality and
 Stage 45 production readiness are not established.
+
+### W5-L cross-workflow audit: consumed W5-J runner retired
+
+Independent review found that the older W5-J cloud CPU workflow still
+accepted its historical approval label after that earlier experiment
+had been completed. Reapplying the label could run the weaker W5-J
+path, bypassing newer W5-L blob-integrity and per-request approval checks.
+
+The W5-J job is now guarded by unconditional `false &&` at the start
+of the GitHub Actions job condition. Its historical source and evidence
+are preserved for audit, but the job cannot download a model or invoke
+inference even if the historical label is reapplied. A model-free CI
+regression requires this retirement and confirms W5-L remains a
+separately owner-approved workflow. Any future reinstatement would
+require new independent review and a new explicit authorization.
+
+This is a bounded cross-file finding, not a full security certification.
+The W5-L labeled trigger and real-model path remain unexecuted and
+Stage 45 remains NO_GO.

@@ -13,7 +13,10 @@ concurrency:
   cancel-in-progress: false
 jobs:
   owner-approved-three-brief-cloud-cpu:
+    # RETIRED: old W5-J approval was consumed; execution must remain impossible.
+    # Historical implementation retained for audit; W5-L is a separate experiment.
     if: >-
+      false &&
       github.event.label.name == 'e6-w5j-three-brief-cpu-approved' &&
       github.event.pull_request.number == 275 &&
       github.event.pull_request.draft == true &&
