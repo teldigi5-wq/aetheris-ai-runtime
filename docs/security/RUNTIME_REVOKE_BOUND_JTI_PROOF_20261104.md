@@ -464,3 +464,47 @@ transport authorization, globally linearizable fencing, atomic
 failover or eventual event emission. All protected API filters remain
 quarantined. Runtime #23, Platform #251 and all nine Stage45
 attestations remain open; **Stage45 NO_GO**.
+
+## 4 November 2026 — observed in-flight SQL action versus leadership transition
+
+A new **real PostgreSQL 16 concurrent transaction** experiment in the
+disposable B62 physical-standby script tests a protected effect while
+a separate coordinator writer attempts to change authority. The
+restricted synthetic actor opens an explicit transaction, executes
+the existing SECURITY DEFINER protected action for term 2, then
+blocks in pg_sleep(12) while retaining the two checked FOR SHARE
+locks on the coordinator-local leader_fence and b62_resource_fence
+rows. The harness first polls pg_stat_activity for the expected
+actor and PgSleep wait event so it never assumes an in-flight
+critical section merely because a shell process was launched.
+
+While the first transaction is still open, independent coordinator
+UPDATE(term) attempts are made against **both** checked rows with a
+400 ms lock timeout. Each must fail **specifically** with PostgreSQL's
+"canceling statement due to lock timeout" error; unrelated SQL,
+permission or transport errors cannot count as a successful denial.
+Only after the in-flight actor commits does CI verify its recorded
+effect, the old term still being 2, and the successful existing
+transition to term 3. This proves that the co-located row locks
+serialize the synthetic effect with competing leader/resource-term
+updates on this **single authority PostgreSQL server**.
+
+The test increases the expected synthetic action count to account
+for the one additional protected effect. Existing genuine physical
+replica promotion, divergent writable-primary, coordinator-outage
+and stale local resource ALLOW counterexamples are intentionally
+unchanged and mandatory. The recorded action is synthetic and the
+entire server/network lab is destroyed after CI.
+
+**Limits and release blockers:** A valid effect can still finish
+before the leadership transition; the test does not abort an
+already authorized action or prove revocation after authorization.
+The coordinator and protected effect share **one database here**,
+so row-lock serialization does not fence two independently writable
+physical primaries, a disconnected resource or an external event
+sink. No production service identity, real task mutation, SSE
+stream, actual distributed quorum/leader lease, cross-resource
+atomicity, verified client transport, writer migration or
+release-level security evidence exists. No protected API route
+is enabled. Runtime #23, Platform #251 and all nine Stage45
+attestations remain open. **Stage45 NO_GO**.
