@@ -104,7 +104,7 @@ jobs:
                          "RUNTIME_FULL_SPRINGBOOT_SSE_CLOSE_BEFORE_NEXT_EVENT_PASS",
                          "RUNTIME_REAL_TASK_HISTORY_SSE_QUARANTINE_NO_GO"):
               assert marker in lifecycle, marker
-          assert 'Production task/history/live event routes MUST remain 404' in lifecycle
+          assert 'Actual task/history/live event routes MUST remain 404 throughout.' in lifecycle
           assert 'B62' in lifecycle and 'SYNTHETIC' in lifecycle
           # Keep the inherited full-context route policy and signed principal
           # tests runnable on this exact draft head, not only its leaf regressions.
