@@ -286,6 +286,117 @@ class RuntimeVerifiedTaskReadProbeTest {
     }
 
     @Test
+    void independentSignedWorkloadRejectsForgeryScopeAndMismatchedLease()
+            throws Exception {
+        Instant now = Instant.now();
+        Instant issued = now.minusSeconds(5);
+        Instant expires = now.plusSeconds(55);
+        String workloadA = signedWorkloadJwt(workloadSigningKey,
+            REVIEW_WORKLOAD_A, WORKLOAD_ISSUER, WORKLOAD_AUDIENCE,
+            WORKLOAD_KID, "runtime-workload-review", "runtime", issued, expires);
+        var verifiedA = workloadVerifier.verifySignedWorkload(workloadA);
+        var verifiedB = signedWorkload(REVIEW_WORKLOAD_B);
+        assertEquals(REVIEW_WORKLOAD_A, verifiedA.subject());
+        assertTrue(verifiedA.isFresh());
+        assertTrue(verifiedB.isFresh());
+        assertEquals(0,
+            RuntimePinnedWorkloadIdentityVerifier.VerifiedWorkload.class
+                .getConstructors().length);
+        String validLeaseJwt = signedFenceJwt(fenceSigningKey,
+            REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM, FENCE_ISSUER,
+            FENCE_AUDIENCE, FENCE_KID, "runtime-local-fence-review",
+            "runtime", issued, expires);
+        var leaseA = fenceVerifier.verifySignedLease(validLeaseJwt);
+        assertTrue(leaseA.isBoundTo(verifiedA));
+        assertFalse(leaseA.isBoundTo(verifiedB),
+            "Two valid signed objects MUST match the identical workload");
+        assertFalse(leaseA.isBoundTo(null));
+
+        String otherLeaseJwt = signedFenceJwtBoundTo(fenceSigningKey,
+            REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM, FENCE_ISSUER,
+            FENCE_AUDIENCE, FENCE_KID, "runtime-local-fence-review",
+            "runtime", issued, expires, REVIEW_WORKLOAD_B);
+        var leaseB = fenceVerifier.verifySignedLease(otherLeaseJwt);
+        assertFalse(leaseB.isBoundTo(verifiedA));
+        assertTrue(leaseB.isBoundTo(verifiedB));
+
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        var attacker = generator.generateKeyPair();
+        for (KeyPair wrongKey : List.of(attacker, fenceSigningKey)) {
+            assertThrows(IllegalArgumentException.class,
+                () -> workloadVerifier.verifySignedWorkload(signedWorkloadJwt(
+                    wrongKey, REVIEW_WORKLOAD_A,
+                    WORKLOAD_ISSUER, WORKLOAD_AUDIENCE, WORKLOAD_KID,
+                    "runtime-workload-review", "runtime", issued, expires)),
+                "Signing a workload token with an attacker or fence key DENIES");
+        }
+
+        for (String[] wrong : new String[][]{
+                {"https://attacker.example.invalid", WORKLOAD_AUDIENCE,
+                    WORKLOAD_KID, "runtime-workload-review", "runtime"},
+                {WORKLOAD_ISSUER, "wrong-audience",
+                    WORKLOAD_KID, "runtime-workload-review", "runtime"},
+                {WORKLOAD_ISSUER, WORKLOAD_AUDIENCE,
+                    "wrong-key-id", "runtime-workload-review", "runtime"},
+                {WORKLOAD_ISSUER, WORKLOAD_AUDIENCE,
+                    WORKLOAD_KID, "wrong-purpose", "runtime"},
+                {WORKLOAD_ISSUER, WORKLOAD_AUDIENCE,
+                    WORKLOAD_KID, "runtime-workload-review", "other-resource"}}) {
+            assertThrows(IllegalArgumentException.class,
+                () -> workloadVerifier.verifySignedWorkload(signedWorkloadJwt(
+                    workloadSigningKey, REVIEW_WORKLOAD_A,
+                    wrong[0], wrong[1], wrong[2], wrong[3], wrong[4],
+                    issued, expires)));
+        }
+        for (String badSubject : List.of("../escape", "UPPER-SUBJECT")) {
+            assertThrows(IllegalArgumentException.class,
+                () -> workloadVerifier.verifySignedWorkload(signedWorkloadJwt(
+                    workloadSigningKey, badSubject,
+                    WORKLOAD_ISSUER, WORKLOAD_AUDIENCE, WORKLOAD_KID,
+                    "runtime-workload-review", "runtime", issued, expires)));
+        }
+        assertThrows(IllegalArgumentException.class,
+            () -> workloadVerifier.verifySignedWorkload("Bearer " + workloadA));
+        assertThrows(IllegalArgumentException.class,
+            () -> workloadVerifier.verifySignedWorkload(signedWorkloadJwt(
+                workloadSigningKey, REVIEW_WORKLOAD_A,
+                WORKLOAD_ISSUER, WORKLOAD_AUDIENCE, WORKLOAD_KID,
+                "runtime-workload-review", "runtime",
+                now.minusSeconds(5), now.plusSeconds(120))));
+        assertThrows(IllegalArgumentException.class,
+            () -> workloadVerifier.verifySignedWorkload(signedWorkloadJwt(
+                workloadSigningKey, REVIEW_WORKLOAD_A,
+                WORKLOAD_ISSUER, WORKLOAD_AUDIENCE, WORKLOAD_KID,
+                "runtime-workload-review", "runtime",
+                now.minusSeconds(30), now.minusSeconds(5))));
+        assertThrows(IllegalArgumentException.class,
+            () -> workloadVerifier.verifySignedWorkload(signedWorkloadJwt(
+                workloadSigningKey, REVIEW_WORKLOAD_A,
+                WORKLOAD_ISSUER, WORKLOAD_AUDIENCE, WORKLOAD_KID,
+                "runtime-workload-review", "runtime",
+                now.plusSeconds(5), now.plusSeconds(50))));
+
+        AtomicReference<Instant> trustedNow = new AtomicReference<>(now);
+        Clock advancing = new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) {
+                return Clock.fixed(trustedNow.get(), zone);
+            }
+            @Override public Instant instant() { return trustedNow.get(); }
+        };
+        var verifierWithClock = new RuntimePinnedWorkloadIdentityVerifier(
+            publicKeyPem(workloadSigningKey), WORKLOAD_KID, WORKLOAD_ISSUER,
+            WORKLOAD_AUDIENCE, advancing);
+        var retained = verifierWithClock.verifySignedWorkload(workloadA);
+        assertTrue(leaseA.isBoundTo(retained));
+        trustedNow.set(now.plusSeconds(60));
+        assertFalse(retained.isFresh());
+        assertFalse(leaseA.isBoundTo(retained),
+            "A retained workload assertion must DENY after signed expiry");
+    }
+
+    @Test
     void pinnedFenceAuthorityRejectsForgeryClaimsAndRetainedExpiry()
             throws Exception {
         Instant now = Instant.now();
@@ -458,6 +569,15 @@ class RuntimeVerifiedTaskReadProbeTest {
             }
             assertTrue(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA));
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA,
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_B)),
+                "Two valid signatures with different workload subjects must DENY");
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA,
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM), null),
+                "Missing independently signed workload identity must DENY");
             assertFalse(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", LEGACY));
             assertFalse(fenced(combined, connection, alice,
@@ -477,17 +597,20 @@ class RuntimeVerifiedTaskReadProbeTest {
                 "A signed token with no JTI cannot supply active-session proof");
             assertFalse(combined.canReadSynthetic(connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA,
-                signedFence("b62-review-other", REVIEW_LOCAL_TERM)),
+                signedFence("b62-review-other", REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
                 "A different pinned endpoint must not match the local resource");
             assertFalse(combined.canReadSynthetic(connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA,
-                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM - 1)),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM - 1),
+                signedWorkload(REVIEW_WORKLOAD_A)),
                 "Obsolete term must not match a current local fence");
             assertThrows(IllegalArgumentException.class,
                 () -> signedFence(REVIEW_LOCAL_ENDPOINT, 0),
                 "Nonpositive signed term must be rejected at signature proof");
             assertFalse(combined.canReadSynthetic(connection, alice,
-                "tenant-alpha", "project-red", ALICE_ALPHA, null),
+                "tenant-alpha", "project-red", ALICE_ALPHA,
+                null, signedWorkload(REVIEW_WORKLOAD_A)),
                 "Missing signed authority must fail closed");
             try (var change = connection.createStatement()) {
                 assertEquals(1, change.executeUpdate(
@@ -510,7 +633,8 @@ class RuntimeVerifiedTaskReadProbeTest {
                     "A new expected term cannot accept a stale local row");
                 assertTrue(combined.canReadSynthetic(connection, alice,
                     "tenant-alpha", "project-red", ALICE_ALPHA,
-                    signedFence("b62-review-stale", 6)),
+                    signedFence("b62-review-stale", 6),
+                    signedWorkload(REVIEW_WORKLOAD_A)),
                     "NEGATIVE COUNTEREXAMPLE: an authentic signed stale lease"
                     + " still matches its LOCAL row, not global leadership");
                 assertEquals(1, change.executeUpdate(
