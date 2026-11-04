@@ -82,6 +82,10 @@ jobs:
           synthetic_jti=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeSyntheticSignedSessionJdbcTest.java")).read_text()
           for marker in ("Assumptions.assumeTrue", "ownerlab_jti_", "requireRevocationFacts()", "current_setting('transaction_isolation') = 'read committed'", "DROP SCHEMA IF EXISTS", "committedRevocationIsNextStatementVisibleAndStoreFailureDenies"):
               assert marker in synthetic_jti, marker
+          assert "AND s.iat_seconds > epoch.min_iat_seconds" in synthetic_jti
+          assert "AND s.iat_seconds >= epoch.min_iat_seconds" not in synthetic_jti
+          assert "principalEpochRejectsTokenIssuedAtCutoffButPermitsNextSecond" in synthetic_jti
+          assert "GREATEST(min_iat_seconds,?)" in synthetic_jti
           assert "@Component" not in synthetic_jti and "@RestController" not in synthetic_jti
           bridge = (Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeHttpSignedOwnerJdbcBoundaryTest.java")).read_text()
           for marker in ("Assumptions.assumeTrue", "DROP SCHEMA IF EXISTS", "new OwnerlessTaskMissionHttpFilter()", "new RuntimeUncertifiedApiHttpFilter()", "committedTenantRevocationDeniesNextRealSignedHttpRequest"):

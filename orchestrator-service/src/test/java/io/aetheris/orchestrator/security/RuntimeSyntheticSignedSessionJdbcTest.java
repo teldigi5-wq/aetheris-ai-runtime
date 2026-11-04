@@ -112,7 +112,12 @@ class RuntimeSyntheticSignedSessionJdbcTest {
     }
 
     private static String token(KeyPair key, long uid, String jti) {
-        Instant issued = Instant.now().minusSeconds(10);
+        return tokenAt(key, uid, jti, Instant.now().minusSeconds(10));
+    }
+
+    // Provide exact adjacent signed issue-seconds for B62 boundary regression.
+    // The verifier still checks a real RSA signature and token lifetime.
+    private static String tokenAt(KeyPair key, long uid, String jti, Instant issued) {
         return "Bearer " + Jwts.builder().header().keyId(KID).and()
             .subject("synthetic-" + uid + "@example.invalid")
             .issuer(ISSUER).claim("aud", List.of(AUDIENCE))
@@ -189,7 +194,7 @@ class RuntimeSyntheticSignedSessionJdbcTest {
                           AND s.uid=? AND s.iat_seconds=?
                           AND s.status='ACTIVE' AND s.revoked_at IS NULL
                           AND signer.enabled
-                          AND s.iat_seconds >= epoch.min_iat_seconds
+                          AND s.iat_seconds > epoch.min_iat_seconds
                     )
                     """)) {
                 query.setString(1, f.verifiedIssuer());
@@ -262,6 +267,63 @@ class RuntimeSyntheticSignedSessionJdbcTest {
             assertFalse(syntheticDecision(read, alice));
             assertTrue(syntheticDecision(read, bob));
             read.rollback();
+        }
+    }
+
+    @Test
+    void principalEpochRejectsTokenIssuedAtCutoffButPermitsNextSecond()
+            throws Exception {
+        var original = alice.requireRevocationFacts();
+        long revokedAtIatSecond = original.signedIssuedAt().getEpochSecond();
+
+        // A distinct, genuinely RS256-signed post-cutoff token for the same
+        // identity must not be confused with the original session row.
+        var newer = verifier.verifyBearerForRevocation(tokenAt(signer, 42L,
+            UUID.randomUUID().toString(),
+            original.signedIssuedAt().plusSeconds(1)));
+        var later = newer.requireRevocationFacts();
+        assertEquals(revokedAtIatSecond + 1,
+            later.signedIssuedAt().getEpochSecond());
+        try (Connection writer = database();
+             PreparedStatement insert = writer.prepareStatement(
+                "INSERT INTO synthetic_sessions "
+                + "(issuer,kid,jti,uid,iat_seconds,status,revoked_at)"
+                + " VALUES (?,?,?,?,?,'ACTIVE',NULL)")) {
+            insert.setString(1, later.verifiedIssuer());
+            insert.setString(2, later.verifiedKeyId());
+            insert.setString(3, later.signedTokenId());
+            insert.setLong(4, later.signedIdentityUid());
+            insert.setLong(5, later.signedIssuedAt().getEpochSecond());
+            assertEquals(1, insert.executeUpdate());
+        }
+
+        try (Connection reader = readTransaction()) {
+            assertTrue(syntheticDecision(reader, alice));
+            assertTrue(syntheticDecision(reader, newer));
+            assertTrue(syntheticDecision(reader, bob));
+            // Monotonic cutoff, committed by a separate PostgreSQL writer.
+            // B62 requires IAT == cutoff to DENY, not ALLOW.
+            try (Connection writer = database();
+                 PreparedStatement cutoff = writer.prepareStatement("""
+                    UPDATE synthetic_epochs
+                    SET min_iat_seconds=GREATEST(min_iat_seconds,?)
+                    WHERE issuer=? AND uid=? AND min_iat_seconds < ?
+                    """)) {
+                cutoff.setLong(1, revokedAtIatSecond);
+                cutoff.setString(2, original.verifiedIssuer());
+                cutoff.setLong(3, original.signedIdentityUid());
+                cutoff.setLong(4, revokedAtIatSecond);
+                assertEquals(1, cutoff.executeUpdate());
+                assertEquals(0, cutoff.executeUpdate(),
+                    "Repeated same-epoch cutoff cannot roll back or rewrite it");
+            }
+            assertFalse(syntheticDecision(reader, alice),
+                "B62 denies a signed JWT issued exactly AT revocation cutoff");
+            assertTrue(syntheticDecision(reader, newer),
+                "A separately registered signed JWT from cutoff+1 remains valid");
+            assertTrue(syntheticDecision(reader, bob),
+                "Unrelated signed principal is not revoked");
+            reader.rollback();
         }
     }
 
