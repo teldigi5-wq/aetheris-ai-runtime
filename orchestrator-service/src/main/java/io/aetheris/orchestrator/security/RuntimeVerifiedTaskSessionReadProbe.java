@@ -14,8 +14,9 @@ import java.util.UUID;
  * approved production migrations. Real resource fencing, writer audit,
  * authenticated service identity and a least-privilege reader are missing.
  * pg_is_in_recovery() cannot detect two divergent writable primaries.
- * A caller-supplied endpoint/term pair is NOT authenticated leadership;
- * it is only a local fence selector in an isolated SQL compatibility lab.
+ * Endpoint/term now originate from a separately verified, expiring RS256
+ * review token, not arbitrary string/long arguments. Even a correctly signed
+ * stale bearer lease can match an obsolete local row on an isolated primary.
  */
 public final class RuntimeVerifiedTaskSessionReadProbe {
     private static final String SELECTOR = "[a-z0-9][a-z0-9_-]{0,95}";
@@ -64,12 +65,12 @@ public final class RuntimeVerifiedTaskSessionReadProbe {
     public boolean canReadSynthetic(Connection connection,
             RuntimePinnedPrincipalVerifier.VerifiedPrincipal principal,
             String tenant, String project, UUID taskId,
-            String localEndpoint, long localTerm) {
+            RuntimePinnedLocalFenceLeaseVerifier.VerifiedLease lease) {
         try {
             if (connection == null || principal == null
                     || connection.getAutoCommit()
                     || !principal.hasScope("orchestrator:read")
-                    || !validEndpoint(localEndpoint) || localTerm <= 0
+                    || lease == null || !lease.isFresh()
                     || taskId == null || !valid(tenant) || !valid(project)) {
                 return false;
             }
@@ -81,8 +82,8 @@ public final class RuntimeVerifiedTaskSessionReadProbe {
             try (PreparedStatement read = connection.prepareStatement(
                     SCOPED_SESSION_READ)) {
                 read.setQueryTimeout(2); // disposable test budget only
-                read.setString(1, localEndpoint);
-                read.setLong(2, localTerm);
+                read.setString(1, lease.endpoint());
+                read.setLong(2, lease.term());
                 read.setObject(3, taskId);
                 read.setLong(4, signed.signedIdentityUid());
                 read.setString(5, tenant);
@@ -97,17 +98,14 @@ public final class RuntimeVerifiedTaskSessionReadProbe {
                 read.setLong(14, signed.signedIdentityUid());
                 read.setLong(15, iat);
                 try (ResultSet decision = read.executeQuery()) {
-                    return decision.next() && decision.getBoolean(1);
+                    return decision.next() && decision.getBoolean(1)
+                        && lease.isFresh() && principal.isFresh();
                 }
             }
         } catch (SQLException | RuntimeException denied) {
             // Do not leak signed identity, SQL errors or authority details.
             return false;
         }
-    }
-
-    private static boolean validEndpoint(String name) {
-        return name != null && name.matches("[a-z0-9][a-z0-9-]{0,95}");
     }
 
     private static boolean valid(String selector) {
