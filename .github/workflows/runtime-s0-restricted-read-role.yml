@@ -1,5 +1,8 @@
 name: Runtime S0-D2 Restricted Signed Registry Read (Disposable PG16)
 on:
+  # Reverify the exact stacked security draft head after every source/test edit.
+  push:
+    branches: [security/runtime-quarantine-pathinfo-boundary-20261101]
   pull_request:
     branches:
       - security/s0-verified-jdbc-task-write-race-20261029
@@ -72,6 +75,9 @@ jobs:
                         'registry_tenant_memberships', 'registry_project_memberships',
                         'owner_verified_at IS NOT NULL', 'clock_timestamp()'):
               assert token in probe, token
+          assert "current_setting('transaction_isolation') = 'read committed'" in probe
+          regression=(Path('orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedRegistryTaskReadProbeTest.java')).read_text()
+          assert 'signedRegistryReadMustRejectSnapshotIsolationEvenWithMatchingMembership' in regression
           for forbidden in ('@Component','@Bean','request.getHeader(',
                             'System.getenv(', 'SECURITY DEFINER', 'executeUpdate(',
                             'commit()', 'rollback()'):
