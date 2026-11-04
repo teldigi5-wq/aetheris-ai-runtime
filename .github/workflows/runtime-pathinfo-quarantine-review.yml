@@ -143,9 +143,10 @@ jobs:
                          "fence.state='ACTIVE'",
                          "fence.expires_at>clock_timestamp()",
                          "RuntimePinnedLocalFenceLeaseVerifier.VerifiedLease lease",
-                         "lease == null || !lease.isFresh()",
+                         "RuntimePinnedWorkloadIdentityVerifier.VerifiedWorkload workload",
+                         "lease == null || !lease.isBoundTo(workload)",
                          "read.setLong(2, lease.term())",
-                         "lease.isFresh() && principal.isFresh()",
+                         "lease.isBoundTo(workload) && principal.isFresh()",
                          "read.setLong(15, iat)"):
               assert marker in composite, marker
           assert "String localEndpoint, long localTerm" not in composite
@@ -155,15 +156,33 @@ jobs:
                          "expires.isAfter(issued.plusSeconds(90))",
                          'claims.get("purpose")', 'claims.get("resource")',
                          "getModulus().bitLength() < 2048",
-                         "public boolean isFresh()"):
+                         "public boolean isFresh()",
+                         'claims.get("workload")',
+                         "private final String boundWorkload",
+                         "boundWorkload.equals(workload.subject())",
+                         "public boolean isBoundTo("):
               assert marker in lease_source, marker
           for forbidden in ("@Component", "@Bean", "@RestController",
                             "System.getenv(", "jku=", "jwks="):
               assert forbidden not in lease_source, forbidden
+          workload_source=(root/"security/RuntimePinnedWorkloadIdentityVerifier.java").read_text()
+          for marker in ("private VerifiedWorkload(", "verifyWith(trustedKey)",
+                         '!"RS256".equals(signed.getHeader().getAlgorithm())',
+                         "expires.isAfter(issued.plusSeconds(90))",
+                         'claims.get("purpose")', 'claims.get("resource")',
+                         "getModulus().bitLength() < 2048",
+                         "public boolean isFresh()", "claims.getSubject()"):
+              assert marker in workload_source, marker
+          for forbidden in ("@Component", "@Bean", "@RestController",
+                            "System.getenv(", "jku=", "jwks="):
+              assert forbidden not in workload_source, forbidden
           for marker in ("CREATE TEMP TABLE b62_local_resource_fence",
                          "NEGATIVE COUNTEREXAMPLE: an authentic signed stale lease",
                          "pinnedFenceAuthorityRejectsForgeryClaimsAndRetainedExpiry",
+                         "independentSignedWorkloadRejectsForgeryScopeAndMismatchedLease",
+                         "Two valid signatures with different workload subjects must DENY",
                          "new RuntimePinnedLocalFenceLeaseVerifier",
+                         "new RuntimePinnedWorkloadIdentityVerifier",
                          "Explicitly fenced resource must deny every positive JTI",
                          "Expired local lease must deny even without JTI revocation"):
               assert marker in regression, marker
