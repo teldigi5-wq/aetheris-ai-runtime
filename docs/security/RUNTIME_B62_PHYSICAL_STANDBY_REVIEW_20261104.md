@@ -94,3 +94,46 @@ promotion without coordinator update, stale authorizations remain a
 risk. Production must fence or invalidate old authority *before*
 resuming authorization on the new leader and deny all uncertain terms.
 Keep Stage45 NO_GO and Runtime #23/Platform #251 open.
+
+## 4 November 2026 — atomic resource-owned fencing proof (test-only)
+
+The disposable three-PostgreSQL-container lab now adds a **synthetic**
+protected resource within the independent coordinator database. This is
+**not** the production Runtime task store, Identity/JWT path, or a
+distributed fencing implementation.
+
+The test creates separate coordinator leader_fence and protected-resource
+b62_resource_fence rows, a unique-request b62_protected_actions journal,
+two SCRAM-authenticated caller roles, and an independent NOLOGIN function
+owner. Callers receive function EXECUTE only, not direct table mutation.
+The fixed-search-path SECURITY DEFINER function maps session_user to its
+known endpoint and requires READ COMMITTED. It locks *both* fencing rows
+with SELECT FOR SHARE before appending the protected action inside the
+**same PostgreSQL transaction**.
+
+An eligible promoted actor at term 2 succeeds. Old-leader and wrong-term
+operations deny. After a coordinator-only switch toward the stale
+former primary at term 3, the independent resource fence still pins
+the promoted actor to term 2: neither actor can append. The disposable
+test owner then atomically updates the coordinator and resource fences to
+promoted actor term 4. The new term succeeds; obsolete terms, the former
+leader, direct table writes, and a replayed request ID fail. The script
+asserts two journal events and destroys all disposable infrastructure.
+
+**Exact corrected-head proof:** 9f732e35a2281c512e9800509c2a293e507d6c1a,
+[physical-standby CI #41824507420](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/41824507420)
+SUCCESS, including marker
+AETHERIS_B62_RESOURCE_OWNED_MONOTONIC_FENCE_ATOMIC_ACTION_PASS.
+The earlier e35aa5c candidate failed shell syntax before database tests;
+it is **not** passing evidence and was corrected.
+
+**Limits:** This serializes a coordinator update and synthetic INSERT only
+because both fencing records and the effect are co-located in the **same
+disposable PostgreSQL database**. It does not establish atomic fencing for
+independent resource stores, quorum, consensus, split-brain-proof promotion,
+real workload identity/mTLS, production database role ownership, failover
+read-after-write, HTTP/SSE emission fencing, or concurrent load testing.
+The database owner can bypass test-only restrictions. No production Java,
+live endpoint, migration, real secret, customer record or protected main is
+changed. Runtime issue #23, Platform #251 and all nine Stage45 release
+gates remain open; **Stage45 NO_GO**.
