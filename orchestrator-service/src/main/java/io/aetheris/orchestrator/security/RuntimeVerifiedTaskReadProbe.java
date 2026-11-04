@@ -39,9 +39,9 @@ public final class RuntimeVerifiedTaskReadProbe {
             AND t.owner_project_key = ?
             AND t.owner_verified_at IS NOT NULL
             AND tm.status = 'ACTIVE' AND tm.revoked_at IS NULL
-            AND (tm.valid_until IS NULL OR tm.valid_until > CURRENT_TIMESTAMP)
+            AND (tm.valid_until IS NULL OR tm.valid_until > statement_timestamp())
             AND pm.status = 'ACTIVE' AND pm.revoked_at IS NULL
-            AND (pm.valid_until IS NULL OR pm.valid_until > CURRENT_TIMESTAMP)
+            AND (pm.valid_until IS NULL OR pm.valid_until > statement_timestamp())
         )
         """;
 

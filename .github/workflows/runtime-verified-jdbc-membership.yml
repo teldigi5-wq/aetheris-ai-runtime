@@ -65,7 +65,7 @@ jobs:
           for marker in ('PreparedStatement', 'principal.identityUid()', 'principal.hasScope("orchestrator:read")',
                          't.owner_identity_uid = ?', 't.owner_tenant_key = ?', 't.owner_project_key = ?',
                          "tm.status = 'ACTIVE'", "pm.status = 'ACTIVE'", 'tm.revoked_at IS NULL',
-                         'pm.revoked_at IS NULL', 'CURRENT_TIMESTAMP'):
+                         'pm.revoked_at IS NULL', 'tm.valid_until > statement_timestamp()', 'pm.valid_until > statement_timestamp()'):
               assert marker in probe, marker
           for forbidden in ('@Component', '@Bean', '@Value', 'System.getenv(',
                             'request.getHeader(', 'Statement.execute(', 'SECURITY DEFINER'):

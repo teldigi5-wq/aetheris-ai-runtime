@@ -229,6 +229,47 @@ class RuntimeVerifiedTaskReadProbeTest {
     }
 
     @Test
+    void membershipExpiryAdvancesWithinOneOpenTransaction() throws Exception {
+        // PostgreSQL CURRENT_TIMESTAMP is fixed at transaction start. Both
+        // tenant and project permissions must expire on later reads, even
+        // when the JDBC transaction has remained open the entire time.
+        Savepoint tenantRestore = connection.setSavepoint("tenant_elapsed_expiry");
+        try {
+            try (var sql = connection.createStatement()) {
+                assertEquals(1, sql.executeUpdate("""
+                    UPDATE tenant_memberships
+                    SET valid_until = statement_timestamp() + interval '2 seconds'
+                    WHERE tenant_key='tenant-alpha' AND identity_uid=42
+                    """));
+            }
+            assertTrue(allowed(42,"tenant-alpha","project-red",ALICE_ALPHA));
+            Thread.sleep(2300);
+            assertFalse(allowed(42,"tenant-alpha","project-red",ALICE_ALPHA),
+                "Expired tenant membership must not be accepted by an old transaction clock");
+        } finally {
+            connection.rollback(tenantRestore);
+        }
+
+        Savepoint projectRestore = connection.setSavepoint("project_elapsed_expiry");
+        try {
+            try (var sql = connection.createStatement()) {
+                assertEquals(1, sql.executeUpdate("""
+                    UPDATE project_memberships
+                    SET valid_until = statement_timestamp() + interval '2 seconds'
+                    WHERE tenant_key='tenant-alpha'
+                      AND project_key='project-red' AND identity_uid=42
+                    """));
+            }
+            assertTrue(allowed(42,"tenant-alpha","project-red",ALICE_ALPHA));
+            Thread.sleep(2300);
+            assertFalse(allowed(42,"tenant-alpha","project-red",ALICE_ALPHA),
+                "Expired project membership must not be accepted by an old transaction clock");
+        } finally {
+            connection.rollback(projectRestore);
+        }
+    }
+
+    @Test
     void verifiedPrincipalCannotBeManufacturedWithPublicJavaConstructor() {
         assertEquals(0, RuntimePinnedPrincipalVerifier.VerifiedPrincipal.class
             .getConstructors().length);
