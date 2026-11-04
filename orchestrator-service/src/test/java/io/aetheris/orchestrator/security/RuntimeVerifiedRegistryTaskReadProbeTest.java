@@ -212,8 +212,6 @@ class RuntimeVerifiedRegistryTaskReadProbeTest {
                 CountDownLatch updateMadeButUncommitted = new CountDownLatch(1);
                 CountDownLatch allowCommit = new CountDownLatch(1);
                 var workers = Executors.newSingleThreadExecutor();
-                String table = project
-                    ? "registry_project_memberships" : "registry_tenant_memberships";
                 // The two SQL variants are fixed literals, not caller input.
                 String update = project
                     ? """
@@ -272,12 +270,23 @@ class RuntimeVerifiedRegistryTaskReadProbeTest {
                         revoker.get(10, TimeUnit.SECONDS);
                     } finally {
                         workers.shutdownNow();
+                        // Complete static SQL for each registry table. Never
+                        // concatenate a table identifier or partial text block
+                        // into a JDBC statement; the previous fixture had
+                        // missing whitespace before SET and failed restoration.
+                        String restoreSql = project
+                            ? """
+                                UPDATE registry_project_memberships
+                                SET status='ACTIVE', revoked_at=NULL, version=version+1
+                                WHERE tenant_key='alpha' AND project_key='red' AND identity_uid=42
+                                """
+                            : """
+                                UPDATE registry_tenant_memberships
+                                SET status='ACTIVE', revoked_at=NULL, version=version+1
+                                WHERE tenant_key='alpha' AND identity_uid=42
+                                """;
                         try (Connection owner = disposableOwnerConnection();
-                             var restore = owner.prepareStatement(
-                                "UPDATE " + table + """
-                                 SET status='ACTIVE', revoked_at=NULL, version=version+1
-                                 WHERE tenant_key='alpha' AND identity_uid=42
-                                 """ + (project ? " AND project_key='red'" : ""))) {
+                             var restore = owner.prepareStatement(restoreSql)) {
                             assertEquals(1, restore.executeUpdate(),
                                 "Disposable grant must be reset after the overlap test");
                         }
