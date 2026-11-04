@@ -226,11 +226,13 @@ class RuntimeB62EpochSignerCompatibilityTest {
                     """)) {
                 query.setString(1, schema);
                 query.setString(2, schema);
-                for (int i = 3; i <= 6; i++) {
-                    query.setString(i, schema + ".principal_epochs");
-                }
-                query.setString(7, schema + ".blocked_signer_kids");
-                query.setString(8, schema + ".synthetic_session_registration");
+                // Exactly six JDBC placeholders: two schema flags and
+                // four table privileges. Bind each table independently so
+                // no grant assertion is accidentally checked on the owner.
+                query.setString(3, schema + ".principal_epochs");
+                query.setString(4, schema + ".principal_epochs");
+                query.setString(5, schema + ".blocked_signer_kids");
+                query.setString(6, schema + ".synthetic_session_registration");
                 try (var row = query.executeQuery()) {
                     assertTrue(row.next());
                     assertEquals(readerRole, row.getString(1));
