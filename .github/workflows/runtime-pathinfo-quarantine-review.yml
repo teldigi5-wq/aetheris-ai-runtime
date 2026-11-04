@@ -115,9 +115,19 @@ jobs:
           probe=(root/"security/RuntimeVerifiedTaskReadProbe.java").read_text()
           regression=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbeTest.java")).read_text()
           assert "current_setting('transaction_isolation') = 'read committed'" in probe
+          assert "AND NOT pg_is_in_recovery()" in probe
+          assert "connection.getAutoCommit()" in probe
+          assert "Explicit JDBC transaction required" in probe
+          registry=(root/"security/RuntimeVerifiedRegistryTaskReadProbe.java").read_text()
+          assert "AND NOT pg_is_in_recovery()" in registry
+          assert "connection.isReadOnly()" in registry
+          assert "connection.getAutoCommit()" in registry
           assert "tm.valid_until > statement_timestamp()" in probe
           assert "pm.valid_until > statement_timestamp()" in probe
           assert "committedExternalMembershipRevocationIsSeenByOpenReaderTransaction" in regression
+          assert "explicitJdbcTransactionAndActualPrimaryRequiredForOwnerReads" in regression
+          restricted=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedRegistryTaskReadProbeTest.java")).read_text()
+          assert "actualPrimaryReadCommittedRegistryProbeStillAllowsExactSignedOwner" in restricted
           assert "DROP SCHEMA IF EXISTS " in regression
           old_workflow=Path(".github/workflows/runtime-verified-jdbc-membership.yml").read_text()
           assert "current_setting('transaction_isolation') = 'read committed'" in old_workflow
