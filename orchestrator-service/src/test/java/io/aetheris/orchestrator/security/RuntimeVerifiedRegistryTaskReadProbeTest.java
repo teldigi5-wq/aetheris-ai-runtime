@@ -105,6 +105,26 @@ class RuntimeVerifiedRegistryTaskReadProbeTest {
     }
 
     @Test
+    void actualPrimaryReadCommittedRegistryProbeStillAllowsExactSignedOwner()
+            throws Exception {
+        try (Connection c = connect()) {
+            c.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+            readTransaction(c);
+            try (var statement = c.createStatement();
+                 var recovery = statement.executeQuery(
+                     "SELECT pg_is_in_recovery(), current_setting('transaction_isolation')")) {
+                assertTrue(recovery.next());
+                assertFalse(recovery.getBoolean(1),
+                    "This positive authorization test must use an actual primary");
+                assertEquals("read committed", recovery.getString(2));
+            }
+            assertTrue(probe.canRead(c, readAs(42), "alpha", "red", ALICE));
+            assertFalse(probe.canRead(c, readAs(77), "alpha", "red", ALICE));
+            c.rollback();
+        }
+    }
+
+    @Test
     void signedIdentityAllowsExactRegistryBoundReadsButNeverCrossTenantOrLegacy() throws Exception {
         try (Connection c = connect()) {
             readTransaction(c);
