@@ -23,7 +23,7 @@ standby_sql "BEGIN;
    expires_at timestamptz NOT NULL,
    lock_guard smallint NOT NULL DEFAULT 0 CHECK(lock_guard=0));
  INSERT INTO public.b62_effect_permit(resource_key,term,expires_at)
-   VALUES('runtime',4,clock_timestamp()+interval '7 seconds');
+   VALUES('runtime',4,clock_timestamp()+interval '12 seconds');
  REVOKE ALL ON public.b62_effect_permit FROM PUBLIC;
  GRANT SELECT ON public.b62_effect_permit TO $local_owner;
  GRANT UPDATE(lock_guard) ON public.b62_effect_permit TO $local_owner;
@@ -94,13 +94,13 @@ docker exec -e "PGPASSWORD=$local_new_pw" -e PGCONNECT_TIMEOUT=2 \
  "BEGIN;
   SELECT public.b62_try_deadline_bounded_effect(
     4,108,'inflight-expiry-late-commit');
-  SELECT pg_sleep(9);
+  SELECT pg_sleep(14);
   COMMIT;" > "$effect_log" 2>&1
 grep -Fxq t "$effect_log"
 grep -Fxq COMMIT "$effect_log"
 rm -f "$effect_log"
-test "$(standby_sql "SELECT (expires_at<clock_timestamp())::text
- FROM public.b62_effect_permit WHERE resource_key='runtime'")" = true
+test "$(standby_sql "SELECT CASE WHEN expires_at<clock_timestamp() THEN 'expired' ELSE 'fresh' END
+ FROM public.b62_effect_permit WHERE resource_key='runtime'")" = expired
 test "$(standby_sql "SELECT count(*) FROM public.b62_revocation_guarded_actions
  WHERE request_id='inflight-expiry-late-commit' AND uid=108")" = 1
 echo AETHERIS_B62_PG16_INFLIGHT_EFFECT_COMMITS_AFTER_LOCAL_PERMIT_EXPIRY_NO_GO_PASS
