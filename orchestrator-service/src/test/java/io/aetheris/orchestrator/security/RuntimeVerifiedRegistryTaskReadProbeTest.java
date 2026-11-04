@@ -144,6 +144,52 @@ class RuntimeVerifiedRegistryTaskReadProbeTest {
         }
     }
 
+    @Test
+    void signedRegistryReadMustRejectSnapshotIsolationEvenWithMatchingMembership()
+            throws Exception {
+        // The restricted connection is backed by real disposable PG16.
+        // Snapshot isolation can retain revoked rows after an external COMMIT.
+        // Fail closed even while this synthetic membership is currently valid.
+        for (int isolation : new int[]{
+                Connection.TRANSACTION_READ_UNCOMMITTED,
+                Connection.TRANSACTION_REPEATABLE_READ,
+                Connection.TRANSACTION_SERIALIZABLE}) {
+            try (Connection c = connect()) {
+                c.setTransactionIsolation(isolation);
+                readTransaction(c);
+                try (var sql = c.createStatement();
+                     var setting = sql.executeQuery("SHOW transaction_isolation")) {
+                    assertTrue(setting.next());
+                    String expected = switch (isolation) {
+                        case Connection.TRANSACTION_READ_UNCOMMITTED -> "read uncommitted";
+                        case Connection.TRANSACTION_REPEATABLE_READ -> "repeatable read";
+                        case Connection.TRANSACTION_SERIALIZABLE -> "serializable";
+                        default -> throw new IllegalArgumentException("Unexpected test isolation");
+                    };
+                    assertEquals(expected, setting.getString(1));
+                }
+                assertFalse(probe.canRead(c, readAs(42), "alpha", "red", ALICE),
+                    "Server-side authorization must deny snapshot isolation " + isolation);
+                c.rollback();
+            }
+        }
+
+        try (Connection c = connect()) {
+            c.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+            readTransaction(c);
+            try (var sql = c.createStatement();
+                 var setting = sql.executeQuery("SHOW transaction_isolation")) {
+                assertTrue(setting.next());
+                assertEquals("read committed", setting.getString(1));
+            }
+            assertTrue(probe.canRead(c, readAs(42), "alpha", "red", ALICE),
+                "A real signed owner and current registry grant still permit a safe read");
+            assertFalse(probe.canRead(c, readAs(77), "alpha", "red", ALICE),
+                "READ COMMITTED never disables cross-identity owner checks");
+            c.rollback();
+        }
+    }
+
     private static void expectNoPrivilege(String sql) throws Exception {
         // Fresh connection each time; SQLSTATE 42501 aborts its transaction.
         try (Connection c = connect(); var statement = c.createStatement()) {
