@@ -94,6 +94,18 @@ jobs:
           for marker in ("Assumptions.assumeTrue", "DROP SCHEMA IF EXISTS", "new OwnerlessTaskMissionHttpFilter()", "new RuntimeUncertifiedApiHttpFilter()", "committedTenantRevocationDeniesNextRealSignedHttpRequest"):
               assert marker in bridge, marker
           assert "retainedVerifiedPrincipalLosesScopesWhenSignedTokenExpires" in (Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimePinnedPrincipalVerifierTest.java")).read_text()
+          # Verify actual full Spring Boot HTTP/SSE lifecycle on every push:
+          # synthetic authority only, no actual B62 connector or route grant.
+          lifecycle=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeFullAppHttpSseRevocationLifecycleTest.java")).read_text()
+          for marker in ("@SpringBootTest", "AetherisOrchestratorApplication.class",
+                         "RuntimePinnedPrincipalVerifier", "requireRevocationFacts()",
+                         "TestOnly", "/__s0/revoke-sse",
+                         "RUNTIME_FULL_SPRINGBOOT_HTTP_RECHECK_BEFORE_SUCCESS_PASS",
+                         "RUNTIME_FULL_SPRINGBOOT_SSE_CLOSE_BEFORE_NEXT_EVENT_PASS",
+                         "RUNTIME_REAL_TASK_HISTORY_SSE_QUARANTINE_NO_GO"):
+              assert marker in lifecycle, marker
+          assert 'Production task/history/live event routes MUST remain 404' in lifecycle
+          assert 'B62' in lifecycle and 'SYNTHETIC' in lifecycle
           # Keep the inherited full-context route policy and signed principal
           # tests runnable on this exact draft head, not only its leaf regressions.
           test_root=Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security")
@@ -117,7 +129,7 @@ jobs:
         run: |
           set -euo pipefail
           ./mvnw -B -ntp -f orchestrator-service/pom.xml \
-            -Dtest=RuntimeQuarantinePathInfoBoundaryTest,RuntimeRealDirectPortDenialRegressionTest,RuntimeRouteAdmissionPolicyTest,RuntimeFullAppPinnedIdentityAuthorityTest,RuntimeControllerPolicyInventoryTest,RuntimeProductionApiQuarantineTest,RuntimeFullAppHttpContainmentTest,RuntimePinnedSpringBootHttpIntegrationTest,RuntimePinnedHttpBearerGateLoopbackTest,OwnerlessTaskMissionHttpFilterTest,RuntimeVerifiedTaskReadProbeTest,RuntimeHttpSignedOwnerJdbcBoundaryTest,RuntimeSyntheticSignedSessionJdbcTest,RuntimeB62EpochSignerCompatibilityTest,RuntimePinnedPrincipalVerifierTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
+            -Dtest=RuntimeQuarantinePathInfoBoundaryTest,RuntimeRealDirectPortDenialRegressionTest,RuntimeRouteAdmissionPolicyTest,RuntimeFullAppPinnedIdentityAuthorityTest,RuntimeControllerPolicyInventoryTest,RuntimeProductionApiQuarantineTest,RuntimeFullAppHttpContainmentTest,RuntimeFullAppHttpSseRevocationLifecycleTest,RuntimePinnedSpringBootHttpIntegrationTest,RuntimePinnedHttpBearerGateLoopbackTest,OwnerlessTaskMissionHttpFilterTest,RuntimeVerifiedTaskReadProbeTest,RuntimeHttpSignedOwnerJdbcBoundaryTest,RuntimeSyntheticSignedSessionJdbcTest,RuntimeB62EpochSignerCompatibilityTest,RuntimePinnedPrincipalVerifierTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
           echo 'RUNTIME_CONSOLIDATED_HTTP_IDENTITY_POLICY_AND_OWNER_JDBC_REGRESSION_PASS'
       - name: Verify private route inventory is still deny-only
         shell: bash
