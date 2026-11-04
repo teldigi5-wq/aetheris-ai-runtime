@@ -8,6 +8,8 @@ on:
       - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java'
       - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeQuarantinePathInfoBoundaryTest.java'
       - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbe.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimePinnedPrincipalVerifier.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimePinnedPrincipalVerifierTest.java'
       - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbeTest.java'
       - '.github/workflows/runtime-verified-jdbc-membership.yml'
 permissions:
@@ -68,6 +70,13 @@ jobs:
               s=p.read_text()
               assert order in s and "SC_NOT_FOUND" in s and "@Component" in s
           assert "enum Verdict { QUARANTINED }" in (root/"security/RuntimeRouteAdmissionPolicy.java").read_text()
+          pinned=(root/"security/RuntimePinnedPrincipalVerifier.java").read_text()
+          assert "expiresAt.isAfter(clock.instant())" in pinned
+          assert "scopes, expires, clock" in pinned
+          assert "isFresh() && scopes.contains(scope)" in pinned
+          assert "return isFresh() ? scopes : Set.of()" in pinned
+          assert "cachedPrincipalExpiresBeforeAnotherRealJdbcTaskRead" in (Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbeTest.java")).read_text()
+          assert "retainedVerifiedPrincipalLosesScopesWhenSignedTokenExpires" in (Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimePinnedPrincipalVerifierTest.java")).read_text()
           # Keep the inherited full-context route policy and signed principal
           # tests runnable on this exact draft head, not only its leaf regressions.
           test_root=Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security")

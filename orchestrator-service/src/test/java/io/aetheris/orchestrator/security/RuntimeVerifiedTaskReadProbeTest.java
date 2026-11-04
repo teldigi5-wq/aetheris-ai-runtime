@@ -14,6 +14,9 @@ import java.sql.DriverManager;
 import java.sql.Savepoint;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
@@ -477,6 +480,43 @@ class RuntimeVerifiedTaskReadProbeTest {
                 }
             }
         }
+    }
+
+    @Test
+    void cachedPrincipalExpiresBeforeAnotherRealJdbcTaskRead() throws Exception {
+        // The identity was verified only once; reusing the same sealed Java
+        // object after signed JWT expiry must deny the NEXT database read.
+        Instant issued = Instant.now();
+        AtomicReference<Instant> trustedNow = new AtomicReference<>(issued);
+        Clock advancing = new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) {
+                return Clock.fixed(trustedNow.get(), zone);
+            }
+            @Override public Instant instant() { return trustedNow.get(); }
+        };
+        String pem = "-----BEGIN PUBLIC KEY-----\n"
+            + Base64.getMimeEncoder(64, new byte[]{'\n'})
+                .encodeToString(signingKey.getPublic().getEncoded())
+            + "\n-----END PUBLIC KEY-----";
+        var localVerifier = new RuntimePinnedPrincipalVerifier(
+            pem, KEY_ID, ISSUER, AUDIENCE, advancing);
+        String jwt = Jwts.builder().header().keyId(KEY_ID).and()
+            .subject("synthetic-owner-42@example.invalid").issuer(ISSUER)
+            .claim("aud", List.of(AUDIENCE)).claim("uid", 42L)
+            .claim("role", "DEVELOPER")
+            .claim("scopes", List.of("orchestrator:read"))
+            .issuedAt(Date.from(issued.minusSeconds(10)))
+            .expiration(Date.from(issued.plusSeconds(75)))
+            .signWith(signingKey.getPrivate(), Jwts.SIG.RS256).compact();
+        var retained = localVerifier.verifyBearer("Bearer " + jwt);
+        assertTrue(probe.canRead(connection, retained,
+            "tenant-alpha", "project-red", ALICE_ALPHA));
+        trustedNow.set(issued.plusSeconds(76));
+        assertFalse(retained.hasScope("orchestrator:read"));
+        assertFalse(probe.canRead(connection, retained,
+            "tenant-alpha", "project-red", ALICE_ALPHA),
+            "An expired retained principal must not authorize a fresh SQL read");
     }
 
     @Test

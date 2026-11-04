@@ -48,29 +48,44 @@ public final class RuntimePinnedPrincipalVerifier {
         private final String subject;
         private final String role;
         private final Set<String> scopes;
+        private final Instant expiresAt;
+        private final Clock clock;
 
         private VerifiedPrincipal(long identityUid, String subject,
-                                  String role, Set<String> scopes) {
+                                  String role, Set<String> scopes,
+                                  Instant expiresAt, Clock clock) {
             if (identityUid <= 0 || subject == null || subject.isBlank()
                     || !ROLE_SCOPE_CEILINGS.containsKey(role)
                     || scopes == null || scopes.isEmpty()
-                    || !ROLE_SCOPE_CEILINGS.get(role).containsAll(scopes)) {
+                    || !ROLE_SCOPE_CEILINGS.get(role).containsAll(scopes)
+                    || expiresAt == null || clock == null
+                    || !expiresAt.isAfter(clock.instant())) {
                 throw new IllegalArgumentException("Invalid independently signed principal");
             }
             this.identityUid = identityUid;
             this.subject = subject;
             this.role = role;
             this.scopes = Set.copyOf(scopes);
+            this.expiresAt = expiresAt;
+            this.clock = clock;
         }
 
         public long identityUid() { return identityUid; }
         public String subject() { return subject; }
         public String role() { return role; }
-        public Set<String> scopes() { return scopes; }
+        /** Expired signed claims are never exposed as a live scope set. */
+        public Set<String> scopes() { return isFresh() ? scopes : Set.of(); }
 
-        /** Scope is only a capability ceiling: it never grants object ownership. */
+        /**
+         * A previously verified principal is not a permanent capability.
+         * This is token-expiry freshness only, NOT session revocation,
+         * object ownership or proof of live tenant membership.
+         */
+        public boolean isFresh() { return expiresAt.isAfter(clock.instant()); }
+
+        /** Scope is a time-limited ceiling; never a resource grant. */
         public boolean hasScope(String scope) {
-            return scope != null && scopes.contains(scope);
+            return scope != null && isFresh() && scopes.contains(scope);
         }
     }
 
@@ -148,7 +163,8 @@ public final class RuntimePinnedPrincipalVerifier {
             if (!ROLE_SCOPE_CEILINGS.get(rawRole).containsAll(scopes)) {
                 throw new IllegalArgumentException("Signed role-scope ceiling exceeded");
             }
-            return new VerifiedPrincipal(number, subject, (String) rawRole, scopes);
+            return new VerifiedPrincipal(number, subject, (String) rawRole,
+                scopes, expires, clock);
         } catch (RuntimeException untrusted) {
             // Never expose signature, private JWT fields or configuration in
             // an error sent to client or caller logs.

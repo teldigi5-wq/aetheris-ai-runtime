@@ -60,6 +60,10 @@ jobs:
           probe=(root/'security/RuntimeVerifiedTaskReadProbe.java').read_text()
           test=(Path('orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbeTest.java')).read_text()
           assert 'private VerifiedPrincipal(' in auth
+          assert 'expiresAt.isAfter(clock.instant())' in auth
+          assert 'scopes, expires, clock' in auth
+          assert 'isFresh() && scopes.contains(scope)' in auth
+          assert 'cachedPrincipalExpiresBeforeAnotherRealJdbcTaskRead' in test
           assert 'public record VerifiedPrincipal(' not in auth
           assert 'parseSignedClaims(token)' in auth
           for marker in ('PreparedStatement', 'principal.identityUid()', 'principal.hasScope("orchestrator:read")',
