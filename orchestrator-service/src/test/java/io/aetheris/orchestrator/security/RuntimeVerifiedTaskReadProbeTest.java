@@ -46,6 +46,8 @@ class RuntimeVerifiedTaskReadProbeTest {
     private static RuntimePinnedPrincipalVerifier verifier;
     private static KeyPair fenceSigningKey;
     private static RuntimePinnedLocalFenceLeaseVerifier fenceVerifier;
+    private static KeyPair workloadSigningKey;
+    private static RuntimePinnedWorkloadIdentityVerifier workloadVerifier;
     private final RuntimeVerifiedTaskReadProbe probe = new RuntimeVerifiedTaskReadProbe();
 
     @BeforeAll
@@ -135,6 +137,10 @@ class RuntimeVerifiedTaskReadProbeTest {
         fenceVerifier = new RuntimePinnedLocalFenceLeaseVerifier(
             publicKeyPem(fenceSigningKey), FENCE_KID, FENCE_ISSUER,
             FENCE_AUDIENCE, Clock.systemUTC());
+        workloadSigningKey = generator.generateKeyPair();
+        workloadVerifier = new RuntimePinnedWorkloadIdentityVerifier(
+            publicKeyPem(workloadSigningKey), WORKLOAD_KID, WORKLOAD_ISSUER,
+            WORKLOAD_AUDIENCE, Clock.systemUTC());
     }
 
     @AfterAll
@@ -208,6 +214,11 @@ class RuntimeVerifiedTaskReadProbeTest {
     private static final String FENCE_ISSUER = "https://fence.aetheris.example.invalid";
     private static final String FENCE_AUDIENCE = "aetheris-runtime-fence-review";
     private static final String FENCE_KID = "b62-review-fence-key";
+    private static final String REVIEW_WORKLOAD_A = "runtime-review-worker-a";
+    private static final String REVIEW_WORKLOAD_B = "runtime-review-worker-b";
+    private static final String WORKLOAD_ISSUER = "https://workload.aetheris.example.invalid";
+    private static final String WORKLOAD_AUDIENCE = "aetheris-runtime-workload-review";
+    private static final String WORKLOAD_KID = "b62-review-workload-key";
 
     private static String publicKeyPem(KeyPair key) {
         return "-----BEGIN PUBLIC KEY-----\n"
@@ -219,13 +230,41 @@ class RuntimeVerifiedTaskReadProbeTest {
     private static String signedFenceJwt(KeyPair signer, String endpoint,
             long term, String issuer, String audience, String kid,
             String purpose, String resource, Instant issued, Instant expires) {
+        return signedFenceJwtBoundTo(signer, endpoint, term, issuer,
+            audience, kid, purpose, resource, issued, expires, REVIEW_WORKLOAD_A);
+    }
+
+    private static String signedFenceJwtBoundTo(KeyPair signer, String endpoint,
+            long term, String issuer, String audience, String kid,
+            String purpose, String resource, Instant issued, Instant expires,
+            String workloadSubject) {
         return Jwts.builder().header().keyId(kid).and()
             .subject("synthetic-resource-leader").issuer(issuer)
             .claim("aud", List.of(audience))
             .claim("purpose", purpose).claim("resource", resource)
             .claim("endpoint", endpoint).claim("term", term)
+            .claim("workload", workloadSubject)
             .issuedAt(Date.from(issued)).expiration(Date.from(expires))
             .signWith(signer.getPrivate(), Jwts.SIG.RS256).compact();
+    }
+
+    private static String signedWorkloadJwt(KeyPair signer, String subject,
+            String issuer, String audience, String kid, String purpose,
+            String resource, Instant issued, Instant expires) {
+        return Jwts.builder().header().keyId(kid).and()
+            .subject(subject).issuer(issuer).claim("aud", List.of(audience))
+            .claim("purpose", purpose).claim("resource", resource)
+            .issuedAt(Date.from(issued)).expiration(Date.from(expires))
+            .signWith(signer.getPrivate(), Jwts.SIG.RS256).compact();
+    }
+
+    private static RuntimePinnedWorkloadIdentityVerifier.VerifiedWorkload
+            signedWorkload(String subject) {
+        Instant now = Instant.now();
+        return workloadVerifier.verifySignedWorkload(signedWorkloadJwt(
+            workloadSigningKey, subject, WORKLOAD_ISSUER, WORKLOAD_AUDIENCE,
+            WORKLOAD_KID, "runtime-workload-review", "runtime",
+            now.minusSeconds(5), now.plusSeconds(55)));
     }
 
     private static RuntimePinnedLocalFenceLeaseVerifier.VerifiedLease signedFence(
@@ -242,7 +281,8 @@ class RuntimeVerifiedTaskReadProbeTest {
             RuntimePinnedPrincipalVerifier.VerifiedPrincipal signed,
             String tenant, String project, UUID id) {
         return combined.canReadSynthetic(c, signed, tenant, project, id,
-            signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM));
+            signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+            signedWorkload(REVIEW_WORKLOAD_A));
     }
 
     @Test
