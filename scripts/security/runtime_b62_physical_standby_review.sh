@@ -15,12 +15,16 @@ db=aetheris_replica_disposable
 replicauser=b62_ci_replication
 owner_password="$(openssl rand -hex 24)"
 replica_password="$(openssl rand -hex 24)"
+held_action_output=""
+transition_output=""
 
 cleanup() {
   local code=$?
   trap - EXIT
   docker rm -fv "$authority" "$standby" "$primary" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
+  [[ -z "$held_action_output" ]] || rm -f -- "$held_action_output"
+  [[ -z "$transition_output" ]] || rm -f -- "$transition_output"
   if test "$code" -eq 0; then
     echo AETHERIS_B62_PHYSICAL_REPLICA_CONTAINERS_NETWORK_DESTROYED_PASS
   fi
@@ -437,6 +441,72 @@ test "$(coord_write "SELECT endpoint || ':' || term
   FROM public.b62_resource_fence WHERE resource_key='runtime'")" = "$standby:2"
 echo AETHERIS_B62_DEFINER_AUTHORITY_COLUMNS_DENIED_PASS
 
+# Two REAL, overlapping PostgreSQL transactions on the coordinator node.
+# The restricted actor calls SECURITY DEFINER under an explicit transaction
+# and SLEEPS while holding the FOR SHARE leader+resource row locks.
+# A separate coordinator writer tries to advance both authority rows.
+# Observe PgSleep first; assert failure is a *real lock timeout*.
+held_action_output="$(mktemp)"
+transition_output="$(mktemp)"
+(
+  fence_as "$standby" "$fence_new" "$fence_new_pw" \
+    "BEGIN;
+     SELECT public.b62_try_protected_action(2,'inflight-term-two');
+     SELECT pg_sleep(12);
+     COMMIT;"
+) >"$held_action_output" 2>&1 &
+held_pid=$!
+held_ready=false
+for poll in $(seq 1 80); do
+  if test "$(coord_write "SELECT count(*) FROM pg_stat_activity
+        WHERE usename='$fence_new' AND state='active'
+          AND wait_event='PgSleep'
+          AND query LIKE '%inflight-term-two%'")" = 1; then
+    held_ready=true
+    break
+  fi
+  if ! kill -0 "$held_pid" 2>/dev/null; then break; fi
+  sleep 0.1
+done
+if test "$held_ready" != true; then
+  echo "FAIL: in-flight effect did not reach observed transaction hold" >&2
+  exit 1
+fi
+if coord_write "BEGIN; SET LOCAL lock_timeout='400ms';
+  UPDATE public.leader_fence SET term=3
+    WHERE authority_key='runtime' AND term=2;
+  COMMIT;" > /dev/null 2>"$transition_output"; then
+  echo "FAIL: coordinator advanced leadership during protected effect" >&2
+  exit 1
+fi
+if ! grep -Fq 'canceling statement due to lock timeout' \
+    "$transition_output"; then
+  echo "FAIL: coordinator UPDATE failed for reason other than row lock" >&2
+  exit 1
+fi
+if coord_write "BEGIN; SET LOCAL lock_timeout='400ms';
+  UPDATE public.b62_resource_fence SET term=3
+    WHERE resource_key='runtime' AND term=2;
+  COMMIT;" > /dev/null 2>"$transition_output"; then
+  echo "FAIL: resource fence advanced during protected effect" >&2
+  exit 1
+fi
+if ! grep -Fq 'canceling statement due to lock timeout' \
+    "$transition_output"; then
+  echo "FAIL: resource UPDATE failed for reason other than row lock" >&2
+  exit 1
+fi
+wait "$held_pid"
+test "$(coord_write "SELECT actor_login || ':' || term::text
+  FROM public.b62_protected_actions
+  WHERE request_id='inflight-term-two'")" = "$fence_new:2"
+test "$(coord_write 'SELECT count(*) FROM public.b62_protected_actions')" = 2
+test "$(coord_write "SELECT term FROM public.leader_fence
+  WHERE authority_key='runtime'")" = 2
+test "$(coord_write "SELECT term FROM public.b62_resource_fence
+  WHERE resource_key='runtime'")" = 2
+echo AETHERIS_B62_INFLIGHT_ROW_LOCK_BLOCKS_LEADERSHIP_ADVANCE_PASS
+
 # Deliberate negative-only TOCTOU counterexample, NOT a safe application gate:
 # capture an eligible coordinator decision, change leadership, then show
 # the previously eligible database still returns ALLOW. A fresh review_route
@@ -451,6 +521,7 @@ coord_write "UPDATE leader_fence SET endpoint='$primary', term=3,
   expires_at=clock_timestamp()+interval '15 minutes'
   WHERE authority_key='runtime' AND term=2;" >/dev/null
 test "$(coord_write "SELECT term FROM leader_fence WHERE authority_key='runtime'")" = 3
+echo AETHERIS_B62_POST_INFLIGHT_LEADERSHIP_TRANSITION_PASS
 # This is the UNSAFE result a caller could reuse between two sequential reads.
 test "$(standby_sql "$new_sql")" = t
 if review_route "$standby" 2 "$new_sql"; then
@@ -465,7 +536,7 @@ test "$(fence_as "$standby" "$fence_new" "$fence_new_pw" \
   "SELECT public.b62_try_protected_action(2,'stale-after-switch')")" = f
 test "$(fence_as "$primary" "$fence_old" "$fence_old_pw" \
   "SELECT public.b62_try_protected_action(3,'old-primary-term-three')")" = f
-test "$(coord_write 'SELECT count(*) FROM public.b62_protected_actions')" = 1
+test "$(coord_write 'SELECT count(*) FROM public.b62_protected_actions')" = 2
 # Only the synthetic test owner can atomically advance both rows.
 # No real failover controller, runtime route or customer data is involved.
 coord_write "BEGIN;
@@ -486,7 +557,7 @@ if fence_as "$standby" "$fence_new" "$fence_new_pw" \
   >/dev/null 2>&1; then
   echo "FAIL: resource accepted a duplicate action request" >&2; exit 1
 fi
-test "$(coord_write 'SELECT count(*) FROM public.b62_protected_actions')" = 2
+test "$(coord_write 'SELECT count(*) FROM public.b62_protected_actions')" = 3
 echo AETHERIS_B62_RESOURCE_OWNED_MONOTONIC_FENCE_ATOMIC_ACTION_PASS
 
 # Separate physical PostgreSQL resource nodes, NOT the coordinator database.
