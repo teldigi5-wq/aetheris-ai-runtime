@@ -53,6 +53,8 @@ class RuntimeHttpSignedOwnerJdbcBoundaryTest {
     private static final String KID = "s0-http-jdbc-ci";
     private static final UUID ALICE_TASK =
         UUID.fromString("22222222-2222-4222-8222-222222222222");
+    private static final UUID ALICE_BETA_TASK =
+        UUID.fromString("33333333-3333-4333-8333-333333333333");
     private static final UUID BOB_TASK =
         UUID.fromString("44444444-4444-4444-8444-444444444444");
     private static final UUID LEGACY_TASK =
@@ -117,17 +119,20 @@ class RuntimeHttpSignedOwnerJdbcBoundaryTest {
             sql.execute("""
                 INSERT INTO aetheris_tasks VALUES
                   ('22222222-2222-4222-8222-222222222222',42,'tenant-alpha','project-red',statement_timestamp()),
+                  ('33333333-3333-4333-8333-333333333333',42,'tenant-beta','project-red',statement_timestamp()),
                   ('44444444-4444-4444-8444-444444444444',77,'tenant-alpha','project-blue',statement_timestamp()),
                   ('11111111-1111-4111-8111-111111111111',NULL,NULL,NULL,NULL)
                 """);
             sql.execute("""
                 INSERT INTO tenant_memberships VALUES
                   ('tenant-alpha',42,'ACTIVE',NULL,statement_timestamp() + interval '1 day'),
+                  ('tenant-beta',42,'ACTIVE',NULL,statement_timestamp() + interval '1 day'),
                   ('tenant-alpha',77,'ACTIVE',NULL,statement_timestamp() + interval '1 day')
                 """);
             sql.execute("""
                 INSERT INTO project_memberships VALUES
                   ('tenant-alpha','project-red',42,'ACTIVE',NULL,statement_timestamp() + interval '1 day'),
+                  ('tenant-beta','project-red',42,'ACTIVE',NULL,statement_timestamp() + interval '1 day'),
                   ('tenant-alpha','project-blue',77,'ACTIVE',NULL,statement_timestamp() + interval '1 day')
                 """);
         }
@@ -363,6 +368,61 @@ class RuntimeHttpSignedOwnerJdbcBoundaryTest {
             change.setString(1, newStatus);
             change.setString(2, newStatus);
             assertEquals(1, change.executeUpdate(), "Test fixture must update exactly one membership");
+        }
+    }
+
+
+    @Test
+    void sameSignedUidCannotCrossTenantsOrConfuseTaskSelectorsOverHttp()
+            throws Exception {
+        String alice = bearer(trustedKey, 42, List.of("orchestrator:read"));
+        String bob = bearer(trustedKey, 77, List.of("orchestrator:read"));
+        String alpha = proofUrl("tenant-alpha", "project-red", ALICE_TASK);
+        String beta = proofUrl("tenant-beta", "project-red", ALICE_BETA_TASK);
+        status(204, alpha, alice, Map.of());
+        status(204, beta, alice, Map.of());
+        status(404, proofUrl("tenant-beta", "project-red", ALICE_TASK), alice, Map.of());
+        status(404, proofUrl("tenant-alpha", "project-red", ALICE_BETA_TASK), alice, Map.of());
+        status(404, beta, bob, Map.of("X-Aetheris-Owner", "42"));
+        status(404, alpha, bob, Map.of("X-Forwarded-User", "42"));
+        status(404, "/__s0/owner-read?tenant=tenant-alpha%27OR1%3D1--"
+            + "&project=project-red&task=" + ALICE_TASK, alice, Map.of());
+        status(404, "/__s0/owner-read?tenant=tenant-alpha"
+            + "&project=project-red&project=project-red&task=" + ALICE_TASK,
+            alice, Map.of());
+    }
+
+    @Test
+    void committedProjectRevocationDeniesNextRealSignedHttpRequest()
+            throws Exception {
+        String alice = bearer(trustedKey, 42, List.of("orchestrator:read"));
+        String own = proofUrl("tenant-alpha", "project-red", ALICE_TASK);
+        String independentTenant = proofUrl("tenant-beta", "project-red", ALICE_BETA_TASK);
+        status(204, own, alice, Map.of());
+        status(204, independentTenant, alice, Map.of());
+        try {
+            projectStatus("REVOKED");
+            status(404, own, alice, Map.of());
+            status(204, independentTenant, alice, Map.of());
+        } finally {
+            projectStatus("ACTIVE");
+        }
+        status(204, own, alice, Map.of());
+    }
+
+    private static void projectStatus(String newStatus) throws Exception {
+        try (Connection writer = connect();
+             PreparedStatement change = writer.prepareStatement("""
+                 UPDATE project_memberships
+                 SET status=?, revoked_at=CASE WHEN ?='REVOKED'
+                     THEN statement_timestamp() ELSE NULL END
+                 WHERE tenant_key='tenant-alpha'
+                   AND project_key='project-red' AND identity_uid=42
+                 """)) {
+            change.setString(1, newStatus);
+            change.setString(2, newStatus);
+            assertEquals(1, change.executeUpdate(),
+                "Disposable fixture must update exactly one project membership");
         }
     }
 
