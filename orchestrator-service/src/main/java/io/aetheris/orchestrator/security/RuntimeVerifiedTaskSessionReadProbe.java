@@ -17,6 +17,8 @@ import java.util.UUID;
  * Endpoint/term now originate from a separately verified, expiring RS256
  * review token, not arbitrary string/long arguments. Even a correctly signed
  * stale bearer lease can match an obsolete local row on an isolated primary.
+ * A second independently signed workload assertion must match the lease's
+ * signed workload subject. Neither bearer proves the transport's machine.
  */
 public final class RuntimeVerifiedTaskSessionReadProbe {
     private static final String SELECTOR = "[a-z0-9][a-z0-9_-]{0,95}";
@@ -65,12 +67,13 @@ public final class RuntimeVerifiedTaskSessionReadProbe {
     public boolean canReadSynthetic(Connection connection,
             RuntimePinnedPrincipalVerifier.VerifiedPrincipal principal,
             String tenant, String project, UUID taskId,
-            RuntimePinnedLocalFenceLeaseVerifier.VerifiedLease lease) {
+            RuntimePinnedLocalFenceLeaseVerifier.VerifiedLease lease,
+            RuntimePinnedWorkloadIdentityVerifier.VerifiedWorkload workload) {
         try {
             if (connection == null || principal == null
                     || connection.getAutoCommit()
                     || !principal.hasScope("orchestrator:read")
-                    || lease == null || !lease.isFresh()
+                    || lease == null || !lease.isBoundTo(workload)
                     || taskId == null || !valid(tenant) || !valid(project)) {
                 return false;
             }
@@ -99,7 +102,7 @@ public final class RuntimeVerifiedTaskSessionReadProbe {
                 read.setLong(15, iat);
                 try (ResultSet decision = read.executeQuery()) {
                     return decision.next() && decision.getBoolean(1)
-                        && lease.isFresh() && principal.isFresh();
+                        && lease.isBoundTo(workload) && principal.isFresh();
                 }
             }
         } catch (SQLException | RuntimeException denied) {
