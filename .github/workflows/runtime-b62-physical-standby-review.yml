@@ -66,9 +66,19 @@ jobs:
               'AETHERIS_B62_PG16_REPLAY_SOURCE_UID_PROVENANCE_MISSING_NO_GO_PASS',
           ):
               assert marker in continuity
+          provenance=Path('scripts/security/runtime_b62_pg16_provenance_authenticity_review.sh').read_text()
+          for marker in (
+              'AETHERIS_B62_PG16_PROVENANCE_MISMATCH_FORGED_OUT_OF_ORDER_DENIED_PASS',
+              'AETHERIS_B62_PG16_AUTHENTICATED_EVENT_REPLAY_TEST_ONLY_PASS',
+              'REVOKE ALL ON public.b62_provenance_verify_key',
+              'session_user',
+          ):
+              assert marker in provenance
+          assert 'source scripts/security/runtime_b62_pg16_provenance_authenticity_review.sh' in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           bash -n scripts/security/runtime_b62_pg16_revocation_continuity_review.sh
+          bash -n scripts/security/runtime_b62_pg16_provenance_authenticity_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
       - name: Real physical standby, stale WAL, deliberate isolated dual-primary and old-primary fencing
         shell: bash
