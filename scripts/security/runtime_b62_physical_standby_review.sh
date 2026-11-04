@@ -601,6 +601,8 @@ echo AETHERIS_B62_SEPARATE_DATABASE_OLD_RESOURCE_FENCED_DURING_PARTITION_PASS
 source scripts/security/runtime_b62_pg16_revocation_continuity_review.sh
 # Review-only source-event authentication; still no safe distributed cutover.
 source scripts/security/runtime_b62_pg16_provenance_authenticity_review.sh
+# A revocation source can commit while an uncommitted resource effect remains.
+source scripts/security/runtime_b62_pg16_inflight_commit_revocation_review.sh
 
 # A local term alone does NOT detect coordinator outage: the promoted
 # database still accepts a locally matched synthetic term while its
