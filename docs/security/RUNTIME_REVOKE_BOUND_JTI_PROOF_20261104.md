@@ -508,3 +508,57 @@ atomicity, verified client transport, writer migration or
 release-level security evidence exists. No protected API route
 is enabled. Runtime #23, Platform #251 and all nine Stage45
 attestations remain open. **Stage45 NO_GO**.
+
+## 4 November 2026 — real concurrent detached-resource NO_GO proof
+
+The preceding test established a useful, **limited** positive property:
+an effect and leadership transition are serialized when both
+authority and effect run on **one PostgreSQL database**, holding
+FOR SHARE locks on the same two authority rows. This is not the
+topology of a real independent resource node.
+
+The new B62 negative experiment uses **separate running PostgreSQL16
+processes**: the coordinator holds the authoritative leader_fence
+while the physically promoted resource database holds its own
+b62_local_fence and b62_local_effects. On the promoted resource,
+an independently authenticated disposable SQL writer begins a
+transaction, invokes the local SECURITY DEFINER effect function
+with signed-transport-independent synthetic term 4, and pauses
+inside pg_sleep(12) without committing. The harness observes its
+actual PgSleep wait event in that resource's pg_stat_activity before
+trying to change leadership. No assumption about scheduling alone
+is accepted as a concurrency proof.
+
+While the resource transaction remains open, an administrator
+advances the **separate coordinator** from term 4 to term 5, with
+a 400 ms lock timeout to reject unexpected blocking. This update
+succeeds: the resource-local row lock does not serialize with
+the remote leader-fence update. A fresh coordinator-based client
+route check correctly rejects stale term 4, yet the detached
+resource remains at local term 4. When the resource transaction
+commits, CI confirms that the already-authorized old-term action
+was recorded with term 4. **This is an intentionally observed
+unsafe outcome and must never be interpreted as a release grant.**
+
+The existing negative experiments continue to demonstrate stale
+old-primary effects and local writes during coordinator outage.
+Expected synthetic per-resource effect counts were updated to
+account for the one additional unsafe committed effect. The
+disposable containers and network must still be destroyed by CI.
+
+**Engineering implication:** An authenticated or signed lease,
+a fail-closed API route, and a SQL row lock on an independent
+resource are individually insufficient to prevent stale
+in-flight effects during externally coordinated leadership
+transitions. A production solution must define a resource
+cutover barrier that closes old writers before transferring
+authority, verify the barrier across partitions/failover, and
+safely handle in-flight work, data durability and downstream
+non-database side effects. A proposed protocol needs explicit
+failure models and hardware/transport evidence; none is
+implemented or claimed by this lab.
+
+No production routes or workers were activated. The PR remains
+draft/unmerged, Runtime issue #23 and Platform issue #251 remain
+unresolved, and Stage45's outstanding release evidence is not
+satisfied. **Stage45 NO_GO.**
