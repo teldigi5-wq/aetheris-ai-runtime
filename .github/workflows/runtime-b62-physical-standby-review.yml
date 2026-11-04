@@ -96,6 +96,15 @@ jobs:
           ):
               assert token in crash
           assert 'source scripts/security/runtime_b62_pg16_source_crash_recovery_review.sh' in script
+          prebarrier=Path('scripts/security/runtime_b62_pg16_prebarrier_coordinator_loss_review.sh').read_text()
+          for mark in (
+              'AETHERIS_B62_PG16_COORDINATOR_LOST_BEFORE_RESOURCE_BARRIER_UNSAFE_ALLOW_NO_GO_PASS',
+              'AETHERIS_B62_PG16_LATE_DENY_BARRIER_CANNOT_REVERSE_STALE_EFFECT_PASS',
+              'AETHERIS_B62_PG16_PREBARRIER_PARTITION_RECOVERY_WITH_IRREVERSIBLE_EFFECT_NO_GO_PASS',
+              'docker stop "$authority"',
+          ):
+              assert mark in prebarrier
+          assert 'source scripts/security/runtime_b62_pg16_prebarrier_coordinator_loss_review.sh' in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           bash -n scripts/security/runtime_b62_pg16_revocation_continuity_review.sh
@@ -103,6 +112,7 @@ jobs:
           bash -n scripts/security/runtime_b62_pg16_inflight_commit_revocation_review.sh
           bash -n scripts/security/runtime_b62_pg16_reachable_prepublication_barrier_review.sh
           bash -n scripts/security/runtime_b62_pg16_source_crash_recovery_review.sh
+          bash -n scripts/security/runtime_b62_pg16_prebarrier_coordinator_loss_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
       - name: Real physical standby, stale WAL, deliberate isolated dual-primary and old-primary fencing
         shell: bash
