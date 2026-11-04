@@ -164,3 +164,25 @@ partition or a production authenticated revocation service. Its result
 must not be used to admit any Runtime task, mission or SSE route.
 Issues #23/#251 OPEN, Stage45 NO_GO; no production schema, main merge,
 deployment or real inference authorization.
+
+## 4 November 2026 — require PostgreSQL primary and fresh read transaction
+
+Review-only emergency B62 and synthetic session registration predicates
+now include **`AND NOT pg_is_in_recovery()`** in the same SQL statement
+that verifies `READ COMMITTED`, signer block, principal cutoff, and
+signed-session state. On a PostgreSQL hot standby, this predicate must
+fail closed rather than accepting a potentially stale revocation answer.
+
+A separate disposable PG16 test checks that the actual restricted login
+is connected to a primary (`pg_is_in_recovery() = false`), correctly
+evaluates a signed registered session on `READ COMMITTED`, and denies
+both predicates when the real JDBC transaction is switched to
+`REPEATABLE READ`. All other negative tests, schema/role cleanup and
+HTTP quarantine remain unchanged.
+
+**Limits:** There is no second PostgreSQL node in this CI. This confirms
+the query-level primary-only guard and actual snapshot isolation rejection,
+**not** a real standby failover, stale-replica network routing, split-brain,
+read-after-write consistency across services or in-flight cancellation test.
+No production reader or customer API is activated. Stage45 NO_GO; issues
+#23 and #251 remain open.

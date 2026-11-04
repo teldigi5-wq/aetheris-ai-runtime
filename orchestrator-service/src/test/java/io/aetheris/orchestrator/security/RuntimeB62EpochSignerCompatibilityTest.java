@@ -172,6 +172,7 @@ class RuntimeB62EpochSignerCompatibilityTest {
                     || signed.verifiedKeyId().length() > 64) return false;
             try (PreparedStatement q = c.prepareStatement("""
                 SELECT current_setting('transaction_isolation')='read committed'
+                AND NOT pg_is_in_recovery()
                 AND NOT EXISTS (SELECT 1 FROM blocked_signer_kids
                   WHERE issuer=? AND kid=?)
                 AND NOT EXISTS (SELECT 1 FROM principal_epochs
@@ -340,6 +341,7 @@ class RuntimeB62EpochSignerCompatibilityTest {
                     || verified.verifiedKeyId().length() > 64) return false;
             try (PreparedStatement sql = c.prepareStatement("""
                 SELECT current_setting('transaction_isolation')='read committed'
+                  AND NOT pg_is_in_recovery()
                   AND EXISTS (
                     SELECT 1 FROM synthetic_session_registration active
                     WHERE active.issuer=? AND active.kid=? AND active.jti=?
@@ -561,6 +563,38 @@ class RuntimeB62EpochSignerCompatibilityTest {
             // the same restricted primary again; no stale allow is cached.
             assertTrue(syntheticComposedDecision(c, earlier));
             c.rollback();
+        }
+    }
+
+    @Test void primaryOnlyDecisionRequiresCurrentCommittedPrimaryStatement()
+            throws Exception {
+        registerSyntheticSession(earlier);
+        try (Connection primary = reader()) {
+            // Verify real PostgreSQL primary state on the separately
+            // authenticated SELECT-only reviewer connection.
+            try (PreparedStatement statement = primary.prepareStatement("""
+                    SELECT pg_is_in_recovery(),
+                      current_setting('transaction_isolation'),
+                      current_setting('transaction_read_only')
+                    """);
+                 ResultSet rows = statement.executeQuery()) {
+                assertTrue(rows.next());
+                assertFalse(rows.getBoolean(1),
+                    "Disposable CI must use a PostgreSQL primary");
+                assertEquals("read committed", rows.getString(2));
+                assertEquals("on", rows.getString(3));
+            }
+            assertTrue(syntheticComposedDecision(primary, earlier));
+            assertTrue(notEmergencyBlocked(primary, earlier));
+            primary.rollback();
+        }
+        // Actual REPEATABLE READ is refused even if the signed synthetic
+        // session is valid. This is NOT an actual physical-replica test.
+        try (Connection snapshot = reader()) {
+            snapshot.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+            assertFalse(syntheticComposedDecision(snapshot, earlier));
+            assertFalse(notEmergencyBlocked(snapshot, earlier));
+            snapshot.rollback();
         }
     }
 
