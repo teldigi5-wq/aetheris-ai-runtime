@@ -112,3 +112,30 @@ An independently reviewed, production primary-consistent read-only service,
 security migrations, grant management, bounded timeouts, signer blocks,
 audit, stale-replica protections and safe rollback remain outstanding.
 Runtime issue #23 and Platform #251 OPEN; Stage45 NO_GO.
+
+## 4 November 2026 — bounded disposable read-timeout negative proof
+
+A real PostgreSQL16 failure-recovery rehearsal now configures the temporary
+independently authenticated `ownerlab_b62r_*` LOGIN with a **server-enforced**
+`statement_timeout = 1500ms` on newly created connections. The review-only
+reader uses explicit `connectTimeout=3` and `socketTimeout=3` JDBC
+parameters, and its B62 emergency and composed session checks set
+`PreparedStatement.setQueryTimeout(2)`. These are bounded synthetic test
+defaults, **not production-derived latency SLOs**.
+
+A new regression registers a genuine signed synthetic session, proves the
+restricted reader can initially evaluate it, then deliberately executes
+`SELECT pg_sleep(3)` on the same read-only, READ COMMITTED transaction.
+PostgreSQL must return SQLSTATE `57014` from the role-level timeout, and
+both the composed session decision and B62 emergency-only predicate must
+**DENY while that transaction is aborted**. An explicit rollback then
+allows a fresh primary-backed statement to evaluate the same still-active
+session without any optimistic allow-cache. The temporary reader login
+and synthetic schema are still removed and checked at the end of CI.
+
+This is an actual disposable PostgreSQL timeout test, **not a network outage,
+replica freshness, TLS workload identity or permission-revocation race test**.
+No real Runtime authorization route consumes this code. A production
+primary-read path still needs a reviewed operational timeout budget,
+authenticated workload transport, transaction lifecycle and safe
+availability/rollback plan. Stage45 NO_GO; issues #23/#251 remain open.

@@ -103,6 +103,11 @@ class RuntimeB62EpochSignerCompatibilityTest {
             // granted on this lab schema's three synthetic tables.
             ddl.execute("CREATE ROLE " + readerRole
                 + " LOGIN PASSWORD '" + readerPassword + "'");
+            // Server-side per-LOGIN budget, not merely a cooperative JDBC
+            // readOnly flag. PostgreSQL applies this to every NEW connection
+            // and it survives a failed transaction's ROLLBACK.
+            ddl.execute("ALTER ROLE " + readerRole
+                + " SET statement_timeout = '1500ms'");
             ddl.execute("GRANT USAGE ON SCHEMA " + schema + " TO " + readerRole);
             ddl.execute("GRANT SELECT ON TABLE "
                 + schema + ".principal_epochs, "
@@ -144,7 +149,8 @@ class RuntimeB62EpochSignerCompatibilityTest {
         // Different real PostgreSQL login over TCP, NOT JDBC readOnly
         // masquerading as least privilege on the ownerlab_ci superuser.
         var c = DriverManager.getConnection(
-            "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+            "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable"
+                + "?connectTimeout=3&socketTimeout=3",
             readerRole, readerPassword);
         c.setSchema(schema);
         c.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
@@ -172,6 +178,7 @@ class RuntimeB62EpochSignerCompatibilityTest {
                   WHERE principal_id=?
                   AND ? <= reject_issued_at_or_before_epoch)
                 """)) {
+                q.setQueryTimeout(2);
                 q.setString(1, signed.verifiedIssuer());
                 q.setString(2, signed.verifiedKeyId());
                 q.setLong(3, signed.signedIdentityUid());
@@ -346,6 +353,7 @@ class RuntimeB62EpochSignerCompatibilityTest {
                     WHERE principal_id=?
                       AND ? <= reject_issued_at_or_before_epoch)
                 """)) {
+                sql.setQueryTimeout(2);
                 sql.setString(1, verified.verifiedIssuer());
                 sql.setString(2, verified.verifiedKeyId());
                 sql.setString(3, verified.signedTokenId());
@@ -447,6 +455,35 @@ class RuntimeB62EpochSignerCompatibilityTest {
         try (Connection unavailable = reader()) {
             unavailable.close();
             assertFalse(syntheticComposedDecision(unavailable, other));
+        }
+    }
+
+    @Test void timedOutPrimaryReadFailsClosedUntilTransactionRollback()
+            throws Exception {
+        // A registered and signed synthetic session is eligible before the
+        // failure. The distinct PostgreSQL LOGIN has a server-enforced
+        // statement_timeout; a deliberate slow SELECT must fail rather than
+        // potentially blocking an authorization decision indefinitely.
+        registerSyntheticSession(earlier);
+        try (Connection c = reader()) {
+            assertTrue(syntheticComposedDecision(c, earlier));
+            try (var slow = c.createStatement()) {
+                SQLException cancelled = assertThrows(SQLException.class,
+                    () -> slow.executeQuery("SELECT pg_sleep(3)"));
+                assertEquals("57014", cancelled.getSQLState(),
+                    "PostgreSQL role timeout must cancel the slow query");
+            }
+            // PostgreSQL aborts this transaction on statement timeout.
+            // There must not be any cache/optimistic-ALLOW fallback.
+            assertFalse(syntheticComposedDecision(c, earlier),
+                "A failed reader transaction cannot authorize a signed JWT");
+            assertFalse(notEmergencyBlocked(c, earlier),
+                "A B62 emergency-only check also denies an aborted read");
+            c.rollback();
+            // A fresh statement following an explicit rollback can consult
+            // the same restricted primary again; no stale allow is cached.
+            assertTrue(syntheticComposedDecision(c, earlier));
+            c.rollback();
         }
     }
 
