@@ -79,6 +79,10 @@ jobs:
           assert "private VerifiedRevocationFacts(" in pinned
           assert "revocationBoundVerifierRejectsMissingIdAndExpiredRetainedPrincipal" in (Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimePinnedPrincipalVerifierTest.java")).read_text()
           assert "cachedPrincipalExpiresBeforeAnotherRealJdbcTaskRead" in (Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbeTest.java")).read_text()
+          synthetic_jti=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeSyntheticSignedSessionJdbcTest.java")).read_text()
+          for marker in ("Assumptions.assumeTrue", "ownerlab_jti_", "requireRevocationFacts()", "current_setting('transaction_isolation') = 'read committed'", "DROP SCHEMA IF EXISTS", "committedRevocationIsNextStatementVisibleAndStoreFailureDenies"):
+              assert marker in synthetic_jti, marker
+          assert "@Component" not in synthetic_jti and "@RestController" not in synthetic_jti
           bridge = (Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeHttpSignedOwnerJdbcBoundaryTest.java")).read_text()
           for marker in ("Assumptions.assumeTrue", "DROP SCHEMA IF EXISTS", "new OwnerlessTaskMissionHttpFilter()", "new RuntimeUncertifiedApiHttpFilter()", "committedTenantRevocationDeniesNextRealSignedHttpRequest"):
               assert marker in bridge, marker
@@ -106,7 +110,7 @@ jobs:
         run: |
           set -euo pipefail
           ./mvnw -B -ntp -f orchestrator-service/pom.xml \
-            -Dtest=RuntimeQuarantinePathInfoBoundaryTest,RuntimeRealDirectPortDenialRegressionTest,RuntimeRouteAdmissionPolicyTest,RuntimeFullAppPinnedIdentityAuthorityTest,RuntimeControllerPolicyInventoryTest,RuntimeProductionApiQuarantineTest,RuntimeFullAppHttpContainmentTest,RuntimePinnedSpringBootHttpIntegrationTest,RuntimePinnedHttpBearerGateLoopbackTest,OwnerlessTaskMissionHttpFilterTest,RuntimeVerifiedTaskReadProbeTest,RuntimeHttpSignedOwnerJdbcBoundaryTest,RuntimePinnedPrincipalVerifierTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
+            -Dtest=RuntimeQuarantinePathInfoBoundaryTest,RuntimeRealDirectPortDenialRegressionTest,RuntimeRouteAdmissionPolicyTest,RuntimeFullAppPinnedIdentityAuthorityTest,RuntimeControllerPolicyInventoryTest,RuntimeProductionApiQuarantineTest,RuntimeFullAppHttpContainmentTest,RuntimePinnedSpringBootHttpIntegrationTest,RuntimePinnedHttpBearerGateLoopbackTest,OwnerlessTaskMissionHttpFilterTest,RuntimeVerifiedTaskReadProbeTest,RuntimeHttpSignedOwnerJdbcBoundaryTest,RuntimeSyntheticSignedSessionJdbcTest,RuntimePinnedPrincipalVerifierTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
           echo 'RUNTIME_CONSOLIDATED_HTTP_IDENTITY_POLICY_AND_OWNER_JDBC_REGRESSION_PASS'
       - name: Verify private route inventory is still deny-only
         shell: bash
@@ -129,7 +133,7 @@ jobs:
             sudo apt-get install -y -qq postgresql-client
           fi
           test "$(psql -X -A -t -c "SELECT count(*) FROM information_schema.tables WHERE table_name IN ('aetheris_tasks','tenant_memberships','project_memberships') AND table_schema NOT LIKE 'pg_temp_%'")" = "0"
-          test "$(psql -X -A -t -c "SELECT count(*) FROM pg_namespace WHERE nspname LIKE 'ownerlab_xconn_%' OR nspname LIKE 'ownerlab_http_%'")" = "0"
+          test "$(psql -X -A -t -c "SELECT count(*) FROM pg_namespace WHERE nspname LIKE 'ownerlab_xconn_%' OR nspname LIKE 'ownerlab_http_%' OR nspname LIKE 'ownerlab_jti_%'")" = "0"
           echo 'RUNTIME_DISPOSABLE_PG16_CROSS_SESSION_SCHEMA_CLEANUP_PASS'
       - name: No API admission, deployment or publication
         shell: bash
