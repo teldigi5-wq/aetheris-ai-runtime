@@ -75,10 +75,15 @@ jobs:
           ):
               assert marker in provenance
           assert 'source scripts/security/runtime_b62_pg16_provenance_authenticity_review.sh' in script
+          inflight=Path('scripts/security/runtime_b62_pg16_inflight_commit_revocation_review.sh').read_text()
+          assert 'AETHERIS_B62_PG16_INFLIGHT_EFFECT_COMMITS_AFTER_SOURCE_REVOCATION_NO_GO_PASS' in inflight
+          assert 'pg_stat_activity' in inflight and 'wait_event=\'PgSleep\'' in inflight
+          assert 'source scripts/security/runtime_b62_pg16_inflight_commit_revocation_review.sh' in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           bash -n scripts/security/runtime_b62_pg16_revocation_continuity_review.sh
           bash -n scripts/security/runtime_b62_pg16_provenance_authenticity_review.sh
+          bash -n scripts/security/runtime_b62_pg16_inflight_commit_revocation_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
       - name: Real physical standby, stale WAL, deliberate isolated dual-primary and old-primary fencing
         shell: bash
