@@ -481,6 +481,7 @@ local_setup() {
     REVOKE ALL ON public.b62_local_fence,public.b62_local_effects FROM PUBLIC;
     GRANT USAGE ON SCHEMA public TO $local_owner,$local_writer;
     GRANT SELECT ON public.b62_local_fence TO $local_owner;
+    GRANT UPDATE(term) ON public.b62_local_fence TO $local_owner;
     GRANT INSERT ON public.b62_local_effects TO $local_owner;
     CREATE FUNCTION public.b62_local_try_effect(p_term bigint,p_id text)
     RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER
