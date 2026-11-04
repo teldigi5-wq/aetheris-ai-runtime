@@ -142,12 +142,28 @@ jobs:
                          "AND fence.endpoint=? AND fence.term=?",
                          "fence.state='ACTIVE'",
                          "fence.expires_at>clock_timestamp()",
-                         "String localEndpoint, long localTerm",
-                         "validEndpoint(localEndpoint)", "localTerm <= 0",
+                         "RuntimePinnedLocalFenceLeaseVerifier.VerifiedLease lease",
+                         "lease == null || !lease.isFresh()",
+                         "read.setLong(2, lease.term())",
+                         "lease.isFresh() && principal.isFresh()",
                          "read.setLong(15, iat)"):
               assert marker in composite, marker
+          assert "String localEndpoint, long localTerm" not in composite
+          lease_source=(root/"security/RuntimePinnedLocalFenceLeaseVerifier.java").read_text()
+          for marker in ("private VerifiedLease(", "verifyWith(trustedKey)",
+                         '!"RS256".equals(signed.getHeader().getAlgorithm())',
+                         "expires.isAfter(issued.plusSeconds(90))",
+                         'claims.get("purpose")', 'claims.get("resource")',
+                         "getModulus().bitLength() < 2048",
+                         "public boolean isFresh()"):
+              assert marker in lease_source, marker
+          for forbidden in ("@Component", "@Bean", "@RestController",
+                            "System.getenv(", "jku=", "jwks="):
+              assert forbidden not in lease_source, forbidden
           for marker in ("CREATE TEMP TABLE b62_local_resource_fence",
-                         "NEGATIVE COUNTEREXAMPLE: caller-selected stale endpoint/term",
+                         "NEGATIVE COUNTEREXAMPLE: an authentic signed stale lease",
+                         "pinnedFenceAuthorityRejectsForgeryClaimsAndRetainedExpiry",
+                         "new RuntimePinnedLocalFenceLeaseVerifier",
                          "Explicitly fenced resource must deny every positive JTI",
                          "Expired local lease must deny even without JTI revocation"):
               assert marker in regression, marker
