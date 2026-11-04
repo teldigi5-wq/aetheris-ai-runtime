@@ -186,3 +186,46 @@ the query-level primary-only guard and actual snapshot isolation rejection,
 read-after-write consistency across services or in-flight cancellation test.
 No production reader or customer API is activated. Stage45 NO_GO; issues
 #23 and #251 remain open.
+
+## 4 November 2026 — single-statement signed session and task-owner composition
+
+A new **non-Spring, review-only** RuntimeVerifiedTaskSessionReadProbe
+combines the existing task/tenant/project owner predicate with an exact
+signed-JTI ACTIVE session registration, blocked signer check, and B62-G1
+inclusive principal issuance cutoff. It checks verified RS256-derived
+principal facts (UID, issuer, kid, signed JTI and signed issuance second)
+against one **READ COMMITTED**, non-standby PostgreSQL SELECT EXISTS
+statement. Each JDBC parameter is bound separately, with an explicit
+transaction required and a bounded 2-second **test-only** query timeout.
+A failed or unavailable authority returns DENY. A positive result is
+**synthetic evidence only**; it is not a production grant.
+
+The disposable ownerlab_ci PostgreSQL regression creates three
+**transaction-local TEMP fixtures**, registering exactly one signed
+session for one existing owner task. Its positive signed owner read must
+coexist with negative checks for no session registration, a second
+unregistered JTI of the same user, a different signed UID, wrong
+task/project/tenant, legacy ownerless data, malformed selectors and a
+signed token without a JTI. A blocked signer must deny even an ACTIVE
+session. A principal emergency cutoff equal to the signed issuance
+second must deny; issuance strictly after the cutoff can pass. An
+individually revoked JTI denies despite an eligible task owner.
+Implicit JDBC autocommit is rejected. The fixture is rolled back
+without creating permanent task, user, session or policy objects.
+
+**Important boundaries:** The SQL currently names synthetic session
+registration and B62 compatibility tables, not an independently
+certified Identity service or migrated production schema. The tests
+share one disposable PostgreSQL transaction and use a database-owner
+CI connection rather than an approved SELECT-only workload identity.
+They do not prove consensus, resource-local leader fencing, reliable
+cross-service JTI revocation, transactional HTTP/SSE emission, quorum,
+physically inaccessible old primaries or production latency/error
+budgets. An earlier positive owner-only probe remains an isolated
+prototype and MUST NOT be interpreted as a session authorization grant.
+The new method name canReadSynthetic is intentionally explicit.
+
+No route/filter/agent is activated and no customer data, deployment,
+main branch or real secret is touched. Keep Runtime issue #23,
+Platform issue #251, all nine Stage45 attestations and release status
+**NO_GO** until independently reviewed.
