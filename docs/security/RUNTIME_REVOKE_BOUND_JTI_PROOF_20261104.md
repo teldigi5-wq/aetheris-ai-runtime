@@ -423,3 +423,44 @@ All protected APIs remain deny-only; no routes, customers, secrets,
 protected main, release or deployment are modified. Runtime #23,
 Platform #251 and nine Stage45 attestations remain open.
 **Stage45 NO_GO**.
+
+## 4 November 2026 — remove leadership-write privilege from disposable effect owners
+
+The real PostgreSQL16 B62 physical-failover lab revealed an unnecessary
+authority escalation surface: the non-login SECURITY DEFINER roles that
+insert synthetic protected actions also held UPDATE(term) on both the
+coordinator and local resource-fence rows. This supported PostgreSQL's
+FOR SHARE row-lock privilege requirements but coupled the effect
+execution identity to leadership mutation rights.
+
+In the **disposable lab only**, the coordinator leader_fence,
+b62_resource_fence and each physical b62_local_fence gain a
+CHECK(lock_guard=0) smallint column. The respective effect-function
+owners receive UPDATE(lock_guard) solely to retain the minimum
+column-level privilege PostgreSQL uses when locking with FOR SHARE.
+They no longer receive UPDATE(term), UPDATE(endpoint) or
+UPDATE(expires_at). That lock_guard column is explicitly **not**
+used to decide leadership or admit an action; it is constrained to
+zero and changes to it cannot advance leadership.
+
+Regression probes first prove SET LOCAL ROLE actually changes the
+effective principal to each NOLOGIN function owner. They then attempt
+actual UPDATE(term) or UPDATE(endpoint) under that effective identity
+on the coordinator and **both** physical resource nodes. Every
+attempt must fail, and original authority term values are checked.
+Existing restricted login tests, valid signed/synthetic actions,
+non-replay behavior, stale old-primary ALLOW counterexamples,
+coordinator-outage behavior, real physical promotion and cleanup
+remain mandatory in the same draft workflow.
+
+**No production privilege migration is proposed.** PostgreSQL's
+column-level UPDATE capability on the constrained lock_guard still
+permits non-authority writes and potential lock-contention/DoS by an
+actor already holding the function-owner identity. Least privilege
+for a real system therefore requires a reviewed database role model
+and independent owner/signer/failover operator controls. The lab
+does not prove separation across independent real infrastructure,
+transport authorization, globally linearizable fencing, atomic
+failover or eventual event emission. All protected API filters remain
+quarantined. Runtime #23, Platform #251 and all nine Stage45
+attestations remain open; **Stage45 NO_GO**.
