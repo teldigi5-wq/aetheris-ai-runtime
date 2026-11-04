@@ -1,17 +1,10 @@
 name: Runtime consolidated deny-only HTTP and owner JDBC regression (review only)
+# This is a review-only, single-branch proof. A path allowlist can leave
+# stale green evidence when a security-related inherited class is changed.
+# Reverify every commit on this exact draft branch, including workflow edits.
 on:
   push:
     branches: [security/runtime-quarantine-pathinfo-boundary-20261101]
-    paths:
-      - '.github/workflows/runtime-pathinfo-quarantine-review.yml'
-      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeUncertifiedApiHttpFilter.java'
-      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java'
-      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeQuarantinePathInfoBoundaryTest.java'
-      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbe.java'
-      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimePinnedPrincipalVerifier.java'
-      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimePinnedPrincipalVerifierTest.java'
-      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbeTest.java'
-      - '.github/workflows/runtime-verified-jdbc-membership.yml'
 permissions:
   contents: read
 jobs:
