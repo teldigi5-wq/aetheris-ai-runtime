@@ -47,6 +47,12 @@ jobs:
                          "AETHERIS_B62_SEPARATE_LEADER_TERM_DENIES_OLD_PRIMARY_PASS",
                          "AETHERIS_B62_SEPARATE_LEADER_EXPIRY_AND_OUTAGE_FAIL_CLOSED_PASS",
                          "AETHERIS_B62_RESOURCE_OWNED_MONOTONIC_FENCE_ATOMIC_ACTION_PASS",
+                         "AETHERIS_B62_INFLIGHT_ROW_LOCK_BLOCKS_LEADERSHIP_ADVANCE_PASS",
+                         "AETHERIS_B62_POST_INFLIGHT_LEADERSHIP_TRANSITION_PASS",
+                         "pg_stat_activity", "wait_event='PgSleep'",
+                         "SET LOCAL lock_timeout='400ms'",
+                         "canceling statement due to lock timeout",
+                         "WHERE request_id='inflight-term-two'",
                          "FOR SHARE OF l,r;",
                          "REVOKE ALL ON FUNCTION public.b62_try_protected_action",
                          "AETHERIS_B62_SEPARATE_DATABASE_STALE_OLD_RESOURCE_ALLOW_NO_GO_PASS",
@@ -67,6 +73,12 @@ jobs:
           assert "GRANT UPDATE(term)" not in script
           assert "GRANT UPDATE(endpoint)" not in script
           assert "GRANT UPDATE(expires_at)" not in script
+          # Ensure both concurrent writer paths are covered and cannot
+          # pass merely from any unrelated SQL/permission failure.
+          assert script.count("grep -Fq 'canceling statement due to lock timeout'") == 2
+          assert "wait \"$held_pid\"" in script
+          assert script.count("UPDATE public.leader_fence SET term=3") >= 1
+          assert script.count("UPDATE public.b62_resource_fence SET term=3") >= 1
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
