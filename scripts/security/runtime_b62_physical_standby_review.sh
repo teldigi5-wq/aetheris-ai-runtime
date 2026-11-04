@@ -609,6 +609,8 @@ source scripts/security/runtime_b62_pg16_reachable_prepublication_barrier_review
 source scripts/security/runtime_b62_pg16_source_crash_recovery_review.sh
 # Negative: coordinator outage BEFORE a resource admission barrier.
 source scripts/security/runtime_b62_pg16_prebarrier_coordinator_loss_review.sh
+# Bounded local permit: pre-expiry stale-allow and post-expiry late-commit witnesses.
+source scripts/security/runtime_b62_pg16_local_permit_expiry_review.sh
 
 # A local term alone does NOT detect coordinator outage: the promoted
 # database still accepts a locally matched synthetic term while its
