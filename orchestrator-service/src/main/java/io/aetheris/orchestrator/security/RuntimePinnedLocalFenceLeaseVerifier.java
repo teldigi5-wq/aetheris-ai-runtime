@@ -31,14 +31,16 @@ public final class RuntimePinnedLocalFenceLeaseVerifier {
     public static final class VerifiedLease {
         private final String endpoint;
         private final long term;
+        private final String boundWorkload;
         private final Instant issuedAt;
         private final Instant expiresAt;
         private final Clock clock;
 
-        private VerifiedLease(String endpoint, long term, Instant issuedAt,
-                Instant expiresAt, Clock clock) {
+        private VerifiedLease(String endpoint, long term, String boundWorkload,
+                Instant issuedAt, Instant expiresAt, Clock clock) {
             this.endpoint = endpoint;
             this.term = term;
+            this.boundWorkload = boundWorkload;
             this.issuedAt = issuedAt;
             this.expiresAt = expiresAt;
             this.clock = clock;
@@ -46,6 +48,13 @@ public final class RuntimePinnedLocalFenceLeaseVerifier {
 
         public String endpoint() { return endpoint; }
         public long term() { return term; }
+
+        /** Signed name matching two independently verified assertions only. */
+        public boolean isBoundTo(
+                RuntimePinnedWorkloadIdentityVerifier.VerifiedWorkload workload) {
+            return workload != null && workload.isFresh() && isFresh()
+                && boundWorkload.equals(workload.subject());
+        }
 
         /** Previously verified signatures are not permanently live grants. */
         public boolean isFresh() {
@@ -72,7 +81,8 @@ public final class RuntimePinnedLocalFenceLeaseVerifier {
 
     /**
      * Verify an operator-pinned RS256 compact JWT (NOT an arbitrary caller
-     * endpoint/term). The token is an unbound bearer artefact: still unsafe
+     * endpoint/term). The two signed workload claims must be matched at
+     * the consuming probe. Both assertions are replayable bearer artefacts,
      * to rely on for cross-node leadership, HTTP, task execution or SSE.
      */
     public VerifiedLease verifySignedLease(String jwt) {
@@ -98,7 +108,10 @@ public final class RuntimePinnedLocalFenceLeaseVerifier {
             }
             Object rawEndpoint = claims.get("endpoint");
             Object rawTerm = claims.get("term");
+            Object rawWorkload = claims.get("workload");
             if (!(rawEndpoint instanceof String endpoint) || !validEndpoint(endpoint)
+                    || !(rawWorkload instanceof String boundWorkload)
+                    || !validWorkloadSubject(boundWorkload)
                     || !(rawTerm instanceof Integer || rawTerm instanceof Long)
                     || claims.getIssuedAt() == null || claims.getExpiration() == null) {
                 throw new IllegalArgumentException("Missing signed lease fields");
@@ -113,11 +126,16 @@ public final class RuntimePinnedLocalFenceLeaseVerifier {
                     || !expires.isAfter(now)) {
                 throw new IllegalArgumentException("Invalid signed lease lifetime or term");
             }
-            return new VerifiedLease(endpoint, term, issued, expires, clock);
+            return new VerifiedLease(endpoint, term, boundWorkload,
+                issued, expires, clock);
         } catch (RuntimeException invalid) {
             // Fail closed without revealing signed identities, tokens or keys.
             throw new IllegalArgumentException("Rejected pinned fence lease");
         }
+    }
+
+    private static boolean validWorkloadSubject(String subject) {
+        return subject != null && subject.matches("[a-z][a-z0-9-]{0,95}");
     }
 
     private static boolean validEndpoint(String endpoint) {
