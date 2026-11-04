@@ -43,7 +43,9 @@ jobs:
                          "pg_wal_replay_resume()", "AETHERIS_B62_PAUSED_STALE_STANDBY_FALSE_ALLOW_BLOCKED_PASS",
                          "pg_ctl -D /tmp/b62-standby -w -t 30 promote",
                          "AETHERIS_B62_SPLIT_BRAIN_OLD_PRIMARY_STALE_ALLOW_DEMONSTRATED_NO_GO_PASS",
-                         "AETHERIS_B62_DISPOSABLE_OLD_PRIMARY_FENCED_AFTER_PROMOTION_PASS"):
+                         "AETHERIS_B62_DISPOSABLE_OLD_PRIMARY_FENCED_AFTER_PROMOTION_PASS",
+                         "AETHERIS_B62_SEPARATE_LEADER_TERM_DENIES_OLD_PRIMARY_PASS",
+                         "AETHERIS_B62_SEPARATE_LEADER_EXPIRY_AND_OUTAGE_FAIL_CLOSED_PASS"):
               assert marker in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
@@ -58,7 +60,7 @@ jobs:
         run: |
           set -euo pipefail
           suffix="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          for role in primary standby; do
+          for role in primary standby coordinator; do
             name="aetheris-b62-$role-$suffix"
             test -z "$(docker ps -a --filter "name=^/$name$" --format '{{.Names}}')"
           done

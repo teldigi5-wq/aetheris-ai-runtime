@@ -66,3 +66,31 @@ split-brain and read-after-write tests, rollback and operator approvals.
 An old primary could still incorrectly approve before fencing: therefore
 Stage45 remains **NO_GO**. This test cannot be counted as one of the nine
 production release attestations. Runtime #23 and Platform #251 remain OPEN.
+
+## 4 November 2026 — separate, failure-closed leader/term test
+
+An isolated **third PostgreSQL16 container** now supplies a disposable
+coordinator `leader_fence` record with current endpoint, increasing term
+and expiry. A **separate SCRAM-authenticated SELECT-only role** queries this
+coordinator from the candidate database container. The lab requires both a
+current matching coordinator record and the original SQL decision to be
+positive. A stale old-primary record therefore cannot pass the synthetic
+routing gate after the coordinator points to the promoted node, despite
+the old primary still reporting `pg_is_in_recovery()=false`. The test
+also verifies a different currently active session on the promoted node,
+denies stale term, prevents unauthorized leader-row writes, and denies
+when the coordinator record expires or the coordinator is stopped. Upon
+restart a fresh lookup is possible. All three containers and the internal
+network are destroyed.
+
+**Not a production solution:** a separate coordinator lookup and session
+lookup are two sequential operations with an unresolved time-of-check-to-
+time-of-use race. This lab has no quorum, split-brain-proof consensus,
+durable hardware fencing, cryptographically bound endpoint identity,
+signed leases, mTLS, service networking policy or production failure
+domains. It cannot validate data continuity across a failover or prove
+that session revocation was durably synchronized. During initial
+promotion without coordinator update, stale authorizations remain a
+risk. Production must fence or invalidate old authority *before*
+resuming authorization on the new leader and deny all uncertain terms.
+Keep Stage45 NO_GO and Runtime #23/Platform #251 open.
