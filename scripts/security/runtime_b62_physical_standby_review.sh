@@ -338,6 +338,12 @@ CREATE TABLE public.b62_resource_fence(
   resource_key text PRIMARY KEY, endpoint text NOT NULL,
   term bigint NOT NULL CHECK (term>0));
 INSERT INTO public.b62_resource_fence VALUES ('runtime','$standby',2);
+-- FOR SHARE requires column-level UPDATE. The only grantable column
+-- is constrained to zero and is NOT a term, endpoint or lease.
+ALTER TABLE public.leader_fence ADD COLUMN lock_guard smallint NOT NULL
+  DEFAULT 0 CHECK(lock_guard=0);
+ALTER TABLE public.b62_resource_fence ADD COLUMN lock_guard smallint NOT NULL
+  DEFAULT 0 CHECK(lock_guard=0);
 CREATE TABLE public.b62_protected_actions(
   request_id text PRIMARY KEY, actor_login text NOT NULL, term bigint NOT NULL);
 CREATE ROLE $fence_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
@@ -347,8 +353,8 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 REVOKE ALL ON public.b62_resource_fence, public.b62_protected_actions FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO $fence_owner, $fence_old, $fence_new;
 GRANT SELECT ON public.leader_fence, public.b62_resource_fence TO $fence_owner;
-GRANT UPDATE(term) ON public.leader_fence TO $fence_owner;
-GRANT UPDATE(term) ON public.b62_resource_fence TO $fence_owner;
+GRANT UPDATE(lock_guard) ON public.leader_fence TO $fence_owner;
+GRANT UPDATE(lock_guard) ON public.b62_resource_fence TO $fence_owner;
 GRANT INSERT ON public.b62_protected_actions TO $fence_owner;
 CREATE FUNCTION public.b62_try_protected_action(p_term bigint,p_request text)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER
@@ -408,6 +414,24 @@ if fence_as "$standby" "$fence_new" "$fence_new_pw" \
   echo "FAIL: action caller can lower resource fencing term" >&2; exit 1
 fi
 test "$(coord_write 'SELECT count(*) FROM public.b62_protected_actions')" = 1
+# The SECURITY DEFINER owner itself must not possess leadership
+# mutation rights; only the synthetic coordinator/admin transitions terms.
+# SET LOCAL ROLE exercises effective function-owner privileges.
+if coord_write "BEGIN; SET LOCAL ROLE $fence_owner;
+  UPDATE public.leader_fence SET term=1 WHERE authority_key='runtime';" \
+  >/dev/null 2>&1; then
+  echo "FAIL: definer owner can change coordinator leadership term" >&2; exit 1
+fi
+if coord_write "BEGIN; SET LOCAL ROLE $fence_owner;
+  UPDATE public.b62_resource_fence SET endpoint='$primary'
+  WHERE resource_key='runtime';" >/dev/null 2>&1; then
+  echo "FAIL: definer owner can change protected resource endpoint" >&2; exit 1
+fi
+test "$(coord_write "SELECT term FROM public.leader_fence
+  WHERE authority_key='runtime'")" = 2
+test "$(coord_write "SELECT endpoint || ':' || term
+  FROM public.b62_resource_fence WHERE resource_key='runtime'")" = "$standby:2"
+echo AETHERIS_B62_DEFINER_AUTHORITY_COLUMNS_DENIED_PASS
 
 # Deliberate negative-only TOCTOU counterexample, NOT a safe application gate:
 # capture an eligible coordinator decision, change leadership, then show
@@ -478,6 +502,8 @@ local_setup() {
       resource_key text PRIMARY KEY, endpoint text NOT NULL,
       term bigint NOT NULL CHECK(term>0));
     INSERT INTO public.b62_local_fence VALUES ('runtime','$pinned',$epoch);
+    ALTER TABLE public.b62_local_fence ADD COLUMN lock_guard smallint NOT NULL
+      DEFAULT 0 CHECK(lock_guard=0);
     CREATE TABLE public.b62_local_effects(
       request_id text PRIMARY KEY, term bigint NOT NULL CHECK(term>0));
     CREATE ROLE $local_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
@@ -485,7 +511,7 @@ local_setup() {
     REVOKE ALL ON public.b62_local_fence,public.b62_local_effects FROM PUBLIC;
     GRANT USAGE ON SCHEMA public TO $local_owner,$local_writer;
     GRANT SELECT ON public.b62_local_fence TO $local_owner;
-    GRANT UPDATE(term) ON public.b62_local_fence TO $local_owner;
+    GRANT UPDATE(lock_guard) ON public.b62_local_fence TO $local_owner;
     GRANT INSERT ON public.b62_local_effects TO $local_owner;
     CREATE FUNCTION public.b62_local_try_effect(p_term bigint,p_id text)
     RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER
@@ -541,6 +567,23 @@ test "$(local_call "$standby" "$local_new_pw" \
   "SELECT public.b62_local_try_effect(4,'new-local-allow')")" = t
 test "$(primary_sql 'SELECT count(*) FROM public.b62_local_effects')" = 1
 test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 1
+# Independently verify definer identities cannot mint/swap authority fields
+# on EITHER writable primary even though FOR SHARE remains permitted.
+if primary_sql "BEGIN; SET LOCAL ROLE $local_owner;
+  UPDATE public.b62_local_fence SET term=5 WHERE resource_key='runtime';" \
+  >/dev/null 2>&1; then
+  echo "FAIL: old resource function owner can mint leadership term" >&2; exit 1
+fi
+if standby_sql "BEGIN; SET LOCAL ROLE $local_owner;
+  UPDATE public.b62_local_fence SET endpoint='$primary'
+  WHERE resource_key='runtime';" >/dev/null 2>&1; then
+  echo "FAIL: promoted resource function owner can swap endpoint" >&2; exit 1
+fi
+test "$(primary_sql "SELECT term FROM public.b62_local_fence
+  WHERE resource_key='runtime'")" = 2
+test "$(standby_sql "SELECT term FROM public.b62_local_fence
+  WHERE resource_key='runtime'")" = 4
+echo AETHERIS_B62_PHYSICAL_LOCAL_DEFINER_TERM_ENDPOINT_DENIED_PASS
 echo AETHERIS_B62_SEPARATE_DATABASE_STALE_OLD_RESOURCE_ALLOW_NO_GO_PASS
 
 # Resource-side SQL privileges, role credentials, wrong terms and replay
