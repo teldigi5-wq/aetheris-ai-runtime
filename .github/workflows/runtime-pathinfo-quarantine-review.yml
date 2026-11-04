@@ -1,4 +1,4 @@
-name: Runtime decoded pathInfo quarantine regression (review only)
+name: Runtime decoded pathInfo and real owner JDBC regression (review only)
 on:
   push:
     branches: [security/runtime-quarantine-pathinfo-boundary-20261101]
@@ -7,13 +7,37 @@ on:
       - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeUncertifiedApiHttpFilter.java'
       - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java'
       - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeQuarantinePathInfoBoundaryTest.java'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbe.java'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbeTest.java'
+      - '.github/workflows/runtime-verified-jdbc-membership.yml'
 permissions:
   contents: read
 jobs:
   decoded-servlet-pathinfo-fail-closed:
     runs-on: ubuntu-24.04
-    timeout-minutes: 28
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ownerlab_ci
+          POSTGRES_PASSWORD: disposable_ci_only_not_a_real_secret
+          POSTGRES_DB: ownerlab_disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ownerlab_ci -d ownerlab_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     env:
+      AETHERIS_OWNER_SCHEMA_DISPOSABLE_CI_ONLY: "yes"
+      AETHERIS_MEMBERSHIP_JDBC_MUST_RUN: "yes"
+      PGHOST: "127.0.0.1"
+      PGPORT: "5432"
+      PGUSER: "ownerlab_ci"
+      PGDATABASE: "ownerlab_disposable"
+      PGPASSWORD: "disposable_ci_only_not_a_real_secret"
       AETHERIS_DISPATCHER_ENABLED: 'false'
       AETHERIS_SYNTRA_OWNER_RUNTIME_ENABLED: 'false'
       AETHERIS_CLOUD_PROVIDER_ENABLED: 'false'
@@ -44,15 +68,36 @@ jobs:
               s=p.read_text()
               assert order in s and "SC_NOT_FOUND" in s and "@Component" in s
           assert "enum Verdict { QUARANTINED }" in (root/"security/RuntimeRouteAdmissionPolicy.java").read_text()
+          probe=(root/"security/RuntimeVerifiedTaskReadProbe.java").read_text()
+          regression=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbeTest.java")).read_text()
+          assert "current_setting('transaction_isolation') = 'read committed'" in probe
+          assert "tm.valid_until > statement_timestamp()" in probe
+          assert "pm.valid_until > statement_timestamp()" in probe
+          assert "committedExternalMembershipRevocationIsSeenByOpenReaderTransaction" in regression
+          assert "DROP SCHEMA IF EXISTS " in regression
+          old_workflow=Path(".github/workflows/runtime-verified-jdbc-membership.yml").read_text()
+          assert "current_setting('transaction_isolation') = 'read committed'" in old_workflow
+          assert "'CURRENT_TIMESTAMP'" not in old_workflow
           print("RUNTIME_QUARANTINE_PRODUCTION_FILTERS_UNCHANGED_IN_ORDER")
           PY
-      - name: Execute adversarial pathInfo plus existing full HTTP quarantine suites
+      - name: Execute adversarial HTTP quarantine plus real PostgreSQL signed-owner suites
         shell: bash
         run: |
           set -euo pipefail
           ./mvnw -B -ntp -f orchestrator-service/pom.xml \
-            -Dtest=RuntimeQuarantinePathInfoBoundaryTest,RuntimeRealDirectPortDenialRegressionTest,RuntimeProductionApiQuarantineTest,OwnerlessTaskMissionHttpFilterTest test
-          echo 'RUNTIME_PATHINFO_FULL_HTTP_QUARANTINE_REVIEW_PASS'
+            -Dtest=RuntimeQuarantinePathInfoBoundaryTest,RuntimeRealDirectPortDenialRegressionTest,RuntimeProductionApiQuarantineTest,OwnerlessTaskMissionHttpFilterTest,RuntimeVerifiedTaskReadProbeTest,RuntimePinnedPrincipalVerifierTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
+          echo 'RUNTIME_PATHINFO_HTTP_AND_OWNER_JDBC_QUARANTINE_REVIEW_PASS'
+      - name: Verify no transient shared-schema or permanent tenant/task objects
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+          test "$(psql -X -A -t -c "SELECT count(*) FROM information_schema.tables WHERE table_name IN ('aetheris_tasks','tenant_memberships','project_memberships') AND table_schema NOT LIKE 'pg_temp_%'")" = "0"
+          test "$(psql -X -A -t -c "SELECT count(*) FROM pg_namespace WHERE nspname LIKE 'ownerlab_xconn_%'")" = "0"
+          echo 'RUNTIME_DISPOSABLE_PG16_CROSS_SESSION_SCHEMA_CLEANUP_PASS'
       - name: No API admission, deployment or publication
         shell: bash
         run: |

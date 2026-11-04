@@ -229,6 +229,257 @@ class RuntimeVerifiedTaskReadProbeTest {
     }
 
     @Test
+    void membershipExpiryAdvancesWithinOneOpenTransaction() throws Exception {
+        // PostgreSQL CURRENT_TIMESTAMP is fixed at transaction start. Both
+        // tenant and project permissions must expire on later reads, even
+        // when the JDBC transaction has remained open the entire time.
+        Savepoint tenantRestore = connection.setSavepoint("tenant_elapsed_expiry");
+        try {
+            try (var sql = connection.createStatement()) {
+                assertEquals(1, sql.executeUpdate("""
+                    UPDATE tenant_memberships
+                    SET valid_until = statement_timestamp() + interval '2 seconds'
+                    WHERE tenant_key='tenant-alpha' AND identity_uid=42
+                    """));
+            }
+            assertTrue(allowed(42,"tenant-alpha","project-red",ALICE_ALPHA));
+            Thread.sleep(2300);
+            assertFalse(allowed(42,"tenant-alpha","project-red",ALICE_ALPHA),
+                "Expired tenant membership must not be accepted by an old transaction clock");
+        } finally {
+            connection.rollback(tenantRestore);
+        }
+
+        Savepoint projectRestore = connection.setSavepoint("project_elapsed_expiry");
+        try {
+            try (var sql = connection.createStatement()) {
+                assertEquals(1, sql.executeUpdate("""
+                    UPDATE project_memberships
+                    SET valid_until = statement_timestamp() + interval '2 seconds'
+                    WHERE tenant_key='tenant-alpha'
+                      AND project_key='project-red' AND identity_uid=42
+                    """));
+            }
+            assertTrue(allowed(42,"tenant-alpha","project-red",ALICE_ALPHA));
+            Thread.sleep(2300);
+            assertFalse(allowed(42,"tenant-alpha","project-red",ALICE_ALPHA),
+                "Expired project membership must not be accepted by an old transaction clock");
+        } finally {
+            connection.rollback(projectRestore);
+        }
+    }
+
+    @Test
+    void matchingMembershipMustRejectStaleTransactionIsolation() throws Exception {
+        // Real PG16 sessions contain valid matching task and membership rows.
+        // A stale-snapshot denial cannot pass merely because a row is absent.
+        assertTrue(ownerReadAtIsolation(Connection.TRANSACTION_READ_COMMITTED));
+        assertFalse(ownerReadAtIsolation(Connection.TRANSACTION_REPEATABLE_READ));
+        assertFalse(ownerReadAtIsolation(Connection.TRANSACTION_SERIALIZABLE));
+        // PG treats this as READ COMMITTED internally, but policy is exact.
+        assertFalse(ownerReadAtIsolation(Connection.TRANSACTION_READ_UNCOMMITTED));
+    }
+
+    private boolean ownerReadAtIsolation(int isolation) throws Exception {
+        try (Connection other = DriverManager.getConnection(
+                "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                "ownerlab_ci", System.getenv("PGPASSWORD"))) {
+            other.setTransactionIsolation(isolation);
+            other.setAutoCommit(false);
+            try {
+                try (var sql = other.createStatement()) {
+                    sql.execute("""
+                        CREATE TEMP TABLE aetheris_tasks AS
+                        SELECT '22222222-2222-4222-8222-222222222222'::uuid AS id,
+                               42::bigint AS owner_identity_uid,
+                               'tenant-alpha'::text AS owner_tenant_key,
+                               'project-red'::text AS owner_project_key,
+                               statement_timestamp() AS owner_verified_at
+                        """);
+                    sql.execute("""
+                        CREATE TEMP TABLE tenant_memberships AS
+                        SELECT 'tenant-alpha'::text AS tenant_key,
+                               42::bigint AS identity_uid,
+                               'ACTIVE'::text AS status,
+                               NULL::timestamptz AS revoked_at,
+                               statement_timestamp() + interval '1 day' AS valid_until
+                        """);
+                    sql.execute("""
+                        CREATE TEMP TABLE project_memberships AS
+                        SELECT 'tenant-alpha'::text AS tenant_key,
+                               'project-red'::text AS project_key,
+                               42::bigint AS identity_uid,
+                               'ACTIVE'::text AS status,
+                               NULL::timestamptz AS revoked_at,
+                               statement_timestamp() + interval '1 day' AS valid_until
+                        """);
+                }
+                try (var sql = other.createStatement();
+                     var settings = sql.executeQuery("SHOW transaction_isolation")) {
+                    assertTrue(settings.next());
+                    String expected = switch (isolation) {
+                        case Connection.TRANSACTION_READ_COMMITTED -> "read committed";
+                        case Connection.TRANSACTION_REPEATABLE_READ -> "repeatable read";
+                        case Connection.TRANSACTION_SERIALIZABLE -> "serializable";
+                        case Connection.TRANSACTION_READ_UNCOMMITTED -> "read uncommitted";
+                        default -> throw new IllegalArgumentException("Unsupported test isolation");
+                    };
+                    assertEquals(expected, settings.getString(1));
+                }
+                return probe.canRead(other, signed(42, List.of("orchestrator:read")),
+                    "tenant-alpha", "project-red", ALICE_ALPHA);
+            } finally {
+                other.rollback(); // TEMP objects and records remain disposable.
+            }
+        }
+    }
+
+    @Test
+    void committedExternalMembershipRevocationIsSeenByOpenReaderTransaction()
+            throws Exception {
+        // PostgreSQL TEMP tables are session-local and cannot prove a
+        // cross-connection revocation. Use a uniquely named, short-lived
+        // schema ONLY in the disposable CI database. Drop it in finally.
+        String schema = "ownerlab_xconn_" + UUID.randomUUID().toString().replace("-", "");
+        String password = System.getenv("PGPASSWORD");
+        try {
+            try (Connection setup = DriverManager.getConnection(
+                    "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                    "ownerlab_ci", password)) {
+                try (var ddl = setup.createStatement()) {
+                    ddl.execute("CREATE SCHEMA " + schema);
+                }
+                setup.setSchema(schema);
+                try (var ddl = setup.createStatement()) {
+                    ddl.execute("""
+                        CREATE TABLE aetheris_tasks AS
+                        SELECT '22222222-2222-4222-8222-222222222222'::uuid AS id,
+                               42::bigint AS owner_identity_uid,
+                               'tenant-alpha'::text AS owner_tenant_key,
+                               'project-red'::text AS owner_project_key,
+                               statement_timestamp() AS owner_verified_at
+                        """);
+                    ddl.execute("""
+                        CREATE TABLE tenant_memberships AS
+                        SELECT 'tenant-alpha'::text AS tenant_key,
+                               42::bigint AS identity_uid,
+                               'ACTIVE'::text AS status,
+                               NULL::timestamptz AS revoked_at,
+                               statement_timestamp() + interval '1 day' AS valid_until
+                        """);
+                    ddl.execute("""
+                        CREATE TABLE project_memberships AS
+                        SELECT 'tenant-alpha'::text AS tenant_key,
+                               'project-red'::text AS project_key,
+                               42::bigint AS identity_uid,
+                               'ACTIVE'::text AS status,
+                               NULL::timestamptz AS revoked_at,
+                               statement_timestamp() + interval '1 day' AS valid_until
+                        """);
+                }
+            }
+
+            try (Connection reader = DriverManager.getConnection(
+                     "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                     "ownerlab_ci", password);
+                 Connection writer = DriverManager.getConnection(
+                     "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                     "ownerlab_ci", password)) {
+                reader.setSchema(schema);
+                writer.setSchema(schema);
+                reader.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+                reader.setAutoCommit(false);
+                writer.setAutoCommit(false);
+                var alice = signed(42, List.of("orchestrator:read"));
+                var bob = signed(77, List.of("orchestrator:read"));
+                try {
+                    assertTrue(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA));
+                    assertFalse(probe.canRead(reader, bob,
+                        "tenant-alpha", "project-red", ALICE_ALPHA));
+
+                    try (var update = writer.prepareStatement("""
+                        UPDATE tenant_memberships
+                        SET status='REVOKED', revoked_at=statement_timestamp()
+                        WHERE tenant_key='tenant-alpha' AND identity_uid=42
+                        """)) {
+                        assertEquals(1, update.executeUpdate());
+                    }
+                    assertTrue(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "Uncommitted changes by another connection must not leak");
+                    writer.commit();
+                    assertFalse(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "A committed tenant revocation must deny the next read");
+                    try (var restore = writer.prepareStatement("""
+                        UPDATE tenant_memberships
+                        SET status='ACTIVE', revoked_at=NULL
+                        WHERE tenant_key='tenant-alpha' AND identity_uid=42
+                        """)) {
+                        assertEquals(1, restore.executeUpdate());
+                    }
+                    writer.commit();
+                    assertTrue(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "A newly committed tenant membership must be visible");
+
+                    try (var update = writer.prepareStatement("""
+                        UPDATE project_memberships
+                        SET status='REVOKED', revoked_at=statement_timestamp()
+                        WHERE tenant_key='tenant-alpha'
+                          AND project_key='project-red' AND identity_uid=42
+                        """)) {
+                        assertEquals(1, update.executeUpdate());
+                    }
+                    assertTrue(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "Uncommitted project revocation must not leak");
+                    writer.commit();
+                    assertFalse(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "A committed project revocation must deny the next read");
+                    try (var restore = writer.prepareStatement("""
+                        UPDATE project_memberships
+                        SET status='ACTIVE', revoked_at=NULL
+                        WHERE tenant_key='tenant-alpha'
+                          AND project_key='project-red' AND identity_uid=42
+                        """)) {
+                        assertEquals(1, restore.executeUpdate());
+                    }
+                    writer.commit();
+                    assertTrue(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "The reader must see the latest committed project grant");
+                } finally {
+                    writer.rollback();
+                    reader.rollback();
+                }
+            }
+        } finally {
+            // CI-only short-lived shared tables are never left behind.
+            // The schema identifier is generated locally from UUID hex,
+            // never derived from untrusted user or model input.
+            try (Connection cleanup = DriverManager.getConnection(
+                    "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                    "ownerlab_ci", password)) {
+                try (var drop = cleanup.createStatement()) {
+                    drop.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
+                }
+                try (var check = cleanup.prepareStatement(
+                        "SELECT COUNT(*) FROM pg_namespace WHERE nspname = ?")) {
+                    check.setString(1, schema);
+                    try (var result = check.executeQuery()) {
+                        assertTrue(result.next());
+                        assertEquals(0L, result.getLong(1),
+                            "No short-lived revocation schema may survive cleanup");
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     void verifiedPrincipalCannotBeManufacturedWithPublicJavaConstructor() {
         assertEquals(0, RuntimePinnedPrincipalVerifier.VerifiedPrincipal.class
             .getConstructors().length);
