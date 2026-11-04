@@ -48,8 +48,15 @@ jobs:
                          "AETHERIS_B62_SEPARATE_LEADER_EXPIRY_AND_OUTAGE_FAIL_CLOSED_PASS",
                          "AETHERIS_B62_RESOURCE_OWNED_MONOTONIC_FENCE_ATOMIC_ACTION_PASS",
                          "FOR SHARE OF l,r;",
-                         "REVOKE ALL ON FUNCTION public.b62_try_protected_action"):
+                         "REVOKE ALL ON FUNCTION public.b62_try_protected_action",
+                         "AETHERIS_B62_SEPARATE_DATABASE_STALE_OLD_RESOURCE_ALLOW_NO_GO_PASS",
+                         "AETHERIS_B62_SEPARATE_DATABASE_OLD_RESOURCE_FENCED_DURING_PARTITION_PASS",
+                         "AETHERIS_B62_LOCAL_ONLY_FENCE_COORDINATOR_OUTAGE_ALLOW_NO_GO_PASS",
+                         "GRANT UPDATE(term) ON public.b62_local_fence TO $local_owner",
+                         "CREATE FUNCTION public.b62_local_try_effect",
+                         'docker network disconnect "$network" "$primary"'):
               assert marker in script
+          assert "pg_isready" not in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
