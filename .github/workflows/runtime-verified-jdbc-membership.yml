@@ -73,6 +73,9 @@ jobs:
               assert forbidden not in probe, forbidden
           assert 'AETHERIS_MEMBERSHIP_JDBC_MUST_RUN' in test
           assert 'connection.rollback()' in test
+          assert 'committedExternalMembershipRevocationIsSeenByOpenReaderTransaction' in test
+          assert 'DROP SCHEMA IF EXISTS ' in test
+          assert 'Connection.TRANSACTION_READ_COMMITTED' in test
           assert 'getConstructors().length' in test
           assert 'signWith(attackerKey.getPrivate()' in test
           lock=(root/'api/OwnerlessTaskMissionHttpFilter.java').read_text()

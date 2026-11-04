@@ -43,3 +43,29 @@ or persistent customer data is introduced. This guard does not prove
 concurrent-revocation race ordering, immediate cancellation of an in-flight
 read, token-session revocation, or production trust boundaries. Runtime
 issue #23 stays OPEN; Stage45 NO_GO.
+
+## 4 November 2026 — two committed connection revocations (draft-only)
+
+The previous `READ COMMITTED` isolation test did not prove a concurrent
+transaction's *committed* membership update became visible in an already open
+reader transaction. This addition uses genuine independent PostgreSQL16 JDBC
+reader and writer connections, one signed synthetic owner and a distinct denied
+identity. The writer updates first the tenant membership and then project
+membership; the reader demonstrates uncommitted updates remain invisible,
+committed revocations deny the next read, and later committed reinstatements
+restore only the valid signed owner.
+
+PostgreSQL temporary tables cannot be shared between sessions, so this test
+creates a uniquely named transient schema with three synthetic tables only
+inside the disposable `ownerlab_disposable` CI database. The schema is
+explicitly dropped in a `finally` block and the test queries `pg_namespace`
+to prove the schema is absent afterwards. The job's existing final check
+requires no persistent task/membership tables, and the HTTP quarantine is
+unchanged.
+
+This is a real two-connection sequential commit/recheck test, **not** proof
+of instantaneous revocation for an already-running query, session/token
+revocation, tenant registry authority, safe API activation, or a production
+release. No production DB, real user data, long-lived schema migration,
+protected-main merge or deployment. Runtime issue #23 remains OPEN.
+Stage45 NO_GO.

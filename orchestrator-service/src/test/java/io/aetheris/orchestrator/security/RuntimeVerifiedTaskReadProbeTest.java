@@ -335,6 +335,151 @@ class RuntimeVerifiedTaskReadProbeTest {
     }
 
     @Test
+    void committedExternalMembershipRevocationIsSeenByOpenReaderTransaction()
+            throws Exception {
+        // PostgreSQL TEMP tables are session-local and cannot prove a
+        // cross-connection revocation. Use a uniquely named, short-lived
+        // schema ONLY in the disposable CI database. Drop it in finally.
+        String schema = "ownerlab_xconn_" + UUID.randomUUID().toString().replace("-", "");
+        String password = System.getenv("PGPASSWORD");
+        try {
+            try (Connection setup = DriverManager.getConnection(
+                    "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                    "ownerlab_ci", password)) {
+                try (var ddl = setup.createStatement()) {
+                    ddl.execute("CREATE SCHEMA " + schema);
+                }
+                setup.setSchema(schema);
+                try (var ddl = setup.createStatement()) {
+                    ddl.execute("""
+                        CREATE TABLE aetheris_tasks AS
+                        SELECT '22222222-2222-4222-8222-222222222222'::uuid AS id,
+                               42::bigint AS owner_identity_uid,
+                               'tenant-alpha'::text AS owner_tenant_key,
+                               'project-red'::text AS owner_project_key,
+                               statement_timestamp() AS owner_verified_at
+                        """);
+                    ddl.execute("""
+                        CREATE TABLE tenant_memberships AS
+                        SELECT 'tenant-alpha'::text AS tenant_key,
+                               42::bigint AS identity_uid,
+                               'ACTIVE'::text AS status,
+                               NULL::timestamptz AS revoked_at,
+                               statement_timestamp() + interval '1 day' AS valid_until
+                        """);
+                    ddl.execute("""
+                        CREATE TABLE project_memberships AS
+                        SELECT 'tenant-alpha'::text AS tenant_key,
+                               'project-red'::text AS project_key,
+                               42::bigint AS identity_uid,
+                               'ACTIVE'::text AS status,
+                               NULL::timestamptz AS revoked_at,
+                               statement_timestamp() + interval '1 day' AS valid_until
+                        """);
+                }
+            }
+
+            try (Connection reader = DriverManager.getConnection(
+                     "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                     "ownerlab_ci", password);
+                 Connection writer = DriverManager.getConnection(
+                     "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                     "ownerlab_ci", password)) {
+                reader.setSchema(schema);
+                writer.setSchema(schema);
+                reader.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+                reader.setAutoCommit(false);
+                writer.setAutoCommit(false);
+                var alice = signed(42, List.of("orchestrator:read"));
+                var bob = signed(77, List.of("orchestrator:read"));
+                try {
+                    assertTrue(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA));
+                    assertFalse(probe.canRead(reader, bob,
+                        "tenant-alpha", "project-red", ALICE_ALPHA));
+
+                    try (var update = writer.prepareStatement("""
+                        UPDATE tenant_memberships
+                        SET status='REVOKED', revoked_at=statement_timestamp()
+                        WHERE tenant_key='tenant-alpha' AND identity_uid=42
+                        """)) {
+                        assertEquals(1, update.executeUpdate());
+                    }
+                    assertTrue(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "Uncommitted changes by another connection must not leak");
+                    writer.commit();
+                    assertFalse(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "A committed tenant revocation must deny the next read");
+                    try (var restore = writer.prepareStatement("""
+                        UPDATE tenant_memberships
+                        SET status='ACTIVE', revoked_at=NULL
+                        WHERE tenant_key='tenant-alpha' AND identity_uid=42
+                        """)) {
+                        assertEquals(1, restore.executeUpdate());
+                    }
+                    writer.commit();
+                    assertTrue(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "A newly committed tenant membership must be visible");
+
+                    try (var update = writer.prepareStatement("""
+                        UPDATE project_memberships
+                        SET status='REVOKED', revoked_at=statement_timestamp()
+                        WHERE tenant_key='tenant-alpha'
+                          AND project_key='project-red' AND identity_uid=42
+                        """)) {
+                        assertEquals(1, update.executeUpdate());
+                    }
+                    assertTrue(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "Uncommitted project revocation must not leak");
+                    writer.commit();
+                    assertFalse(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "A committed project revocation must deny the next read");
+                    try (var restore = writer.prepareStatement("""
+                        UPDATE project_memberships
+                        SET status='ACTIVE', revoked_at=NULL
+                        WHERE tenant_key='tenant-alpha'
+                          AND project_key='project-red' AND identity_uid=42
+                        """)) {
+                        assertEquals(1, restore.executeUpdate());
+                    }
+                    writer.commit();
+                    assertTrue(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "The reader must see the latest committed project grant");
+                } finally {
+                    writer.rollback();
+                    reader.rollback();
+                }
+            }
+        } finally {
+            // CI-only short-lived shared tables are never left behind.
+            // The schema identifier is generated locally from UUID hex,
+            // never derived from untrusted user or model input.
+            try (Connection cleanup = DriverManager.getConnection(
+                    "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                    "ownerlab_ci", password)) {
+                try (var drop = cleanup.createStatement()) {
+                    drop.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
+                }
+                try (var check = cleanup.prepareStatement(
+                        "SELECT COUNT(*) FROM pg_namespace WHERE nspname = ?")) {
+                    check.setString(1, schema);
+                    try (var result = check.executeQuery()) {
+                        assertTrue(result.next());
+                        assertEquals(0L, result.getLong(1),
+                            "No short-lived revocation schema may survive cleanup");
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     void verifiedPrincipalCannotBeManufacturedWithPublicJavaConstructor() {
         assertEquals(0, RuntimePinnedPrincipalVerifier.VerifiedPrincipal.class
             .getConstructors().length);
