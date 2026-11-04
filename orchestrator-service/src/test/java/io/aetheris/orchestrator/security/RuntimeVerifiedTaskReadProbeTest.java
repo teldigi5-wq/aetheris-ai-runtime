@@ -158,6 +158,32 @@ class RuntimeVerifiedTaskReadProbeTest {
     }
 
     @Test
+    void explicitJdbcTransactionAndActualPrimaryRequiredForOwnerReads()
+            throws Exception {
+        // A signed owner does not make JDBC autocommit a reviewable
+        // authorization transaction; reject it before SQL is prepared.
+        try (Connection autocommit = DriverManager.getConnection(
+                "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                "ownerlab_ci", System.getenv("PGPASSWORD"))) {
+            assertTrue(autocommit.getAutoCommit());
+            var owner = signed(42, List.of("orchestrator:read"));
+            var denial = assertThrows(IllegalStateException.class,
+                () -> probe.canRead(autocommit, owner,
+                    "tenant-alpha", "project-red", ALICE_ALPHA));
+            assertEquals("Explicit JDBC transaction required",
+                denial.getMessage());
+        }
+        // This confirms the positive test uses a real PostgreSQL primary;
+        // only the query's recovery guard is responsible for standby denial.
+        try (var sql = connection.createStatement();
+             var primary = sql.executeQuery("SELECT NOT pg_is_in_recovery()")) {
+            assertTrue(primary.next());
+            assertTrue(primary.getBoolean(1));
+        }
+        assertTrue(allowed(42, "tenant-alpha", "project-red", ALICE_ALPHA));
+    }
+
+    @Test
     void exactSignedUidAndLiveMembershipIsNeededAcrossTwoTenants() throws Exception {
         assertTrue(allowed(42,"tenant-alpha","project-red",ALICE_ALPHA));
         assertTrue(allowed(42,"tenant-beta","project-red",ALICE_BETA));
