@@ -126,6 +126,18 @@ jobs:
           assert "pm.valid_until > statement_timestamp()" in probe
           assert "committedExternalMembershipRevocationIsSeenByOpenReaderTransaction" in regression
           assert "explicitJdbcTransactionAndActualPrimaryRequiredForOwnerReads" in regression
+          assert "signedJtiTaskOwnerSessionAndEmergencyRevocationMustAgreeAtomically" in regression
+          composite=(root/"security/RuntimeVerifiedTaskSessionReadProbe.java").read_text()
+          for token in ("principal.requireRevocationFacts()", "synthetic_session_registration",
+                        "active.state='ACTIVE'", "blocked_signer_kids",
+                        "principal_epochs", "AND NOT pg_is_in_recovery()",
+                        "current_setting('transaction_isolation')='read committed'",
+                        "connection.getAutoCommit()", 'read.setQueryTimeout(2)',
+                        'signed.signedTokenId()', 'AND ?<=epoch.reject_issued_at_or_before_epoch'):
+              assert token in composite, token
+          for forbidden in ("@Component", "@Bean", "@RestController",
+                            "request.getHeader(", "System.getenv("):
+              assert forbidden not in composite, forbidden
           restricted=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedRegistryTaskReadProbeTest.java")).read_text()
           assert "actualPrimaryReadCommittedRegistryProbeStillAllowsExactSignedOwner" in restricted
           assert "DROP SCHEMA IF EXISTS " in regression
