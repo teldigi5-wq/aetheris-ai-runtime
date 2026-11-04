@@ -229,3 +229,48 @@ No route/filter/agent is activated and no customer data, deployment,
 main branch or real secret is touched. Keep Runtime issue #23,
 Platform issue #251, all nine Stage45 attestations and release status
 **NO_GO** until independently reviewed.
+
+## 4 November 2026 — resource-local epoch/lease added to synthetic owner+JTI read
+
+The previous review-only composite SQL could return a positive synthetic
+decision when the verified owner, project membership and signed session
+matched, even if no resource-local leadership state was present. The
+non-Spring RuntimeVerifiedTaskSessionReadProbe now requires a matching
+**synthetic local resource fence** JOIN in the **same** PostgreSQL SELECT:
+one runtime row, endpoint selector, positive monotonic term, ACTIVE state,
+an unexpired clock_timestamp()-checked lease, READ COMMITTED, and a
+non-recovering PostgreSQL server. Its original UID, owner, project,
+membership, signed-JTI ACTIVE registration, signer-block and emergency
+cutoff checks remain. Invalid term/endpoint selectors and any missing SQL
+authority fail closed. Exactly 15 JDBC parameters are bound.
+
+The disposable ownerlab_ci PostgreSQL test creates a temporary local
+fence row inside its existing rollback-only savepoint. It verifies
+**DENY** for no fence row, stale requested term, mismatched endpoint,
+nonpositive term, explicitly FENCED state, expired lease and missing
+or revoked session. The positive case requires all of those synthetic
+conditions to match concurrently. The test then changes the LOCAL
+fence row to an obsolete endpoint/term. Requests expecting the newer
+endpoint/term correctly DENY, but a caller selecting the *obsolete*
+endpoint/term still gets a synthetic ALLOW. This is an intentional,
+high-priority NEGATIVE counterexample; positive local-only behavior
+does not demonstrate current global authority.
+
+**Do not use for real admission.** Endpoint and term are method inputs,
+not verified machine identity, signed leader authority or coordinator
+attestations. The one-database SELECT does not lock a later task read,
+response emission, journal mutation or SSE stream for its entire
+lifecycle. Clock-based expiry alone cannot prove a stale old primary has
+been physically fenced, and PostgreSQL standby denial does not prove
+which writable primary is authoritative. The separate real physical
+standby lab demonstrates that local fencing alone accepts stale writes
+during an uncoordinated transition or coordinator outage.
+
+There is still no quorum, primary-consistent authenticated authority,
+cross-resource fencing contract, independently permissioned production
+reader/writer, real Identity/JTI registry, approved migration,
+HTTP/SSE/mission authorization integration or independent production
+release review. No production bean, route, filter, dispatch, secret,
+deployment or protected main is changed. Runtime issue #23,
+Platform #251 and all nine release attestations remain open;
+**Stage45 NO_GO**.
