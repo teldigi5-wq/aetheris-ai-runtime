@@ -42,7 +42,7 @@ docker run -d --name "$primary" --network "$network" \
   postgres:16 >/dev/null
 ready=false
 for attempt in $(seq 1 50); do
-  if docker exec "$primary" pg_isready -U "$dbuser" -d "$db" >/dev/null 2>&1; then
+  if test "$(primary_sql 'SELECT 1' 2>/dev/null || true)" = 1; then
     ready=true; break
   fi
   sleep 1
@@ -214,8 +214,10 @@ docker run -d --name "$authority" --network "$network" \
   -e "POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256" postgres:16 >/dev/null
 coord_ready=false
 for attempt in $(seq 1 50); do
-  if docker exec "$authority" pg_isready -U "$coord_owner" -d "$coord_db" \
-       >/dev/null 2>&1; then coord_ready=true; break; fi
+  if test "$(docker exec "$authority" psql -X -A -t -v ON_ERROR_STOP=1 \
+       -U "$coord_owner" -d "$coord_db" -c 'SELECT 1' 2>/dev/null || true)" = 1; then
+    coord_ready=true; break
+  fi
   sleep 1
 done
 test "$coord_ready" = true
@@ -314,8 +316,10 @@ fi
 docker start "$authority" >/dev/null
 coord_ready=false
 for attempt in $(seq 1 50); do
-  if docker exec "$authority" pg_isready -U "$coord_owner" -d "$coord_db" \
-       >/dev/null 2>&1; then coord_ready=true; break; fi
+  if test "$(docker exec "$authority" psql -X -A -t -v ON_ERROR_STOP=1 \
+       -U "$coord_owner" -d "$coord_db" -c 'SELECT 1' 2>/dev/null || true)" = 1; then
+    coord_ready=true; break
+  fi
   sleep 1
 done
 test "$coord_ready" = true
