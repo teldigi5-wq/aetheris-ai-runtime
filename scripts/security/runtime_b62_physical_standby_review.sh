@@ -322,6 +322,28 @@ test "$coord_ready" = true
 review_route "$standby" 2 "$new_sql"
 echo AETHERIS_B62_SEPARATE_LEADER_EXPIRY_AND_OUTAGE_FAIL_CLOSED_PASS
 
+# Deliberate negative-only TOCTOU counterexample, NOT a safe application gate:
+# capture an eligible coordinator decision, change leadership, then show
+# the previously eligible database still returns ALLOW. A fresh review_route
+# call must reject the obsolete leader term. Never emit protected data after
+# the cached decision; the old ALLOW is a demonstrated unsafe intermediate.
+cached_leader="$(coord_read "$standby" \
+  "SELECT endpoint || ':' || term::text FROM leader_fence
+   WHERE authority_key='runtime' AND NOT pg_is_in_recovery()
+     AND expires_at>clock_timestamp()")"
+test "$cached_leader" = "$standby:2"
+coord_write "UPDATE leader_fence SET endpoint='$primary', term=3,
+  expires_at=clock_timestamp()+interval '15 minutes'
+  WHERE authority_key='runtime' AND term=2;" >/dev/null
+test "$(coord_write "SELECT term FROM leader_fence WHERE authority_key='runtime'")" = 3
+# This is the UNSAFE result a caller could reuse between two sequential reads.
+test "$(standby_sql "$new_sql")" = t
+if review_route "$standby" 2 "$new_sql"; then
+  echo "FAIL: cached coordinator term admitted after leadership change" >&2
+  exit 1
+fi
+echo AETHERIS_B62_COORDINATOR_TOCTOU_STALE_LOCAL_ALLOW_NO_GO_PASS
+
 # EXTERNAL FENCING EXAMPLE ONLY: stop the old server process/container.
 # In real systems, fencing/leases/route control must be independently
 # designed, cryptographically authenticated and operationally tested.
