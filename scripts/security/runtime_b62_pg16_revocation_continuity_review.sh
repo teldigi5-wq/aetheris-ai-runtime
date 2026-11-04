@@ -81,6 +81,7 @@ standby_sql "BEGIN;
  GRANT UPDATE(applied_seq) ON public.b62_replay_gate TO $local_owner;
  GRANT SELECT ON public.b62_replayed_revocations TO $local_owner;
  GRANT INSERT ON public.b62_revocation_guarded_actions TO $local_owner;
+ GRANT SELECT(request_id) ON public.b62_revocation_guarded_actions TO $local_owner;
  REVOKE ALL ON FUNCTION public.b62_apply_review_revocation(bigint,bigint)
    FROM PUBLIC;
  REVOKE ALL ON FUNCTION public.b62_try_guarded_revocation_effect(bigint,bigint,text)
