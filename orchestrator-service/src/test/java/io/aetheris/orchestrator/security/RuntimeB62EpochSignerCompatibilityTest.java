@@ -81,6 +81,16 @@ class RuntimeB62EpochSignerCompatibilityTest {
                   reason_code text NOT NULL DEFAULT 'compromise',
                   PRIMARY KEY(issuer,kid))
                 """);
+            // NOT part of Platform B62-G1. Independent synthetic session
+            // authority, required to demonstrate nonrevocation != admission.
+            ddl.execute("""
+                CREATE TABLE synthetic_session_registration(
+                  issuer text NOT NULL, kid text NOT NULL,
+                  jti text NOT NULL, uid bigint NOT NULL,
+                  iat_seconds bigint NOT NULL, state text NOT NULL
+                    CHECK(state IN ('ACTIVE','REVOKED')),
+                  PRIMARY KEY(issuer,kid,jti))
+                """);
         }
     }
 
@@ -108,7 +118,8 @@ class RuntimeB62EpochSignerCompatibilityTest {
 
     @BeforeEach void reset() throws Exception {
         try (Connection c = connect(); var stmt = c.createStatement()) {
-            stmt.execute("TRUNCATE principal_epochs, blocked_signer_kids");
+            stmt.execute("TRUNCATE principal_epochs, blocked_signer_kids,"
+                + " synthetic_session_registration");
         }
     }
 
@@ -214,6 +225,143 @@ class RuntimeB62EpochSignerCompatibilityTest {
             assertThrows(IllegalArgumentException.class,
                 () -> verify(attacker, 42L, Instant.now().minusSeconds(15)));
             c.rollback();
+        }
+    }
+
+
+    /**
+     * Review-only composition of TWO independent synthetic authorities:
+     * (1) exact signed-jti session registration/activation, and (2) the
+     * genuine B62-G1 emergency epoch and signer-block predicates.
+     * One READ COMMITTED PostgreSQL statement is critical: a successful
+     * emergency NOT-blocked result alone is NEVER an admission decision.
+     * This is NOT a deployed Identity session store or Runtime API filter.
+     */
+    private static boolean syntheticComposedDecision(Connection c,
+            RuntimePinnedPrincipalVerifier.VerifiedPrincipal principal) {
+        try {
+            if (c == null || !c.isReadOnly() || c.getAutoCommit()) return false;
+            var verified = principal.requireRevocationFacts();
+            long issued = verified.signedIssuedAt().getEpochSecond();
+            if (issued <= 0 || verified.signedIdentityUid() <= 0
+                    || verified.verifiedIssuer().length() > 120
+                    || verified.verifiedKeyId().length() > 64) return false;
+            try (PreparedStatement sql = c.prepareStatement("""
+                SELECT current_setting('transaction_isolation')='read committed'
+                  AND EXISTS (
+                    SELECT 1 FROM synthetic_session_registration active
+                    WHERE active.issuer=? AND active.kid=? AND active.jti=?
+                      AND active.uid=? AND active.iat_seconds=?
+                      AND active.state='ACTIVE')
+                  AND NOT EXISTS (
+                    SELECT 1 FROM blocked_signer_kids
+                    WHERE issuer=? AND kid=?)
+                  AND NOT EXISTS (
+                    SELECT 1 FROM principal_epochs
+                    WHERE principal_id=?
+                      AND ? <= reject_issued_at_or_before_epoch)
+                """)) {
+                sql.setString(1, verified.verifiedIssuer());
+                sql.setString(2, verified.verifiedKeyId());
+                sql.setString(3, verified.signedTokenId());
+                sql.setLong(4, verified.signedIdentityUid());
+                sql.setLong(5, issued);
+                sql.setString(6, verified.verifiedIssuer());
+                sql.setString(7, verified.verifiedKeyId());
+                sql.setLong(8, verified.signedIdentityUid());
+                sql.setLong(9, issued);
+                try (var rows = sql.executeQuery()) {
+                    return rows.next() && rows.getBoolean(1);
+                }
+            }
+        } catch (RuntimeException | SQLException unavailableOrInvalid) {
+            return false;
+        }
+    }
+
+    private static void registerSyntheticSession(
+            RuntimePinnedPrincipalVerifier.VerifiedPrincipal principal)
+            throws Exception {
+        var f = principal.requireRevocationFacts();
+        try (Connection writer = connect();
+             PreparedStatement insert = writer.prepareStatement("""
+                 INSERT INTO synthetic_session_registration
+                 (issuer,kid,jti,uid,iat_seconds,state)
+                 VALUES (?,?,?,?,?,'ACTIVE')
+                 """)) {
+            insert.setString(1, f.verifiedIssuer());
+            insert.setString(2, f.verifiedKeyId());
+            insert.setString(3, f.signedTokenId());
+            insert.setLong(4, f.signedIdentityUid());
+            insert.setLong(5, f.signedIssuedAt().getEpochSecond());
+            assertEquals(1, insert.executeUpdate());
+        }
+    }
+
+    @Test void emergencyNonrevocationNeverSubstitutesForActiveSignedSession()
+            throws Exception {
+        try (Connection read = reader()) {
+            // A valid RSA signature with no emergency block still has NO
+            // verified active session. This must never authorize a resource.
+            assertTrue(notEmergencyBlocked(read, earlier));
+            assertFalse(syntheticComposedDecision(read, earlier));
+            assertFalse(syntheticComposedDecision(read, later));
+            assertFalse(syntheticComposedDecision(read, other));
+
+            registerSyntheticSession(earlier);
+            registerSyntheticSession(other);
+            assertTrue(syntheticComposedDecision(read, earlier));
+            assertFalse(syntheticComposedDecision(read, later),
+                "Same user, different signed JTI is not registered");
+            assertTrue(syntheticComposedDecision(read, other));
+
+            // Separate committed writer revokes the registered JTI. The
+            // B62-only NOT-blocked function remains TRUE: it cannot
+            // independently enforce a session logout.
+            try (Connection writer = connect();
+                 PreparedStatement revoke = writer.prepareStatement("""
+                     UPDATE synthetic_session_registration
+                     SET state='REVOKED'
+                     WHERE issuer=? AND kid=? AND jti=?
+                     """)) {
+                var f = earlier.requireRevocationFacts();
+                revoke.setString(1, f.verifiedIssuer());
+                revoke.setString(2, f.verifiedKeyId());
+                revoke.setString(3, f.signedTokenId());
+                assertEquals(1, revoke.executeUpdate());
+            }
+            assertTrue(notEmergencyBlocked(read, earlier),
+                "B62 emergency blocks do not register individual JTI logout");
+            assertFalse(syntheticComposedDecision(read, earlier));
+            assertTrue(syntheticComposedDecision(read, other));
+
+            registerSyntheticSession(later);
+            assertTrue(syntheticComposedDecision(read, later));
+            long cutoff = later.requireRevocationFacts()
+                .signedIssuedAt().getEpochSecond();
+            assertEquals(cutoff, monotonicCutoff(42L, cutoff));
+            assertFalse(syntheticComposedDecision(read, later),
+                "B62 cutoff at exact signed issue second must deny");
+            assertTrue(syntheticComposedDecision(read, other));
+
+            // Independent signer compromise denies even actively registered
+            // unrelated sessions; no signed JTI is an override.
+            try (Connection writer = connect();
+                 PreparedStatement block = writer.prepareStatement("""
+                     INSERT INTO blocked_signer_kids(issuer,kid,reason_code)
+                     VALUES (?,?,'compromise')
+                     """)) {
+                block.setString(1, ISS);
+                block.setString(2, KID);
+                assertEquals(1, block.executeUpdate());
+            }
+            assertFalse(syntheticComposedDecision(read, later));
+            assertFalse(syntheticComposedDecision(read, other));
+            read.rollback();
+        }
+        try (Connection unavailable = reader()) {
+            unavailable.close();
+            assertFalse(syntheticComposedDecision(unavailable, other));
         }
     }
 

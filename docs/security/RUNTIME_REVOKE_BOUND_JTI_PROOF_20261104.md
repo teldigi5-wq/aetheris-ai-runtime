@@ -55,3 +55,29 @@ retention, online primary reader or actual user session logout.
 The signed `jti` seam is not a revocation verdict and does not replace
 tenant/resource ownership. Protected main unchanged, issue #23/#251 open,
 Stage45 NO_GO and nine release attestations still outstanding.
+
+## 4 November 2026 — combined emergency-block and session-registration denial
+
+A further review-only PostgreSQL16 regression proves a dangerous distinction:
+Platform B62-G1's emergency `principal_epochs` and `blocked_signer_kids`
+tables contain **no per-`jti` active session registry**. The absence of an
+emergency block must not be mistaken for active-session authorization.
+
+The disposable Runtime B62 compatibility test now creates an explicitly
+**separate synthetic session registration** table. A new single-statement,
+READ COMMITTED boolean reference requires *all* of: a matching verified
+issuer, key ID, `jti`, UID, signed issuance time and ACTIVE registration;
+no blocked signing key; and issuance strictly **after** any principal
+emergency cutoff. It tests missing registration, different signed JTI,
+committed individual-session revocation, unchanged B62-only result after
+session logout, inclusive principal cutoff, unrelated user isolation,
+signer block and closed connection. The test is not an Identity schema,
+deployed revocation service, API permission, production migration or
+proof of cross-service operational consistency. Its disposable CI role
+is not certified as a production least-privilege reader. No route opens.
+
+This demonstrates only a **synthetic two-authority composition**.
+Real admission additionally requires independently approved resource,
+tenant and project ownership, authenticated primary consistency, bounded
+timeouts, audited writer separation, rollout/rollback and human review.
+Issue #23/#251 OPEN, Stage45 NO_GO with nine outstanding attestations.
