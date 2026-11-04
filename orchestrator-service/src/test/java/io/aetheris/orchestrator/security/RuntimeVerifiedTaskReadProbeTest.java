@@ -183,6 +183,145 @@ class RuntimeVerifiedTaskReadProbeTest {
         assertTrue(allowed(42, "tenant-alpha", "project-red", ALICE_ALPHA));
     }
 
+    private static RuntimePinnedPrincipalVerifier.VerifiedPrincipal signedJti(
+            long uid, String jti) {
+        Instant issued = Instant.now().minusSeconds(10);
+        String token = Jwts.builder().header().keyId(KEY_ID).and()
+            .subject("synthetic-owner-" + uid + "@example.invalid")
+            .issuer(ISSUER).claim("aud", List.of(AUDIENCE))
+            .claim("uid", uid).claim("role", "DEVELOPER")
+            .claim("scopes", List.of("orchestrator:read"))
+            .id(jti).issuedAt(Date.from(issued))
+            .expiration(Date.from(issued.plusSeconds(180)))
+            .signWith(signingKey.getPrivate(), Jwts.SIG.RS256).compact();
+        return verifier.verifyBearerForRevocation("Bearer " + token);
+    }
+
+    @Test
+    void signedJtiTaskOwnerSessionAndEmergencyRevocationMustAgreeAtomically()
+            throws Exception {
+        // Three synthetic session/B62 tables exist only inside this
+        // disposable JDBC connection and this rollback-only SAVEPOINT.
+        Savepoint lab = connection.setSavepoint("joint_session_owner_lab");
+        var combined = new RuntimeVerifiedTaskSessionReadProbe();
+        try {
+            try (var setup = connection.createStatement()) {
+                setup.execute("""
+                    CREATE TEMP TABLE synthetic_session_registration(
+                      issuer text NOT NULL, kid text NOT NULL,
+                      jti text NOT NULL, uid bigint NOT NULL,
+                      iat_seconds bigint NOT NULL,
+                      state text NOT NULL CHECK(state IN ('ACTIVE','REVOKED')),
+                      PRIMARY KEY(issuer,kid,jti))
+                    """);
+                setup.execute("""
+                    CREATE TEMP TABLE blocked_signer_kids(
+                      issuer text NOT NULL, kid text NOT NULL,
+                      PRIMARY KEY(issuer,kid))
+                    """);
+                setup.execute("""
+                    CREATE TEMP TABLE principal_epochs(
+                      principal_id bigint PRIMARY KEY,
+                      reject_issued_at_or_before_epoch bigint NOT NULL)
+                    """);
+            }
+
+            var alice = signedJti(42, UUID.randomUUID().toString());
+            var anotherAliceSession = signedJti(42, UUID.randomUUID().toString());
+            var bob = signedJti(77, UUID.randomUUID().toString());
+            var signed = alice.requireRevocationFacts();
+            long iat = signed.signedIssuedAt().getEpochSecond();
+
+            // Neither signed ownership nor absence of emergency blocks
+            // substitutes for an explicitly registered active session.
+            assertTrue(probe.canRead(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA));
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA));
+            try (var register = connection.prepareStatement("""
+                    INSERT INTO synthetic_session_registration
+                      (issuer,kid,jti,uid,iat_seconds,state)
+                    VALUES (?,?,?,?,?,'ACTIVE')
+                    """)) {
+                register.setString(1, signed.verifiedIssuer());
+                register.setString(2, signed.verifiedKeyId());
+                register.setString(3, signed.signedTokenId());
+                register.setLong(4, signed.signedIdentityUid());
+                register.setLong(5, iat);
+                assertEquals(1, register.executeUpdate());
+            }
+            assertTrue(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA));
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", LEGACY));
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-blue", BOB_ALPHA));
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-beta", "project-red", ALICE_ALPHA));
+            assertFalse(combined.canReadSynthetic(connection, bob,
+                "tenant-alpha", "project-red", ALICE_ALPHA));
+            assertFalse(combined.canReadSynthetic(connection, anotherAliceSession,
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "An unregistered signed JTI must not borrow another valid JTI");
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "invalid' OR true --", "project-red", ALICE_ALPHA));
+            assertFalse(combined.canReadSynthetic(connection,
+                signed(42, List.of("orchestrator:read")),
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "A signed token with no JTI cannot supply active-session proof");
+
+            try (var block = connection.prepareStatement(
+                    "INSERT INTO blocked_signer_kids VALUES (?,?)")) {
+                block.setString(1, signed.verifiedIssuer());
+                block.setString(2, signed.verifiedKeyId());
+                assertEquals(1, block.executeUpdate());
+            }
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "Emergency signer block must override active session");
+            try (var unBlock = connection.createStatement()) {
+                assertEquals(1, unBlock.executeUpdate(
+                    "DELETE FROM blocked_signer_kids"));
+            }
+
+            try (var cutoff = connection.prepareStatement(
+                    "INSERT INTO principal_epochs VALUES (?,?)")) {
+                cutoff.setLong(1, signed.signedIdentityUid());
+                cutoff.setLong(2, iat);
+                assertEquals(1, cutoff.executeUpdate());
+            }
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "Signed issue second equal to emergency cutoff must DENY");
+            try (var olderCutoff = connection.prepareStatement(
+                    "UPDATE principal_epochs SET reject_issued_at_or_before_epoch=?")) {
+                olderCutoff.setLong(1, iat - 1);
+                assertEquals(1, olderCutoff.executeUpdate());
+            }
+            assertTrue(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "Only issuance strictly after cutoff can pass");
+            try (var revoke = connection.createStatement()) {
+                assertEquals(1, revoke.executeUpdate(
+                    "UPDATE synthetic_session_registration SET state='REVOKED'"));
+            }
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "Individually revoked JTI must deny despite eligible owner");
+
+            try (Connection auto = DriverManager.getConnection(
+                    "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                    "ownerlab_ci", System.getenv("PGPASSWORD"))) {
+                assertTrue(auto.getAutoCommit());
+                assertFalse(combined.canReadSynthetic(auto, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA),
+                    "Implicit autocommit cannot pass composite admission");
+            }
+        } finally {
+            connection.rollback(lab);
+        }
+    }
+
     @Test
     void exactSignedUidAndLiveMembershipIsNeededAcrossTwoTenants() throws Exception {
         assertTrue(allowed(42,"tenant-alpha","project-red",ALICE_ALPHA));
