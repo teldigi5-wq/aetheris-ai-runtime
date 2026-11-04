@@ -58,6 +58,11 @@ jobs:
                          "AETHERIS_B62_SEPARATE_DATABASE_STALE_OLD_RESOURCE_ALLOW_NO_GO_PASS",
                          "AETHERIS_B62_SEPARATE_DATABASE_OLD_RESOURCE_FENCED_DURING_PARTITION_PASS",
                          "AETHERIS_B62_LOCAL_ONLY_FENCE_COORDINATOR_OUTAGE_ALLOW_NO_GO_PASS",
+                         "AETHERIS_B62_DETACHED_INFLIGHT_STALE_EFFECT_COMMITS_NO_GO_PASS",
+                         "grep -Fxq t \"$detached_action_output\"",
+                         "wait \"$detached_pid\"",
+                         "detached-inflight-term-four",
+                         "if review_route \"$standby\" 4 \"$new_sql\"; then",
                          "GRANT UPDATE(lock_guard) ON public.leader_fence TO $fence_owner",
                          "GRANT UPDATE(lock_guard) ON public.b62_resource_fence TO $fence_owner",
                          "GRANT UPDATE(lock_guard) ON public.b62_local_fence TO $local_owner",
@@ -79,6 +84,15 @@ jobs:
           assert "wait \"$held_pid\"" in script
           assert script.count("UPDATE public.leader_fence SET term=3") >= 1
           assert script.count("UPDATE public.b62_resource_fence SET term=3") >= 1
+          # A separate physical-resource action is explicitly observed
+          # running when the independent coordinator advances to term five.
+          assert script.count("wait_event='PgSleep'") >= 2
+          assert "detached_ready=true" in script
+          assert "UPDATE public.leader_fence SET term=5," in script
+          assert "WHERE authority_key='runtime' AND term=4" in script
+          assert "request_id='detached-inflight-term-four'" in script
+          assert script.count("SELECT count(*) FROM public.b62_local_effects") >= 4
+          assert "AETHERIS_B62_DETACHED_INFLIGHT_STALE_EFFECT_COMMITS_NO_GO_PASS" in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
