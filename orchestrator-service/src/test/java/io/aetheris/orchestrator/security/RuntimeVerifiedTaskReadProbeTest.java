@@ -246,6 +246,104 @@ class RuntimeVerifiedTaskReadProbeTest {
     }
 
     @Test
+    void pinnedFenceAuthorityRejectsForgeryClaimsAndRetainedExpiry()
+            throws Exception {
+        Instant now = Instant.now();
+        Instant issued = now.minusSeconds(5);
+        Instant expires = now.plusSeconds(55);
+        String valid = signedFenceJwt(fenceSigningKey, REVIEW_LOCAL_ENDPOINT,
+            REVIEW_LOCAL_TERM, FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+            "runtime-local-fence-review", "runtime", issued, expires);
+        var verified = fenceVerifier.verifySignedLease(valid);
+        assertTrue(verified.isFresh());
+        assertEquals(REVIEW_LOCAL_ENDPOINT, verified.endpoint());
+        assertEquals(REVIEW_LOCAL_TERM, verified.term());
+        assertEquals(0,
+            RuntimePinnedLocalFenceLeaseVerifier.VerifiedLease.class
+                .getConstructors().length,
+            "No public constructor can forge a verified lease type");
+
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        KeyPair untrusted = generator.generateKeyPair();
+        assertThrows(IllegalArgumentException.class,
+            () -> fenceVerifier.verifySignedLease(signedFenceJwt(
+                untrusted, REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM,
+                FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+                "runtime-local-fence-review", "runtime", issued, expires)),
+            "Signed lease from a different RSA key must not authenticate");
+
+        for (String[] wrong : new String[][]{
+                {"https://attacker.example.invalid", FENCE_AUDIENCE, FENCE_KID,
+                    "runtime-local-fence-review", "runtime"},
+                {FENCE_ISSUER, "wrong-target", FENCE_KID,
+                    "runtime-local-fence-review", "runtime"},
+                {FENCE_ISSUER, FENCE_AUDIENCE, "untrusted-key-id",
+                    "runtime-local-fence-review", "runtime"},
+                {FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+                    "different-purpose", "runtime"},
+                {FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+                    "runtime-local-fence-review", "other-resource"}}) {
+            String invalid = signedFenceJwt(fenceSigningKey,
+                REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM,
+                wrong[0], wrong[1], wrong[2], wrong[3], wrong[4],
+                issued, expires);
+            assertThrows(IllegalArgumentException.class,
+                () -> fenceVerifier.verifySignedLease(invalid),
+                "Issuer, audience, kid, purpose and resource are all pinned");
+        }
+        for (String invalidEndpoint : List.of("UPPER-ENDPOINT", "../escape")) {
+            assertThrows(IllegalArgumentException.class,
+                () -> fenceVerifier.verifySignedLease(signedFenceJwt(
+                    fenceSigningKey, invalidEndpoint, REVIEW_LOCAL_TERM,
+                    FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+                    "runtime-local-fence-review", "runtime", issued, expires)));
+        }
+        assertThrows(IllegalArgumentException.class,
+            () -> signedFence(REVIEW_LOCAL_ENDPOINT, 0));
+        assertThrows(IllegalArgumentException.class,
+            () -> fenceVerifier.verifySignedLease(signedFenceJwt(
+                fenceSigningKey, REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM,
+                FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+                "runtime-local-fence-review", "runtime",
+                now.minusSeconds(5), now.plusSeconds(120))),
+            "A 125-second lease must exceed the 90-second ceiling");
+        assertThrows(IllegalArgumentException.class,
+            () -> fenceVerifier.verifySignedLease(signedFenceJwt(
+                fenceSigningKey, REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM,
+                FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+                "runtime-local-fence-review", "runtime",
+                now.minusSeconds(25), now.minusSeconds(5))),
+            "An expired signed lease must never validate");
+        assertThrows(IllegalArgumentException.class,
+            () -> fenceVerifier.verifySignedLease(signedFenceJwt(
+                fenceSigningKey, REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM,
+                FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+                "runtime-local-fence-review", "runtime",
+                now.plusSeconds(20), now.plusSeconds(50))),
+            "Signed issuance in the future must not validate");
+        assertThrows(IllegalArgumentException.class,
+            () -> fenceVerifier.verifySignedLease("Bearer " + valid));
+
+        AtomicReference<Instant> trustedNow = new AtomicReference<>(now);
+        Clock advancing = new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) {
+                return Clock.fixed(trustedNow.get(), zone);
+            }
+            @Override public Instant instant() { return trustedNow.get(); }
+        };
+        var retainedVerifier = new RuntimePinnedLocalFenceLeaseVerifier(
+            publicKeyPem(fenceSigningKey), FENCE_KID, FENCE_ISSUER,
+            FENCE_AUDIENCE, advancing);
+        var retained = retainedVerifier.verifySignedLease(valid);
+        assertTrue(retained.isFresh());
+        trustedNow.set(now.plusSeconds(60));
+        assertFalse(retained.isFresh(),
+            "Previously verified leases cannot be retained beyond expiry");
+    }
+
+    @Test
     void signedJtiTaskOwnerSessionAndEmergencyRevocationMustAgreeAtomically()
             throws Exception {
         // Three synthetic session/B62 tables exist only inside this
