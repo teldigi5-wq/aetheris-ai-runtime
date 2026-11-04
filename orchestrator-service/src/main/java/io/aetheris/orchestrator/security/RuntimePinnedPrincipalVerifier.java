@@ -37,18 +37,38 @@ public final class RuntimePinnedPrincipalVerifier {
     private final String expectedAudience;
     private final Clock clock;
 
-    public record VerifiedPrincipal(long identityUid, String subject,
-                                    String role, Set<String> scopes) {
-        public VerifiedPrincipal {
+    /**
+     * Capability: can only be created by this verifier after a real, pinned
+     * RS256 signature, issuer and audience check. Neither an HTTP body nor
+     * another Java caller can manufacture this "verified" type directly.
+     * Even this type does NOT prove tenant or project membership.
+     */
+    public static final class VerifiedPrincipal {
+        private final long identityUid;
+        private final String subject;
+        private final String role;
+        private final Set<String> scopes;
+
+        private VerifiedPrincipal(long identityUid, String subject,
+                                  String role, Set<String> scopes) {
             if (identityUid <= 0 || subject == null || subject.isBlank()
                     || !ROLE_SCOPE_CEILINGS.containsKey(role)
-                    || scopes == null || scopes.isEmpty()) {
+                    || scopes == null || scopes.isEmpty()
+                    || !ROLE_SCOPE_CEILINGS.get(role).containsAll(scopes)) {
                 throw new IllegalArgumentException("Invalid independently signed principal");
             }
-            scopes = Set.copyOf(scopes);
+            this.identityUid = identityUid;
+            this.subject = subject;
+            this.role = role;
+            this.scopes = Set.copyOf(scopes);
         }
 
-        /** Scope is only a capability ceiling: this never grants object ownership. */
+        public long identityUid() { return identityUid; }
+        public String subject() { return subject; }
+        public String role() { return role; }
+        public Set<String> scopes() { return scopes; }
+
+        /** Scope is only a capability ceiling: it never grants object ownership. */
         public boolean hasScope(String scope) {
             return scope != null && scopes.contains(scope);
         }
