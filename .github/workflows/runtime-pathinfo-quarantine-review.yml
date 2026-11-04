@@ -186,6 +186,28 @@ jobs:
                          "Explicitly fenced resource must deny every positive JTI",
                          "Expired local lease must deny even without JTI revocation"):
               assert marker in regression, marker
+          effect=(root/"security/RuntimeSyntheticFencedEffectProbe.java").read_text()
+          for marker in ("WITH locked_fence AS MATERIALIZED",
+                         "FOR SHARE OF fence", "scoped AS MATERIALIZED",
+                         "INSERT INTO synthetic_guarded_task_effects",
+                         "ON CONFLICT (effect_id) DO NOTHING",
+                         "signed.signedTokenId()", "read.setQueryTimeout(2)",
+                         "stmt.setObject(16, effectId)",
+                         "stmt.setString(17, workload.subject())",
+                         'lease.isBoundTo(workload)'):
+              # Statement uses stmt rather than read for its 2s deadline.
+              if marker == "read.setQueryTimeout(2)":
+                  marker = "stmt.setQueryTimeout(2)"
+              assert marker in effect, marker
+          for forbidden in ("@Component", "@Bean", "@RestController",
+                            "System.getenv(", "http", "HttpServletRequest"):
+              assert forbidden not in effect, forbidden
+          for marker in ("CREATE TEMP TABLE synthetic_guarded_task_effects",
+                         "Exactly one disposable effect is pending",
+                         "Duplicate effect_id must not repeat a pending mutation",
+                         "Revoked session cannot insert a protected effect",
+                         "UNSAFE COUNTEREXAMPLE: an authentic stale leader"):
+              assert marker in regression, marker
           restricted=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedRegistryTaskReadProbeTest.java")).read_text()
           assert "actualPrimaryReadCommittedRegistryProbeStillAllowsExactSignedOwner" in restricted
           assert "DROP SCHEMA IF EXISTS " in regression
