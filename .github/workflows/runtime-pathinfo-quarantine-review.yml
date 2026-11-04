@@ -1,4 +1,4 @@
-name: Runtime decoded pathInfo and real owner JDBC regression (review only)
+name: Runtime consolidated deny-only HTTP and owner JDBC regression (review only)
 on:
   push:
     branches: [security/runtime-quarantine-pathinfo-boundary-20261101]
@@ -68,6 +68,12 @@ jobs:
               s=p.read_text()
               assert order in s and "SC_NOT_FOUND" in s and "@Component" in s
           assert "enum Verdict { QUARANTINED }" in (root/"security/RuntimeRouteAdmissionPolicy.java").read_text()
+          # Keep the inherited full-context route policy and signed principal
+          # tests runnable on this exact draft head, not only its leaf regressions.
+          test_root=Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security")
+          for name in ("RuntimeRouteAdmissionPolicyTest", "RuntimeFullAppPinnedIdentityAuthorityTest", "RuntimeControllerPolicyInventoryTest", "RuntimeFullAppHttpContainmentTest", "RuntimePinnedSpringBootHttpIntegrationTest", "RuntimePinnedHttpBearerGateLoopbackTest"):
+              src=(test_root/(name+".java")).read_text()
+              assert "@Test" in src and name in src, name
           probe=(root/"security/RuntimeVerifiedTaskReadProbe.java").read_text()
           regression=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbeTest.java")).read_text()
           assert "current_setting('transaction_isolation') = 'read committed'" in probe
@@ -80,13 +86,25 @@ jobs:
           assert "'CURRENT_TIMESTAMP'" not in old_workflow
           print("RUNTIME_QUARANTINE_PRODUCTION_FILTERS_UNCHANGED_IN_ORDER")
           PY
-      - name: Execute adversarial HTTP quarantine plus real PostgreSQL signed-owner suites
+      - name: Full stacked JWT, 403-entry route policy, direct-port HTTP and PostgreSQL regression
         shell: bash
         run: |
           set -euo pipefail
           ./mvnw -B -ntp -f orchestrator-service/pom.xml \
-            -Dtest=RuntimeQuarantinePathInfoBoundaryTest,RuntimeRealDirectPortDenialRegressionTest,RuntimeProductionApiQuarantineTest,OwnerlessTaskMissionHttpFilterTest,RuntimeVerifiedTaskReadProbeTest,RuntimePinnedPrincipalVerifierTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
-          echo 'RUNTIME_PATHINFO_HTTP_AND_OWNER_JDBC_QUARANTINE_REVIEW_PASS'
+            -Dtest=RuntimeQuarantinePathInfoBoundaryTest,RuntimeRealDirectPortDenialRegressionTest,RuntimeRouteAdmissionPolicyTest,RuntimeFullAppPinnedIdentityAuthorityTest,RuntimeControllerPolicyInventoryTest,RuntimeProductionApiQuarantineTest,RuntimeFullAppHttpContainmentTest,RuntimePinnedSpringBootHttpIntegrationTest,RuntimePinnedHttpBearerGateLoopbackTest,OwnerlessTaskMissionHttpFilterTest,RuntimeVerifiedTaskReadProbeTest,RuntimePinnedPrincipalVerifierTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
+          echo 'RUNTIME_CONSOLIDATED_HTTP_IDENTITY_POLICY_AND_OWNER_JDBC_REGRESSION_PASS'
+      - name: Verify private route inventory is still deny-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=orchestrator-service/target/s0-e5-route-audit/runtime-handler-policy-matrix.tsv
+          test -s "$file"
+          test "$(grep -c 'DENY_404' "$file")" -ge 70
+          if grep -E '(^|[[:space:]])(ALLOW|PERMIT|UNLOCKED)([[:space:]]|$)|UNCLASSIFIED_STOP' "$file"; then
+            echo 'Unexpected route admission or unknown controller classification' >&2
+            exit 1
+          fi
+          echo 'RUNTIME_FULL_MVC_ROUTE_INVENTORY_ALL_DENY_REVIEW_PASS'
       - name: Verify no transient shared-schema or permanent tenant/task objects
         shell: bash
         run: |
