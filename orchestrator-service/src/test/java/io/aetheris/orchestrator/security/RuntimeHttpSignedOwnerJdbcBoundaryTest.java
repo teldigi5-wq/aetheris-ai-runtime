@@ -212,6 +212,12 @@ class RuntimeHttpSignedOwnerJdbcBoundaryTest {
         Tomcat.addServlet(context, "s0-never-reachable-business", productionPathTrap);
         context.addServletMappingDecoded(
             "/api/orchestrator/tasks/*", "s0-never-reachable-business");
+        // Explicit trap mappings are essential: a Tomcat unmapped-route 404
+        // does not prove that the production quarantine filter intercepted it.
+        context.addServletMappingDecoded(
+            "/api/orchestrator/live/events", "s0-never-reachable-business");
+        context.addServletMappingDecoded(
+            "/actuator/*", "s0-never-reachable-business");
 
         // The exact production deny-only filters execute BEFORE test servlets.
         register(context, "s0-ownerless-filter", new OwnerlessTaskMissionHttpFilter());
