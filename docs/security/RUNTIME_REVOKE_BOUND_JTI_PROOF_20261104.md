@@ -320,3 +320,54 @@ No public API is enabled, no protected main is touched, and no
 production secrets or deployments are involved. Runtime #23,
 Platform #251 and all nine Stage45 attestations remain outstanding.
 **Stage45 NO_GO**.
+
+## 4 November 2026 — independently signed synthetic workload/lease subject binding
+
+The existing RSA-verified synthetic resource-fence lease was a transferable
+bearer value with no workload subject. The non-Spring
+RuntimePinnedWorkloadIdentityVerifier now independently verifies a second
+RSA-signed, short-lived workload assertion using a **different, pinned
+2048-bit public key** in disposable CI. It enforces RS256, exact signing
+key ID, issuer, sole audience, specific runtime purpose and resource,
+a normalized signed workload subject, issued-at/expiration and a
+90-second maximum assertion lifetime. Its immutable VerifiedWorkload
+cannot be publicly constructed, and retained facts fail expiry checks.
+
+The separately signed fence lease now requires a signed workload claim,
+and its immutable VerifiedLease checks subject equality and BOTH
+assertions' current expiry. The review-only task read prototype
+requires a matching VerifiedLease and VerifiedWorkload before running
+its existing same-statement task/tenant/project, ACTIVE JTI,
+signer/emergency cutoff and local resource-fence SQL predicates. It
+rechecks identity freshness **after** SQL. Raw endpoint/term arguments
+were already removed; a token that lacks a verified workload match
+cannot be used to obtain even a synthetic positive owner-read decision.
+
+The disposable regression signs its local fence lease and workload
+assertions with **different, randomly generated test RSA keys**.
+It verifies valid same-subject assertions, rejects a validly signed
+lease presented with a *different* validly signed workload identity,
+rejects missing workload proof and tests forged workload signatures,
+wrong issuer/audience/kid/purpose/resource, invalid subjects, future
+issue time, expiry, overly long lifetimes and retained-token expiry.
+The older physical PostgreSQL split-brain counterexamples remain
+part of every draft-head CI run.
+
+**Critical limitations:** matching two independently signed claims is
+**not actual workload authentication**. Neither token is bound to a
+verified TLS peer, client certificate, transport session, hardware
+identity, privileged process, leader lease authority or coordinated
+primary. A thief possessing both bearer tokens may replay them before
+expiration; a genuinely signed old lease may continue matching an old
+resource-local row after failover. This test has no mechanism to revoke
+an in-flight response or SSE event, prove resource-linearizable
+leadership, safely transport independent authority, or protect
+multi-database writes. These are synthetic Java/JDBC proofs only,
+not a functioning production Identity/authorization integration.
+
+Both verifiers and the composite probe remain non-bean, are not exposed
+through HTTP, and require no real customer tokens or secrets. The
+existing early API filter still denies uncertified task, mission, SSE
+and actuator routes. Runtime issue #23, Platform issue #251, the
+unmerged draft PR and nine Stage45 release attestations remain open.
+**Stage45 NO_GO**.
