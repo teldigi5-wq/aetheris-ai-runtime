@@ -81,3 +81,34 @@ Real admission additionally requires independently approved resource,
 tenant and project ownership, authenticated primary consistency, bounded
 timeouts, audited writer separation, rollout/rollback and human review.
 Issue #23/#251 OPEN, Stage45 NO_GO with nine outstanding attestations.
+
+## 4 November 2026 — independent least-privilege PostgreSQL reader rehearsal
+
+The earlier B62 synthetic compatibility test used JDBC `setReadOnly(true)`
+on `ownerlab_ci`, which is also the disposable PostgreSQL service
+administrator. That did **not** establish server-side least privilege.
+This review-only revision creates one random ephemeral PostgreSQL LOGIN
+role `ownerlab_b62r_*`, grants it schema USAGE and SELECT on exactly the
+two B62-like emergency tables and the **separate** synthetic session
+registration table, and makes all B62 negative/positive decisions
+execute through that independently authenticated network login.
+
+A new PostgreSQL16 test connects *without* JDBC read-only enabled and
+requires the server to reject INSERT, UPDATE, DELETE, and schema CREATE
+attempts with SQLSTATE `42501`. It also verifies the distinct authenticated
+session identity, schema USAGE, granted SELECT and absence of mutation
+privileges. The ordinary decision connection separately enforces
+READ COMMITTED + read-only transaction semantics. The test tears down the
+synthetic schema **and the ephemeral role**, and CI checks that neither
+`ownerlab_b62_*` schemas nor `ownerlab_b62r_*` roles remain.
+
+**Strict limitations:** The random credential is CI-only, not a production
+secret, certificate, SPIFFE principal, Vault-managed workload account or
+cross-service mTLS integration. B62-G1 still has no real active-session
+registry, and this composition uses temporary owner-created tables in a
+single disposable PG16 instance. Positive synthetic decisions do not grant
+Runtime routes, resource ownership, tenant access or live authority.
+An independently reviewed, production primary-consistent read-only service,
+security migrations, grant management, bounded timeouts, signer blocks,
+audit, stale-replica protections and safe rollback remain outstanding.
+Runtime issue #23 and Platform #251 OPEN; Stage45 NO_GO.

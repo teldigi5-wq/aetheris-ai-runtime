@@ -80,7 +80,7 @@ jobs:
           assert "revocationBoundVerifierRejectsMissingIdAndExpiredRetainedPrincipal" in (Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimePinnedPrincipalVerifierTest.java")).read_text()
           assert "cachedPrincipalExpiresBeforeAnotherRealJdbcTaskRead" in (Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbeTest.java")).read_text()
           compat=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeB62EpochSignerCompatibilityTest.java")).read_text()
-          for marker in ("Platform B62-G1 PR #302", "NOT a per-JTI session allowlist", "GREATEST(", "AND ? <= reject_issued_at_or_before_epoch", "DROP SCHEMA IF EXISTS", "commitBoundarySnapshotAndConnectionFailureDeny", "emergencyNonrevocationNeverSubstitutesForActiveSignedSession", "synthetic_session_registration", "AND active.state='ACTIVE'", "AND ? <= reject_issued_at_or_before_epoch"):
+          for marker in ("Platform B62-G1 PR #302", "NOT a per-JTI session allowlist", "GREATEST(", "AND ? <= reject_issued_at_or_before_epoch", "DROP SCHEMA IF EXISTS", "commitBoundarySnapshotAndConnectionFailureDeny", "emergencyNonrevocationNeverSubstitutesForActiveSignedSession", "independentlyAuthenticatedReaderCannotWriteOrAlterSchema", "ownerlab_b62r_", "GRANT SELECT ON TABLE", "DROP ROLE ", "synthetic_session_registration", "AND active.state='ACTIVE'", "AND ? <= reject_issued_at_or_before_epoch"):
               assert marker in compat, marker
           synthetic_jti=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeSyntheticSignedSessionJdbcTest.java")).read_text()
           for marker in ("Assumptions.assumeTrue", "ownerlab_jti_", "requireRevocationFacts()", "current_setting('transaction_isolation') = 'read committed'", "DROP SCHEMA IF EXISTS", "committedRevocationIsNextStatementVisibleAndStoreFailureDenies"):
@@ -141,6 +141,7 @@ jobs:
           fi
           test "$(psql -X -A -t -c "SELECT count(*) FROM information_schema.tables WHERE table_name IN ('aetheris_tasks','tenant_memberships','project_memberships') AND table_schema NOT LIKE 'pg_temp_%'")" = "0"
           test "$(psql -X -A -t -c "SELECT count(*) FROM pg_namespace WHERE nspname LIKE 'ownerlab_xconn_%' OR nspname LIKE 'ownerlab_http_%' OR nspname LIKE 'ownerlab_jti_%' OR nspname LIKE 'ownerlab_b62_%'")" = "0"
+          test "$(psql -X -A -t -c "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'ownerlab_b62r_%'")" = "0"
           echo 'RUNTIME_DISPOSABLE_PG16_CROSS_SESSION_SCHEMA_CLEANUP_PASS'
       - name: No API admission, deployment or publication
         shell: bash

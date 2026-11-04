@@ -29,6 +29,10 @@ class RuntimeB62EpochSignerCompatibilityTest {
     private static final String KID = "s0-b62-compatibility";
     private static String schema;
     private static String password;
+    // Separate network-authenticated, SELECT-only disposable PostgreSQL role.
+    // This is not a deployed Runtime service account.
+    private static String readerRole;
+    private static String readerPassword;
     private static KeyPair signer;
     private static KeyPair attacker;
     private static RuntimePinnedPrincipalVerifier verifier;
@@ -65,6 +69,9 @@ class RuntimeB62EpochSignerCompatibilityTest {
         other = verify(signer, 77L, now.minusSeconds(35));
         schema = "ownerlab_b62_" + UUID.randomUUID().toString().replace("-", "");
         assertTrue(schema.matches("ownerlab_b62_[a-f0-9]{32}"));
+        readerRole = "ownerlab_b62r_" + UUID.randomUUID().toString().replace("-", "");
+        readerPassword = UUID.randomUUID().toString().replace("-", "");
+        assertTrue(readerRole.matches("ownerlab_b62r_[a-f0-9]{32}"));
         try (Connection c = connect(); var ddl = c.createStatement()) {
             ddl.execute("CREATE SCHEMA " + schema);
             // Shape and cutoff inclusivity are taken from the immutable B62-G1
@@ -91,6 +98,16 @@ class RuntimeB62EpochSignerCompatibilityTest {
                     CHECK(state IN ('ACTIVE','REVOKED')),
                   PRIMARY KEY(issuer,kid,jti))
                 """);
+            // The PostgreSQL service owner creates one ephemeral LOGIN
+            // role with no inherited object permissions. Only SELECT is
+            // granted on this lab schema's three synthetic tables.
+            ddl.execute("CREATE ROLE " + readerRole
+                + " LOGIN PASSWORD '" + readerPassword + "'");
+            ddl.execute("GRANT USAGE ON SCHEMA " + schema + " TO " + readerRole);
+            ddl.execute("GRANT SELECT ON TABLE "
+                + schema + ".principal_epochs, "
+                + schema + ".blocked_signer_kids, "
+                + schema + ".synthetic_session_registration TO " + readerRole);
         }
     }
 
@@ -124,7 +141,12 @@ class RuntimeB62EpochSignerCompatibilityTest {
     }
 
     private static Connection reader() throws SQLException {
-        var c = connect();
+        // Different real PostgreSQL login over TCP, NOT JDBC readOnly
+        // masquerading as least privilege on the ownerlab_ci superuser.
+        var c = DriverManager.getConnection(
+            "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+            readerRole, readerPassword);
+        c.setSchema(schema);
         c.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
         c.setReadOnly(true);
         c.setAutoCommit(false);
@@ -180,6 +202,67 @@ class RuntimeB62EpochSignerCompatibilityTest {
                 assertTrue(row.next());
                 return row.getLong(1);
             }
+        }
+    }
+
+    @Test void independentlyAuthenticatedReaderCannotWriteOrAlterSchema()
+            throws Exception {
+        // The read service identity is an actual PostgreSQL LOGIN with
+        // SELECT-only privileges. Test forbidden mutations WITHOUT setting
+        // JDBC readOnly, so permission denials come from the server grants.
+        try (Connection probe = DriverManager.getConnection(
+                "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                readerRole, readerPassword)) {
+            probe.setSchema(schema);
+            assertFalse(probe.isReadOnly());
+            try (PreparedStatement query = probe.prepareStatement("""
+                    SELECT current_user, session_user,
+                      has_schema_privilege(current_user, ?, 'USAGE'),
+                      has_schema_privilege(current_user, ?, 'CREATE'),
+                      has_table_privilege(current_user, ?, 'SELECT'),
+                      has_table_privilege(current_user, ?, 'INSERT'),
+                      has_table_privilege(current_user, ?, 'UPDATE'),
+                      has_table_privilege(current_user, ?, 'DELETE')
+                    """)) {
+                query.setString(1, schema);
+                query.setString(2, schema);
+                for (int i = 3; i <= 6; i++) {
+                    query.setString(i, schema + ".principal_epochs");
+                }
+                query.setString(7, schema + ".blocked_signer_kids");
+                query.setString(8, schema + ".synthetic_session_registration");
+                try (var row = query.executeQuery()) {
+                    assertTrue(row.next());
+                    assertEquals(readerRole, row.getString(1));
+                    assertEquals(readerRole, row.getString(2));
+                    assertTrue(row.getBoolean(3), "Reader must see review-only schema");
+                    assertFalse(row.getBoolean(4), "Reader must not CREATE schema objects");
+                    assertTrue(row.getBoolean(5), "Reader must SELECT emergency cutoffs");
+                    assertFalse(row.getBoolean(6), "Reader must not insert cutoffs");
+                    assertFalse(row.getBoolean(7), "Reader must not update signer blocks");
+                    assertFalse(row.getBoolean(8), "Reader must not delete sessions");
+                }
+            }
+            for (String deniedSql : List.of(
+                    "INSERT INTO principal_epochs VALUES (9001,9001)",
+                    "UPDATE blocked_signer_kids SET reason_code='tamper'",
+                    "DELETE FROM synthetic_session_registration",
+                    "CREATE TABLE forbidden_writer_table(id bigint)")) {
+                try (var denied = probe.createStatement()) {
+                    SQLException error = assertThrows(SQLException.class,
+                        () -> denied.executeUpdate(deniedSql));
+                    assertEquals("42501", error.getSQLState(),
+                        "PostgreSQL must deny write/DDL by actual role grants");
+                }
+            }
+        }
+        try (Connection live = reader()) {
+            assertTrue(live.isReadOnly());
+            assertFalse(syntheticComposedDecision(live, earlier),
+                "Unregistered signed session stays denied via restricted reader");
+            assertTrue(notEmergencyBlocked(live, earlier),
+                "SELECT-only reader can evaluate B62 predicate");
+            live.rollback();
         }
     }
 
@@ -402,6 +485,17 @@ class RuntimeB62EpochSignerCompatibilityTest {
         assertTrue(schema.matches("ownerlab_b62_[a-f0-9]{32}"));
         try (Connection c = connect(); var drop = c.createStatement()) {
             drop.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
+            // Schema drop removes grants; role then has no remaining objects.
+            assertTrue(readerRole.matches("ownerlab_b62r_[a-f0-9]{32}"));
+            drop.execute("DROP ROLE " + readerRole);
+            try (PreparedStatement roleCheck = c.prepareStatement(
+                    "SELECT COUNT(*) FROM pg_roles WHERE rolname=?")) {
+                roleCheck.setString(1, readerRole);
+                try (var rows = roleCheck.executeQuery()) {
+                    assertTrue(rows.next());
+                    assertEquals(0L, rows.getLong(1));
+                }
+            }
             try (PreparedStatement query = c.prepareStatement(
                     "SELECT COUNT(*) FROM pg_namespace WHERE nspname=?")) {
                 query.setString(1, schema);
