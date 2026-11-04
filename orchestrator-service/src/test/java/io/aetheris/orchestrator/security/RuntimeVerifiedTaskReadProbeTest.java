@@ -529,6 +529,13 @@ class RuntimeVerifiedTaskReadProbeTest {
                       state text NOT NULL CHECK(state IN ('ACTIVE','FENCED')),
                       expires_at timestamptz NOT NULL)
                     """);
+                setup.execute("""
+                    CREATE TEMP TABLE synthetic_guarded_task_effects(
+                      effect_id uuid PRIMARY KEY,
+                      task_id uuid NOT NULL,
+                      fence_term bigint NOT NULL CHECK(fence_term>0),
+                      workload_subject text NOT NULL)
+                    """);
             }
 
             var alice = signedJti(42, UUID.randomUUID().toString());
@@ -569,6 +576,59 @@ class RuntimeVerifiedTaskReadProbeTest {
             }
             assertTrue(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA));
+            var guardedEffects = new RuntimeSyntheticFencedEffectProbe();
+            var firstEffect = UUID.randomUUID();
+            assertTrue(guardedEffects.recordEffectSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA, firstEffect,
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Signed owner/session/workload and locked local fence must"
+                    + " conditionally INSERT a disposable effect");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA, firstEffect,
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Duplicate effect_id must not repeat a pending mutation");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, bob,
+                "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "A second valid signed UID cannot mutate another owner's task");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection,
+                anotherAliceSession, "tenant-alpha", "project-red",
+                ALICE_ALPHA, UUID.randomUUID(),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Unregistered signed JTI cannot execute an effect");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_B)),
+                "Different correctly signed workload must DENY effects");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM - 1),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Signed stale term cannot mutate resource with newer local term");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                "tenant-alpha", "project-red", LEGACY, UUID.randomUUID(),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Legacy ownerless task must never produce protected effects");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                null, signedWorkload(REVIEW_WORKLOAD_A)),
+                "Missing verified lease cannot execute an effect");
+            try (var rows = connection.createStatement().executeQuery("""
+                    SELECT task_id,fence_term,workload_subject
+                    FROM synthetic_guarded_task_effects
+                    """)) {
+                assertTrue(rows.next());
+                assertEquals(ALICE_ALPHA, rows.getObject(1, UUID.class));
+                assertEquals(REVIEW_LOCAL_TERM, rows.getLong(2));
+                assertEquals(REVIEW_WORKLOAD_A, rows.getString(3));
+                assertFalse(rows.next(), "Exactly one disposable effect is pending");
+            }
             assertFalse(combined.canReadSynthetic(connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA,
                 signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
@@ -618,12 +678,22 @@ class RuntimeVerifiedTaskReadProbeTest {
                 assertFalse(fenced(combined, connection, alice,
                     "tenant-alpha", "project-red", ALICE_ALPHA),
                     "Explicitly fenced resource must deny every positive JTI");
+                assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                    signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                    signedWorkload(REVIEW_WORKLOAD_A)),
+                    "An explicitly fenced row cannot admit actual local writes");
                 assertEquals(1, change.executeUpdate(
                     "UPDATE b62_local_resource_fence SET state='ACTIVE',"
                     + " expires_at=clock_timestamp()-interval '1 minute'"));
                 assertFalse(fenced(combined, connection, alice,
                     "tenant-alpha", "project-red", ALICE_ALPHA),
                     "Expired local lease must deny even without JTI revocation");
+                assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                    signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                    signedWorkload(REVIEW_WORKLOAD_A)),
+                    "Expired local resource lease must not insert effects");
                 assertEquals(1, change.executeUpdate(
                     "UPDATE b62_local_resource_fence SET "
                     + "expires_at=clock_timestamp()+interval '30 minutes',"
@@ -637,6 +707,12 @@ class RuntimeVerifiedTaskReadProbeTest {
                     signedWorkload(REVIEW_WORKLOAD_A)),
                     "NEGATIVE COUNTEREXAMPLE: an authentic signed stale lease"
                     + " still matches its LOCAL row, not global leadership");
+                assertTrue(guardedEffects.recordEffectSynthetic(connection, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                    signedFence("b62-review-stale", 6),
+                    signedWorkload(REVIEW_WORKLOAD_A)),
+                    "UNSAFE COUNTEREXAMPLE: an authentic stale leader can still"
+                        + " insert an effect into its own stale local resource");
                 assertEquals(1, change.executeUpdate(
                     "UPDATE b62_local_resource_fence SET "
                     + "endpoint='b62-review-promoted', term=7"));
@@ -682,6 +758,17 @@ class RuntimeVerifiedTaskReadProbeTest {
             assertFalse(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA),
                 "Individually revoked JTI must deny despite eligible owner");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Revoked session cannot insert a protected effect");
+            try (var rows = connection.createStatement().executeQuery(
+                    "SELECT count(*) FROM synthetic_guarded_task_effects")) {
+                assertTrue(rows.next());
+                assertEquals(2L, rows.getLong(1),
+                    "One authorized effect + one deliberately unsafe stale effect");
+            }
 
             try (Connection auto = DriverManager.getConnection(
                     "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
