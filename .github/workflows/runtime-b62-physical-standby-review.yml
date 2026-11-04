@@ -52,11 +52,21 @@ jobs:
                          "AETHERIS_B62_SEPARATE_DATABASE_STALE_OLD_RESOURCE_ALLOW_NO_GO_PASS",
                          "AETHERIS_B62_SEPARATE_DATABASE_OLD_RESOURCE_FENCED_DURING_PARTITION_PASS",
                          "AETHERIS_B62_LOCAL_ONLY_FENCE_COORDINATOR_OUTAGE_ALLOW_NO_GO_PASS",
-                         "GRANT UPDATE(term) ON public.b62_local_fence TO $local_owner",
+                         "GRANT UPDATE(lock_guard) ON public.leader_fence TO $fence_owner",
+                         "GRANT UPDATE(lock_guard) ON public.b62_resource_fence TO $fence_owner",
+                         "GRANT UPDATE(lock_guard) ON public.b62_local_fence TO $local_owner",
+                         "AETHERIS_B62_DEFINER_AUTHORITY_COLUMNS_DENIED_PASS",
+                         "AETHERIS_B62_PHYSICAL_LOCAL_DEFINER_TERM_ENDPOINT_DENIED_PASS",
+                         "SELECT current_user='$fence_owner';",
+                         "SELECT current_user='$local_owner';",
+                         "CHECK(lock_guard=0)",
                          "CREATE FUNCTION public.b62_local_try_effect",
                          'docker network disconnect "$network" "$primary"'):
               assert marker in script
           assert "pg_isready" not in script
+          assert "GRANT UPDATE(term)" not in script
+          assert "GRANT UPDATE(endpoint)" not in script
+          assert "GRANT UPDATE(expires_at)" not in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
