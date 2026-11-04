@@ -139,3 +139,28 @@ No real Runtime authorization route consumes this code. A production
 primary-read path still needs a reviewed operational timeout budget,
 authenticated workload transport, transaction lifecycle and safe
 availability/rollback plan. Stage45 NO_GO; issues #23/#251 remain open.
+
+## 4 November 2026 — committed SELECT revocation on established reader login
+
+An additional disposable PostgreSQL16 test now checks the boundary between
+a previously successful signed-session read and a subsequently committed ACL
+change. The real independently authenticated `ownerlab_b62r_*` connection
+stays open while the owner connection revokes SELECT first on the **separate**
+synthetic session-registration table and then on both B62-like emergency
+tables. The next READ COMMITTED decision must DENY for the affected table,
+and direct table reads must fail with **PostgreSQL SQLSTATE 42501**. The
+emergency-only predicate remains readable when only session-table SELECT
+is revoked, confirming the decisions consult separate authorities.
+
+After restoring only the three original SELECT grants, a **new** SQL
+statement through the same open reader may evaluate the still-active
+synthetic session again; no cached allow is accepted. The test restores
+the disposable grants in a finally block and inherits role/schema cleanup.
+
+**Explicit limitation:** The test ends an earlier transaction before
+the grant change; it does not demonstrate cancellation of an in-flight
+query, long-running snapshot ACL propagation, PostgreSQL replicas, network
+partition or a production authenticated revocation service. Its result
+must not be used to admit any Runtime task, mission or SSE route.
+Issues #23/#251 OPEN, Stage45 NO_GO; no production schema, main merge,
+deployment or real inference authorization.

@@ -458,6 +458,83 @@ class RuntimeB62EpochSignerCompatibilityTest {
         }
     }
 
+    /**
+     * Test a committed privilege REVOKE on a still-established PostgreSQL
+     * reader login BETWEEN statements. This deliberately does NOT prove
+     * cancellation of an in-flight statement or replica invalidation.
+     */
+    @Test void committedSelectRevocationDeniesExistingReaderConnection()
+            throws Exception {
+        registerSyntheticSession(earlier);
+        assertTrue(schema.matches("ownerlab_b62_[a-f0-9]{32}"));
+        assertTrue(readerRole.matches("ownerlab_b62r_[a-f0-9]{32}"));
+        String sessions = schema + ".synthetic_session_registration";
+        String epochs = schema + ".principal_epochs";
+        String signers = schema + ".blocked_signer_kids";
+
+        try (Connection read = reader()) {
+            assertTrue(syntheticComposedDecision(read, earlier));
+            assertTrue(notEmergencyBlocked(read, earlier));
+            // End the current statement transaction before the other
+            // authenticated writer changes ACLs; keep the TCP login open.
+            read.rollback();
+            try {
+                try (Connection owner = connect();
+                     Statement grantChange = owner.createStatement()) {
+                    grantChange.setQueryTimeout(3);
+                    grantChange.execute("REVOKE SELECT ON TABLE " + sessions
+                        + " FROM " + readerRole);
+                }
+                assertFalse(syntheticComposedDecision(read, earlier),
+                    "Revoked session-table SELECT must DENY on same open reader");
+                read.rollback();
+                // The direct database error distinguishes revoked privilege
+                // from a generic false or an already-aborted transaction.
+                try (Statement actualSelect = read.createStatement()) {
+                    SQLException permissionDenied = assertThrows(SQLException.class,
+                        () -> actualSelect.executeQuery(
+                            "SELECT 1 FROM " + sessions + " LIMIT 1"));
+                    assertEquals("42501", permissionDenied.getSQLState());
+                }
+                read.rollback();
+                assertTrue(notEmergencyBlocked(read, earlier),
+                    "Separate emergency-table permissions remain SELECT-able");
+                read.rollback();
+
+                try (Connection owner = connect();
+                     Statement grantChange = owner.createStatement()) {
+                    grantChange.setQueryTimeout(3);
+                    grantChange.execute("REVOKE SELECT ON TABLE " + epochs
+                        + ", " + signers + " FROM " + readerRole);
+                }
+                assertFalse(notEmergencyBlocked(read, earlier),
+                    "Revoked emergency SELECT must fail closed");
+                read.rollback();
+                try (Statement actualSelect = read.createStatement()) {
+                    SQLException permissionDenied = assertThrows(SQLException.class,
+                        () -> actualSelect.executeQuery(
+                            "SELECT 1 FROM " + epochs + " LIMIT 1"));
+                    assertEquals("42501", permissionDenied.getSQLState());
+                }
+                read.rollback();
+            } finally {
+                // Restore only the exact disposable grants, including after
+                // failed assertions; never promote the test role to writer.
+                read.rollback();
+                try (Connection owner = connect();
+                     Statement restore = owner.createStatement()) {
+                    restore.setQueryTimeout(3);
+                    restore.execute("GRANT SELECT ON TABLE " + sessions
+                        + ", " + epochs + ", " + signers + " TO " + readerRole);
+                }
+            }
+            assertTrue(syntheticComposedDecision(read, earlier),
+                "Restored grants require fresh authoritative SQL, not cache");
+            assertTrue(notEmergencyBlocked(read, earlier));
+            read.rollback();
+        }
+    }
+
     @Test void timedOutPrimaryReadFailsClosedUntilTransactionRollback()
             throws Exception {
         // A registered and signed synthetic session is eligible before the
