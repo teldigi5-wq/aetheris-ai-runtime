@@ -167,6 +167,50 @@ class RuntimePinnedPrincipalVerifierTest {
     }
 
     @Test
+    void revocationBoundVerifierRejectsMissingIdAndExpiredRetainedPrincipal() {
+        Instant start = Instant.now();
+        AtomicReference<Instant> now = new AtomicReference<>(start);
+        Clock moving = new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) {
+                return Clock.fixed(now.get(), zone);
+            }
+            @Override public Instant instant() { return now.get(); }
+        };
+        var strict = new RuntimePinnedPrincipalVerifier(
+            pem(identityKey), KID, ISSUER, AUDIENCE, moving);
+        // Legacy positive JWTs deliberately lack a jti. Only the NEW
+        // opt-in revocation seam requires it, without unquarantining APIs.
+        var ordinary = strict.verifyBearer("Bearer " + valid());
+        assertThrows(IllegalArgumentException.class,
+            ordinary::requireRevocationFacts);
+        assertThrows(IllegalArgumentException.class,
+            () -> strict.verifyBearerForRevocation("Bearer " + valid()));
+        String jti = java.util.UUID.randomUUID().toString();
+        String signed = Jwts.builder().header().keyId(KID).and()
+            .subject("ci-session@example.invalid").issuer(ISSUER)
+            .claim("aud", List.of(AUDIENCE)).claim("uid", 42L)
+            .claim("role", "DEVELOPER")
+            .claim("scopes", List.of("orchestrator:read"))
+            .id(jti)
+            .issuedAt(Date.from(start.minusSeconds(10)))
+            .expiration(Date.from(start.plusSeconds(60)))
+            .signWith(identityKey.getPrivate(), Jwts.SIG.RS256).compact();
+        var checked = strict.verifyBearerForRevocation("Bearer " + signed);
+        var fact = checked.requireRevocationFacts();
+        assertEquals(42L, fact.signedIdentityUid());
+        assertEquals(ISSUER, fact.verifiedIssuer());
+        assertEquals(KID, fact.verifiedKeyId());
+        assertEquals(jti, fact.signedTokenId());
+        assertEquals(start.minusSeconds(10).getEpochSecond(),
+            fact.signedIssuedAt().getEpochSecond());
+        now.set(start.plusSeconds(61));
+        assertFalse(checked.isFresh());
+        assertThrows(IllegalArgumentException.class,
+            checked::requireRevocationFacts);
+    }
+
+    @Test
     void refusesMalformedBearerAndHmacInsteadOfRs256() {
         assertThrows(IllegalArgumentException.class,
             () -> verifier.verifyBearer(null));
