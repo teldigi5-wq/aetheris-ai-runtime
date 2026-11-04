@@ -17,6 +17,7 @@ owner_password="$(openssl rand -hex 24)"
 replica_password="$(openssl rand -hex 24)"
 held_action_output=""
 transition_output=""
+detached_action_output=""
 
 cleanup() {
   local code=$?
@@ -25,6 +26,7 @@ cleanup() {
   docker network rm "$network" >/dev/null 2>&1 || true
   [[ -z "$held_action_output" ]] || rm -f -- "$held_action_output"
   [[ -z "$transition_output" ]] || rm -f -- "$transition_output"
+  [[ -z "$detached_action_output" ]] || rm -f -- "$detached_action_output"
   if test "$code" -eq 0; then
     echo AETHERIS_B62_PHYSICAL_REPLICA_CONTAINERS_NETWORK_DESTROYED_PASS
   fi
@@ -691,6 +693,61 @@ test "$(local_call "$primary" "$local_old_pw" \
 test "$(local_call "$standby" "$local_new_pw" \
   "SELECT public.b62_local_try_effect(2,'wrong-new-term')")" = f
 
+# DISPOSABLE NEGATIVE COUNTEREXAMPLE: a protected effect on an
+# INDEPENDENT promoted resource node remains in-flight while the separate
+# coordinator advances its term. Same-node FOR SHARE locks cannot serialize
+# with a leadership update in a different PostgreSQL server.
+detached_action_output="$(mktemp)"
+(
+  local_call "$standby" "$local_new_pw" \
+    "BEGIN;
+     SELECT public.b62_local_try_effect(4,'detached-inflight-term-four');
+     SELECT pg_sleep(12);
+     COMMIT;"
+) >"$detached_action_output" 2>&1 &
+detached_pid=$!
+detached_ready=false
+for poll in $(seq 1 80); do
+  if test "$(standby_sql "SELECT count(*) FROM pg_stat_activity
+      WHERE usename='$local_writer' AND datname='$db'
+        AND state='active' AND wait_event='PgSleep'
+        AND query LIKE '%detached-inflight-term-four%'")" = 1; then
+    detached_ready=true
+    break
+  fi
+  if ! kill -0 "$detached_pid" 2>/dev/null; then break; fi
+  sleep 0.1
+done
+if test "$detached_ready" != true; then
+  echo "FAIL: detached resource effect was not observed in-flight" >&2
+  exit 1
+fi
+test "$(coord_write "SELECT endpoint || ':' || term::text FROM leader_fence
+  WHERE authority_key='runtime'")" = "$standby:4"
+# lock_timeout ensures the independent coordinator update cannot
+# silently block on the separate resource transaction.
+coord_write "BEGIN; SET LOCAL lock_timeout='400ms';
+  UPDATE public.leader_fence SET term=5,
+    expires_at=clock_timestamp()+interval '15 minutes'
+  WHERE authority_key='runtime' AND term=4;
+  COMMIT;" >/dev/null
+test "$(coord_write "SELECT endpoint || ':' || term::text FROM leader_fence
+  WHERE authority_key='runtime'")" = "$standby:5"
+test "$(standby_sql "SELECT endpoint || ':' || term::text
+  FROM public.b62_local_fence WHERE resource_key='runtime'")" = "$standby:4"
+if review_route "$standby" 4 "$new_sql"; then
+  echo "FAIL: coordinator still admitted obsolete term four" >&2
+  exit 1
+fi
+# The actual resource transaction nonetheless commits under its stale
+# local term; this is a SECURITY FAILURE demonstrator, NEVER a release PASS.
+wait "$detached_pid"
+grep -Fxq t "$detached_action_output"
+test "$(standby_sql "SELECT term FROM public.b62_local_effects
+  WHERE request_id='detached-inflight-term-four'")" = 4
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 2
+echo AETHERIS_B62_DETACHED_INFLIGHT_STALE_EFFECT_COMMITS_NO_GO_PASS
+
 # Explicit operator-driven synthetic FENCING of the old database:
 # this happens AFTER a demonstrated unsafe window and cannot be treated
 # as atomic coordinator+resource failover or any safe rollout protocol.
@@ -709,7 +766,7 @@ if local_call "$standby" "$local_new_pw" \
   echo "FAIL: replayed new-resource request was accepted" >&2
   exit 1
 fi
-test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 1
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 2
 
 # Local fencing survives a real network disconnect on the OLD server.
 # docker exec loopback is deliberately a negative-only in-container probe;
@@ -727,7 +784,7 @@ echo AETHERIS_B62_SEPARATE_DATABASE_OLD_RESOURCE_FENCED_DURING_PARTITION_PASS
 docker stop "$authority" >/dev/null
 test "$(local_call "$standby" "$local_new_pw" \
   "SELECT public.b62_local_try_effect(4,'authority-outage-local-allow')")" = t
-test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 2
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 3
 echo AETHERIS_B62_LOCAL_ONLY_FENCE_COORDINATOR_OUTAGE_ALLOW_NO_GO_PASS
 
 # EXTERNAL FENCING EXAMPLE ONLY: stop the old server process/container.
