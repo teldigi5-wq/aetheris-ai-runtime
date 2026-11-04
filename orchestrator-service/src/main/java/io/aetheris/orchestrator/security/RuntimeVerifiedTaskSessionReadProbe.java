@@ -14,12 +14,16 @@ import java.util.UUID;
  * approved production migrations. Real resource fencing, writer audit,
  * authenticated service identity and a least-privilege reader are missing.
  * pg_is_in_recovery() cannot detect two divergent writable primaries.
+ * A caller-supplied endpoint/term pair is NOT authenticated leadership;
+ * it is only a local fence selector in an isolated SQL compatibility lab.
  */
 public final class RuntimeVerifiedTaskSessionReadProbe {
     private static final String SELECTOR = "[a-z0-9][a-z0-9_-]{0,95}";
     private static final String SCOPED_SESSION_READ = """
         SELECT EXISTS (
           SELECT 1 FROM aetheris_tasks t
+          JOIN b62_local_resource_fence fence
+            ON fence.resource_key='runtime'
           JOIN tenant_memberships tm
             ON tm.tenant_key=t.owner_tenant_key
            AND tm.identity_uid=t.owner_identity_uid
@@ -30,6 +34,9 @@ public final class RuntimeVerifiedTaskSessionReadProbe {
           JOIN synthetic_session_registration active
             ON active.uid=t.owner_identity_uid
           WHERE current_setting('transaction_isolation')='read committed'
+            AND fence.endpoint=? AND fence.term=?
+            AND fence.state='ACTIVE'
+            AND fence.expires_at>clock_timestamp()
             AND NOT pg_is_in_recovery()
             AND t.id=? AND t.owner_identity_uid=?
             AND t.owner_tenant_key=? AND t.owner_project_key=?
@@ -56,11 +63,13 @@ public final class RuntimeVerifiedTaskSessionReadProbe {
      */
     public boolean canReadSynthetic(Connection connection,
             RuntimePinnedPrincipalVerifier.VerifiedPrincipal principal,
-            String tenant, String project, UUID taskId) {
+            String tenant, String project, UUID taskId,
+            String localEndpoint, long localTerm) {
         try {
             if (connection == null || principal == null
                     || connection.getAutoCommit()
                     || !principal.hasScope("orchestrator:read")
+                    || !validEndpoint(localEndpoint) || localTerm <= 0
                     || taskId == null || !valid(tenant) || !valid(project)) {
                 return false;
             }
@@ -72,19 +81,21 @@ public final class RuntimeVerifiedTaskSessionReadProbe {
             try (PreparedStatement read = connection.prepareStatement(
                     SCOPED_SESSION_READ)) {
                 read.setQueryTimeout(2); // disposable test budget only
-                read.setObject(1, taskId);
-                read.setLong(2, signed.signedIdentityUid());
-                read.setString(3, tenant);
-                read.setString(4, project);
-                read.setString(5, signed.verifiedIssuer());
-                read.setString(6, signed.verifiedKeyId());
-                read.setString(7, signed.signedTokenId());
-                read.setLong(8, signed.signedIdentityUid());
-                read.setLong(9, iat);
-                read.setString(10, signed.verifiedIssuer());
-                read.setString(11, signed.verifiedKeyId());
-                read.setLong(12, signed.signedIdentityUid());
-                read.setLong(13, iat);
+                read.setString(1, localEndpoint);
+                read.setLong(2, localTerm);
+                read.setObject(3, taskId);
+                read.setLong(4, signed.signedIdentityUid());
+                read.setString(5, tenant);
+                read.setString(6, project);
+                read.setString(7, signed.verifiedIssuer());
+                read.setString(8, signed.verifiedKeyId());
+                read.setString(9, signed.signedTokenId());
+                read.setLong(10, signed.signedIdentityUid());
+                read.setLong(11, iat);
+                read.setString(12, signed.verifiedIssuer());
+                read.setString(13, signed.verifiedKeyId());
+                read.setLong(14, signed.signedIdentityUid());
+                read.setLong(15, iat);
                 try (ResultSet decision = read.executeQuery()) {
                     return decision.next() && decision.getBoolean(1);
                 }
@@ -93,6 +104,10 @@ public final class RuntimeVerifiedTaskSessionReadProbe {
             // Do not leak signed identity, SQL errors or authority details.
             return false;
         }
+    }
+
+    private static boolean validEndpoint(String name) {
+        return name != null && name.matches("[a-z0-9][a-z0-9-]{0,95}");
     }
 
     private static boolean valid(String selector) {
