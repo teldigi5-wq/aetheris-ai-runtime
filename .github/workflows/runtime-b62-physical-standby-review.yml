@@ -2,7 +2,7 @@ name: Runtime B62 real physical-standby stale-read denial (review only)
 # Tests only; no production service, endpoint or real customer database.
 on:
   push:
-    branches: [security/runtime-quarantine-pathinfo-boundary-20261101]
+    branches: [security/runtime-quarantine-pathinfo-boundary-20261101, test/b62-revocation-replay-proof-20261104]
 permissions:
   contents: read
 jobs:
@@ -57,8 +57,18 @@ jobs:
                          'docker network disconnect "$network" "$primary"'):
               assert marker in script
           assert "pg_isready" not in script
+          assert 'source scripts/security/runtime_b62_pg16_revocation_continuity_review.sh' in script
+          continuity = Path('scripts/security/runtime_b62_pg16_revocation_continuity_review.sh').read_text()
+          for marker in (
+              'AETHERIS_B62_PG16_SEPARATE_RESOURCE_GAPLESS_REPLAY_GUARD_PASS',
+              'AETHERIS_B62_PG16_SOURCE_ADVANCE_BEFORE_RESOURCE_BARRIER_UNSAFE_ALLOW_NO_GO_PASS',
+              'AETHERIS_B62_PG16_SEPARATE_DB_WATERMARK_BARRIER_REPLAY_NO_GO_PASS',
+              'AETHERIS_B62_PG16_REPLAY_SOURCE_UID_PROVENANCE_MISSING_NO_GO_PASS',
+          ):
+              assert marker in continuity
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
+          bash -n scripts/security/runtime_b62_pg16_revocation_continuity_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
       - name: Real physical standby, stale WAL, deliberate isolated dual-primary and old-primary fencing
         shell: bash
