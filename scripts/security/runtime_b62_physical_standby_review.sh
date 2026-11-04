@@ -457,6 +457,150 @@ fi
 test "$(coord_write 'SELECT count(*) FROM public.b62_protected_actions')" = 2
 echo AETHERIS_B62_RESOURCE_OWNED_MONOTONIC_FENCE_ATOMIC_ACTION_PASS
 
+# Separate physical PostgreSQL resource nodes, NOT the coordinator database.
+# This negative test proves precisely where the co-located transaction
+# cannot provide end-to-end fencing. Both servers remain disposable.
+local_writer=b62_local_writer
+local_owner=b62_local_exec_owner
+local_old_pw="$(openssl rand -hex 24)"
+local_new_pw="$(openssl rand -hex 24)"
+local_setup() {
+  local node="$1" pinned="$2" password="$3" epoch="$4" sql
+  [[ "$node" == "$primary" || "$node" == "$standby" ]] || return 1
+  [[ "$pinned" == "$primary" || "$pinned" == "$standby" ]] || return 1
+  [[ "$epoch" =~ ^[1-9][0-9]*$ ]] || return 1
+  sql="BEGIN;
+    CREATE TABLE public.b62_local_fence(
+      resource_key text PRIMARY KEY, endpoint text NOT NULL,
+      term bigint NOT NULL CHECK(term>0));
+    INSERT INTO public.b62_local_fence VALUES ('runtime','$pinned',$epoch);
+    CREATE TABLE public.b62_local_effects(
+      request_id text PRIMARY KEY, term bigint NOT NULL CHECK(term>0));
+    CREATE ROLE $local_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+    CREATE ROLE $local_writer LOGIN PASSWORD '$password';
+    REVOKE ALL ON public.b62_local_fence,public.b62_local_effects FROM PUBLIC;
+    GRANT USAGE ON SCHEMA public TO $local_owner,$local_writer;
+    GRANT SELECT ON public.b62_local_fence TO $local_owner;
+    GRANT INSERT ON public.b62_local_effects TO $local_owner;
+    CREATE FUNCTION public.b62_local_try_effect(p_term bigint,p_id text)
+    RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path=pg_catalog,pg_temp
+    AS \$b62_local\$
+    BEGIN
+      IF session_user <> '$local_writer'
+         OR current_setting('transaction_isolation') <> 'read committed'
+         OR p_term IS NULL OR p_term<1
+         OR p_id IS NULL OR p_id !~ '^[a-z][a-z0-9-]{0,47}$' THEN
+        RETURN false;
+      END IF;
+      PERFORM 1 FROM public.b62_local_fence
+      WHERE resource_key='runtime' AND endpoint='$pinned'
+        AND term=p_term AND NOT pg_is_in_recovery()
+      FOR SHARE;
+      IF NOT FOUND THEN RETURN false; END IF;
+      INSERT INTO public.b62_local_effects VALUES(p_id,p_term);
+      RETURN true;
+    END
+    \$b62_local\$;
+    ALTER FUNCTION public.b62_local_try_effect(bigint,text) OWNER TO $local_owner;
+    REVOKE ALL ON FUNCTION public.b62_local_try_effect(bigint,text) FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION public.b62_local_try_effect(bigint,text) TO $local_writer;
+    COMMIT;"
+  if [[ "$node" == "$primary" ]]; then
+    primary_sql "$sql" >/dev/null
+  else
+    standby_sql "$sql" >/dev/null
+  fi
+}
+local_call() {
+  local node="$1" password="$2" statement="$3"
+  [[ "$node" == "$primary" || "$node" == "$standby" ]] || return 1
+  docker exec -e "PGPASSWORD=$password" -e PGCONNECT_TIMEOUT=2 "$node" \
+    psql -X -A -t -w -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 5432 \
+      -U "$local_writer" -d "$db" -c "$statement"
+}
+# These physical servers have diverged after actual pg_ctl promotion.
+# No cross-server transaction or coordinator admission exists here.
+local_setup "$primary" "$primary" "$local_old_pw" 2
+local_setup "$standby" "$standby" "$local_new_pw" 4
+test "$(primary_sql 'SELECT pg_is_in_recovery()')" = f
+test "$(standby_sql 'SELECT pg_is_in_recovery()')" = f
+
+# UNSAFE counterexample: while the coordinator is at promoted leader term 4,
+# the old physical PRIMARY can still append using an obsolete LOCAL term 2.
+test "$(coord_write "SELECT endpoint || ':' || term FROM leader_fence
+  WHERE authority_key='runtime'")" = "$standby:4"
+test "$(local_call "$primary" "$local_old_pw" \
+  "SELECT public.b62_local_try_effect(2,'stale-old-local-allow')")" = t
+test "$(local_call "$standby" "$local_new_pw" \
+  "SELECT public.b62_local_try_effect(4,'new-local-allow')")" = t
+test "$(primary_sql 'SELECT count(*) FROM public.b62_local_effects')" = 1
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 1
+echo AETHERIS_B62_SEPARATE_DATABASE_STALE_OLD_RESOURCE_ALLOW_NO_GO_PASS
+
+# Resource-side SQL privileges, role credentials, wrong terms and replay
+# are independently denied on BOTH PostgreSQL processes.
+if local_call "$standby" "$local_old_pw" \
+  "SELECT public.b62_local_try_effect(4,'wrong-resource-password')" \
+  >/dev/null 2>&1; then
+  echo "FAIL: old resource password authenticated to promoted node" >&2
+  exit 1
+fi
+if local_call "$primary" "$local_old_pw" \
+  "UPDATE public.b62_local_fence SET term=1" >/dev/null 2>&1; then
+  echo "FAIL: restricted old writer can mutate its local fence" >&2
+  exit 1
+fi
+if local_call "$standby" "$local_new_pw" \
+  "INSERT INTO public.b62_local_effects VALUES ('forged-direct',4)" \
+  >/dev/null 2>&1; then
+  echo "FAIL: restricted promoted writer can bypass its journal function" >&2
+  exit 1
+fi
+test "$(local_call "$primary" "$local_old_pw" \
+  "SELECT public.b62_local_try_effect(4,'wrong-old-term')")" = f
+test "$(local_call "$standby" "$local_new_pw" \
+  "SELECT public.b62_local_try_effect(2,'wrong-new-term')")" = f
+
+# Explicit operator-driven synthetic FENCING of the old database:
+# this happens AFTER a demonstrated unsafe window and cannot be treated
+# as atomic coordinator+resource failover or any safe rollout protocol.
+primary_sql "UPDATE public.b62_local_fence
+  SET endpoint='$standby',term=4
+  WHERE resource_key='runtime' AND term=2;" >/dev/null
+test "$(primary_sql "SELECT endpoint || ':' || term FROM public.b62_local_fence
+  WHERE resource_key='runtime'")" = "$standby:4"
+test "$(local_call "$primary" "$local_old_pw" \
+  "SELECT public.b62_local_try_effect(2,'old-fenced-term-two')")" = f
+test "$(local_call "$primary" "$local_old_pw" \
+  "SELECT public.b62_local_try_effect(4,'old-fenced-term-four')")" = f
+if local_call "$standby" "$local_new_pw" \
+  "SELECT public.b62_local_try_effect(4,'new-local-allow')" \
+  >/dev/null 2>&1; then
+  echo "FAIL: replayed new-resource request was accepted" >&2
+  exit 1
+fi
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 1
+
+# Local fencing survives a real network disconnect on the OLD server.
+# docker exec loopback is deliberately a negative-only in-container probe;
+# no external callers are enabled and network reachability is NOT proven.
+docker network disconnect "$network" "$primary"
+test "$(local_call "$primary" "$local_old_pw" \
+  "SELECT public.b62_local_try_effect(2,'isolated-stale-term')")" = f
+test "$(primary_sql 'SELECT count(*) FROM public.b62_local_effects')" = 1
+echo AETHERIS_B62_SEPARATE_DATABASE_OLD_RESOURCE_FENCED_DURING_PARTITION_PASS
+
+# A local term alone does NOT detect coordinator outage: the promoted
+# database still accepts a locally matched synthetic term while its
+# authoritative coordinator is unreachable. This is a deliberate
+# UNRELEASEABLE fail-open counterexample, not acceptable Runtime behavior.
+docker stop "$authority" >/dev/null
+test "$(local_call "$standby" "$local_new_pw" \
+  "SELECT public.b62_local_try_effect(4,'authority-outage-local-allow')")" = t
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 2
+echo AETHERIS_B62_LOCAL_ONLY_FENCE_COORDINATOR_OUTAGE_ALLOW_NO_GO_PASS
+
 # EXTERNAL FENCING EXAMPLE ONLY: stop the old server process/container.
 # In real systems, fencing/leases/route control must be independently
 # designed, cryptographically authenticated and operationally tested.
