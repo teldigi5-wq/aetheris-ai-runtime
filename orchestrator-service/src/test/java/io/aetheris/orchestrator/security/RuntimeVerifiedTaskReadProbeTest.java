@@ -44,6 +44,8 @@ class RuntimeVerifiedTaskReadProbeTest {
     private static Connection connection;
     private static KeyPair signingKey;
     private static RuntimePinnedPrincipalVerifier verifier;
+    private static KeyPair fenceSigningKey;
+    private static RuntimePinnedLocalFenceLeaseVerifier fenceVerifier;
     private final RuntimeVerifiedTaskReadProbe probe = new RuntimeVerifiedTaskReadProbe();
 
     @BeforeAll
@@ -129,6 +131,10 @@ class RuntimeVerifiedTaskReadProbeTest {
             + "\n-----END PUBLIC KEY-----";
         verifier = new RuntimePinnedPrincipalVerifier(pem, KEY_ID, ISSUER,
             AUDIENCE, Clock.systemUTC());
+        fenceSigningKey = generator.generateKeyPair();
+        fenceVerifier = new RuntimePinnedLocalFenceLeaseVerifier(
+            publicKeyPem(fenceSigningKey), FENCE_KID, FENCE_ISSUER,
+            FENCE_AUDIENCE, Clock.systemUTC());
     }
 
     @AfterAll
@@ -199,13 +205,44 @@ class RuntimeVerifiedTaskReadProbeTest {
 
     private static final String REVIEW_LOCAL_ENDPOINT = "b62-review-promoted";
     private static final long REVIEW_LOCAL_TERM = 7L;
+    private static final String FENCE_ISSUER = "https://fence.aetheris.example.invalid";
+    private static final String FENCE_AUDIENCE = "aetheris-runtime-fence-review";
+    private static final String FENCE_KID = "b62-review-fence-key";
+
+    private static String publicKeyPem(KeyPair key) {
+        return "-----BEGIN PUBLIC KEY-----\n"
+            + Base64.getMimeEncoder(64, new byte[]{'\n'})
+                .encodeToString(key.getPublic().getEncoded())
+            + "\n-----END PUBLIC KEY-----";
+    }
+
+    private static String signedFenceJwt(KeyPair signer, String endpoint,
+            long term, String issuer, String audience, String kid,
+            String purpose, String resource, Instant issued, Instant expires) {
+        return Jwts.builder().header().keyId(kid).and()
+            .subject("synthetic-resource-leader").issuer(issuer)
+            .claim("aud", List.of(audience))
+            .claim("purpose", purpose).claim("resource", resource)
+            .claim("endpoint", endpoint).claim("term", term)
+            .issuedAt(Date.from(issued)).expiration(Date.from(expires))
+            .signWith(signer.getPrivate(), Jwts.SIG.RS256).compact();
+    }
+
+    private static RuntimePinnedLocalFenceLeaseVerifier.VerifiedLease signedFence(
+            String endpoint, long term) {
+        Instant now = Instant.now();
+        return fenceVerifier.verifySignedLease(signedFenceJwt(
+            fenceSigningKey, endpoint, term, FENCE_ISSUER, FENCE_AUDIENCE,
+            FENCE_KID, "runtime-local-fence-review", "runtime",
+            now.minusSeconds(5), now.plusSeconds(55)));
+    }
 
     private static boolean fenced(
             RuntimeVerifiedTaskSessionReadProbe combined, Connection c,
             RuntimePinnedPrincipalVerifier.VerifiedPrincipal signed,
             String tenant, String project, UUID id) {
         return combined.canReadSynthetic(c, signed, tenant, project, id,
-            REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM);
+            signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM));
     }
 
     @Test
@@ -302,16 +339,18 @@ class RuntimeVerifiedTaskReadProbeTest {
                 "A signed token with no JTI cannot supply active-session proof");
             assertFalse(combined.canReadSynthetic(connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA,
-                "b62-review-other", REVIEW_LOCAL_TERM),
+                signedFence("b62-review-other", REVIEW_LOCAL_TERM)),
                 "A different pinned endpoint must not match the local resource");
             assertFalse(combined.canReadSynthetic(connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA,
-                REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM - 1),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM - 1)),
                 "Obsolete term must not match a current local fence");
+            assertThrows(IllegalArgumentException.class,
+                () -> signedFence(REVIEW_LOCAL_ENDPOINT, 0),
+                "Nonpositive signed term must be rejected at signature proof");
             assertFalse(combined.canReadSynthetic(connection, alice,
-                "tenant-alpha", "project-red", ALICE_ALPHA,
-                REVIEW_LOCAL_ENDPOINT, 0),
-                "Nonpositive term is rejected before preparing SQL");
+                "tenant-alpha", "project-red", ALICE_ALPHA, null),
+                "Missing signed authority must fail closed");
             try (var change = connection.createStatement()) {
                 assertEquals(1, change.executeUpdate(
                     "UPDATE b62_local_resource_fence SET state='FENCED'"));
@@ -333,8 +372,8 @@ class RuntimeVerifiedTaskReadProbeTest {
                     "A new expected term cannot accept a stale local row");
                 assertTrue(combined.canReadSynthetic(connection, alice,
                     "tenant-alpha", "project-red", ALICE_ALPHA,
-                    "b62-review-stale", 6),
-                    "NEGATIVE COUNTEREXAMPLE: caller-selected stale endpoint/term"
+                    signedFence("b62-review-stale", 6)),
+                    "NEGATIVE COUNTEREXAMPLE: an authentic signed stale lease"
                     + " still matches its LOCAL row, not global leadership");
                 assertEquals(1, change.executeUpdate(
                     "UPDATE b62_local_resource_fence SET "
