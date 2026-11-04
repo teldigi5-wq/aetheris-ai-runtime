@@ -202,3 +202,37 @@ lifecycle, fencing on physically unreachable old nodes and actual
 application JDBC integration remain unproven. Production authorization,
 Runtime issue #23, Platform #251, all nine Stage45 gates and release
 readiness remain NO_GO. This is not a deployment or merge.
+
+## 4 November 2026 — harden quarantined Runtime JDBC task-read prototypes
+
+Two non-bean Java SQL probes now require **NOT pg_is_in_recovery()**
+inside their existing same-statement, READ COMMITTED, signed-UID,
+exact-task, exact-tenant/project and current-membership predicates:
+
+- RuntimeVerifiedTaskReadProbe: also requires an **explicit JDBC
+  transaction** (connection autocommit must be disabled) before it
+  attempts any scoped SQL read. Existing owner-ID binding, parameterized
+  selectors, membership revocation and principal freshness checks remain.
+- RuntimeVerifiedRegistryTaskReadProbe: retains its existing caller-side
+  read-only and non-autocommit checks and restricted PostgreSQL role.
+  Its tenant/project status and membership validity checks remain.
+
+Disposable PostgreSQL16 regression tests require real RS256-signed owner
+reads on a healthy current primary, reject other identities, and reject
+implicit autocommit calls before preparing owner SQL. They cannot directly
+execute these Java probes against a physical standby; the **separate**
+physical-standby lab above demonstrates the underlying SQL recovery guard
+and its limitations. The exact-head Java and CI results must be checked
+for the FINAL draft commit before calling this checkpoint verified.
+
+**Important limitations:** NOT pg_is_in_recovery() can reject a standby
+but CANNOT prove which of two writable primaries is authoritative.
+Neither Java probe currently reads an independent, authenticated,
+resource-side leader epoch. Neither is a Spring bean or route gate.
+The old generic owner probe is a read-only SQL *operation* prototype but
+its JDBC connection is not server-enforced read-only like the independent
+registry role; explicit JDBC transaction alone is not a security role
+boundary. Real signed JTI/session revocation, cross-resource atomicity,
+resource identity, mission writes and HTTP/SSE emission fencing remain
+unimplemented here. Keep every API quarantined, issue #23/#251 OPEN,
+all release attestations uncertified, and Stage45 **NO_GO**.
