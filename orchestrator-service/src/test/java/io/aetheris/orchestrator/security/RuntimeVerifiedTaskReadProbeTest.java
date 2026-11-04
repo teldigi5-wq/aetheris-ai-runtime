@@ -317,13 +317,13 @@ class RuntimeVerifiedTaskReadProbeTest {
                     "UPDATE b62_local_resource_fence SET state='FENCED'"));
                 assertFalse(fenced(combined, connection, alice,
                     "tenant-alpha", "project-red", ALICE_ALPHA),
-                    "Explicitly fenced resource must deny every positive JTI"));
+                    "Explicitly fenced resource must deny every positive JTI");
                 assertEquals(1, change.executeUpdate(
                     "UPDATE b62_local_resource_fence SET state='ACTIVE',"
                     + " expires_at=clock_timestamp()-interval '1 minute'"));
                 assertFalse(fenced(combined, connection, alice,
                     "tenant-alpha", "project-red", ALICE_ALPHA),
-                    "Expired local lease must deny even without JTI revocation"));
+                    "Expired local lease must deny even without JTI revocation");
                 assertEquals(1, change.executeUpdate(
                     "UPDATE b62_local_resource_fence SET "
                     + "expires_at=clock_timestamp()+interval '30 minutes',"
