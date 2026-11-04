@@ -596,6 +596,10 @@ test "$(local_call "$primary" "$local_old_pw" \
 test "$(primary_sql 'SELECT count(*) FROM public.b62_local_effects')" = 1
 echo AETHERIS_B62_SEPARATE_DATABASE_OLD_RESOURCE_FENCED_DURING_PARTITION_PASS
 
+# Disposable PostgreSQL source/replay watermark negative proof (review only).
+# This MUST NOT be interpreted as runtime authorization or API admission.
+source scripts/security/runtime_b62_pg16_revocation_continuity_review.sh
+
 # A local term alone does NOT detect coordinator outage: the promoted
 # database still accepts a locally matched synthetic term while its
 # authoritative coordinator is unreachable. This is a deliberate
