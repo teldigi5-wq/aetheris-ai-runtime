@@ -40,12 +40,15 @@ jobs:
           script=Path("scripts/security/runtime_b62_physical_standby_review.sh").read_text()
           for marker in ("pg_basebackup", "--write-recovery-conf", "pg_is_in_recovery()",
                          "pg_wal_replay_pause()", "pg_get_wal_replay_pause_state()",
-                         "pg_wal_replay_resume()", "AETHERIS_B62_PAUSED_STALE_STANDBY_FALSE_ALLOW_BLOCKED_PASS"):
+                         "pg_wal_replay_resume()", "AETHERIS_B62_PAUSED_STALE_STANDBY_FALSE_ALLOW_BLOCKED_PASS",
+                         "pg_ctl -D /tmp/b62-standby -w -t 30 promote",
+                         "AETHERIS_B62_SPLIT_BRAIN_OLD_PRIMARY_STALE_ALLOW_DEMONSTRATED_NO_GO_PASS",
+                         "AETHERIS_B62_DISPOSABLE_OLD_PRIMARY_FENCED_AFTER_PROMOTION_PASS"):
               assert marker in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
-      - name: Real physical standby with paused stale WAL and primary revocation
+      - name: Real physical standby, stale WAL, deliberate isolated dual-primary and old-primary fencing
         shell: bash
         run: |
           set -euo pipefail

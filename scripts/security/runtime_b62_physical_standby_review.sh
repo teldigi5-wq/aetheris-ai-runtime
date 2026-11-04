@@ -144,3 +144,65 @@ done
 test "$caught_up" = true
 test "$(standby_sql "$guarded_sql")" = f
 echo AETHERIS_B62_PHYSICAL_REPLAY_CATCHUP_NO_AUTHORIZATION_PASS
+
+# Additional failover SAFETY COUNTEREXAMPLE: recovery status alone is
+# insufficient for leader selection. This deliberately creates a brief
+# disposable split-brain, then fences the former primary. NEVER deploy
+# this as an operator runbook or production failover controller.
+primary_sql "INSERT INTO synthetic_session_registration VALUES
+  ('https://identity.aetheris.example.invalid','b62-promotion-review',
+   'synthetic-promotion-jti',77,1700000010,'ACTIVE');" >/dev/null
+replicated=false
+for attempt in $(seq 1 50); do
+  if test "$(standby_sql "SELECT state FROM synthetic_session_registration WHERE jti='synthetic-promotion-jti'" 2>/dev/null || true)" = ACTIVE; then
+    replicated=true; break
+  fi
+  sleep 1
+done
+test "$replicated" = true
+promotion_sql="SELECT NOT pg_is_in_recovery()
+  AND current_setting('transaction_isolation')='read committed'
+  AND EXISTS (SELECT 1 FROM synthetic_session_registration active
+    WHERE active.issuer='https://identity.aetheris.example.invalid'
+      AND active.kid='b62-promotion-review'
+      AND active.jti='synthetic-promotion-jti'
+      AND active.uid=77 AND active.iat_seconds=1700000010
+      AND active.state='ACTIVE')
+  AND NOT EXISTS (SELECT 1 FROM blocked_signer_kids
+    WHERE issuer='https://identity.aetheris.example.invalid'
+      AND kid='b62-promotion-review')
+  AND NOT EXISTS (SELECT 1 FROM principal_epochs
+    WHERE principal_id=77 AND 1700000010 <= reject_issued_at_or_before_epoch)"
+test "$(primary_sql "$promotion_sql")" = t
+test "$(standby_sql "$promotion_sql")" = f
+
+# INTENTIONAL SYNTHETIC SPLIT-BRAIN, RUNNER-INTERNAL ONLY.
+# Promotion of a still-streaming standby must not be interpreted as
+# automatically fencing or revoking access to the former leader.
+docker exec -u postgres "$standby" \
+  pg_ctl -D /tmp/b62-standby -w -t 30 promote >/dev/null
+test "$(standby_sql 'SELECT pg_is_in_recovery()')" = f
+test "$(primary_sql 'SELECT pg_is_in_recovery()')" = f
+test "$(standby_sql "$promotion_sql")" = t
+test "$(primary_sql "$promotion_sql")" = t
+
+# Revoke only on the NEW promoted primary. The old primary has diverged,
+# remains writable, and its primary-only predicate incorrectly ALLOWS.
+standby_sql "UPDATE synthetic_session_registration SET state='REVOKED'
+  WHERE jti='synthetic-promotion-jti';
+  INSERT INTO blocked_signer_kids VALUES
+  ('https://identity.aetheris.example.invalid','b62-promotion-review');" >/dev/null
+test "$(standby_sql "SELECT state FROM synthetic_session_registration WHERE jti='synthetic-promotion-jti'")" = REVOKED
+test "$(primary_sql "SELECT state FROM synthetic_session_registration WHERE jti='synthetic-promotion-jti'")" = ACTIVE
+test "$(standby_sql "$promotion_sql")" = f
+test "$(primary_sql "$promotion_sql")" = t
+echo AETHERIS_B62_SPLIT_BRAIN_OLD_PRIMARY_STALE_ALLOW_DEMONSTRATED_NO_GO_PASS
+
+# EXTERNAL FENCING EXAMPLE ONLY: stop the old server process/container.
+# In real systems, fencing/leases/route control must be independently
+# designed, cryptographically authenticated and operationally tested.
+docker stop "$primary" >/dev/null
+test -z "$(docker ps --filter "name=^/$primary$" --format '{{.Names}}')"
+test "$(standby_sql 'SELECT pg_is_in_recovery()')" = f
+test "$(standby_sql "$promotion_sql")" = f
+echo AETHERIS_B62_DISPOSABLE_OLD_PRIMARY_FENCED_AFTER_PROMOTION_PASS

@@ -33,3 +33,36 @@ partition, primary re-election or customer-session revocation.
 No Runtime API admission or production Java is changed. Runtime issue #23,
 Platform issue #251 and all nine Stage45 release attestations remain
 OPEN / NO_GO. Human security and operations acceptance is still required.
+
+## 4 November 2026 — actual promotion / old-primary divergence counterexample
+
+The same disposable two-node CI lab now goes one step further, **without
+changing production application code**. After replay catches up, a newly
+registered synthetic token for UID 77 is present on BOTH nodes. The actual
+`pg_ctl promote -w` command promotes the physical standby **while the old
+primary is deliberately left running** for a brief negative-only rehearsal
+on the isolated internal Docker network.
+
+The test verifies that BOTH servers report
+`pg_is_in_recovery() = false` and initially approve the matching synthetic
+session. It then commits the UID 77 session revocation and signing-key
+block **only on the newly promoted primary**. The old primary still sees
+an ACTIVE session and its `NOT pg_is_in_recovery()` guarded predicate
+incorrectly returns TRUE, while the new primary returns FALSE. This is a
+real divergent-database *counterexample*: merely verifying that a
+connection talks to *some* PostgreSQL primary is **not** sufficient to
+prove it talks to the authoritative leader.
+
+The script explicitly fences the old primary container with `docker stop`
+and confirms that the promoted database remains available and denies the
+revoked record. Cleanup still destroys all nodes and the network.
+
+**This intentionally exposes a possible old-primary stale ALLOW within
+a disposable test. It is NOT a safe automated promotion algorithm.** Real
+production readiness requires an independently trusted leader/lease or
+fencing authority, protected routing to the currently authorized primary,
+no permissive fallback, durable revocation recovery semantics, quorum/
+split-brain and read-after-write tests, rollback and operator approvals.
+An old primary could still incorrectly approve before fencing: therefore
+Stage45 remains **NO_GO**. This test cannot be counted as one of the nine
+production release attestations. Runtime #23 and Platform #251 remain OPEN.
