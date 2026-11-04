@@ -322,6 +322,160 @@ test "$coord_ready" = true
 review_route "$standby" 2 "$new_sql"
 echo AETHERIS_B62_SEPARATE_LEADER_EXPIRY_AND_OUTAGE_FAIL_CLOSED_PASS
 
+# Test-only protected RESOURCE: coordinator lookup alone is not admission.
+# Co-locate a synthetic effect journal and its own monotonic fencing row
+# in the disposable coordinator database. Only a function-only SCRAM role
+# may request an effect; neither caller gets direct table rights.
+fence_owner=b62_fence_exec_owner
+fence_old=b62_fence_old_actor
+fence_new=b62_fence_new_actor
+fence_old_pw="$(openssl rand -hex 24)"
+fence_new_pw="$(openssl rand -hex 24)"
+coord_write "BEGIN;
+  CREATE TABLE public.b62_resource_fence(
+    resource_key text PRIMARY KEY,
+    endpoint text NOT NULL,
+    term bigint NOT NULL CHECK(term > 0));
+  INSERT INTO public.b62_resource_fence VALUES ('runtime','$standby',2);
+  CREATE TABLE public.b62_protected_actions(
+    request_id text PRIMARY KEY, actor_login text NOT NULL,
+    term bigint NOT NULL CHECK(term > 0));
+  CREATE ROLE $fence_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+  CREATE ROLE $fence_old LOGIN PASSWORD '$fence_old_pw';
+  CREATE ROLE $fence_new LOGIN PASSWORD '$fence_new_pw';
+  REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+  REVOKE ALL ON TABLE public.b62_resource_fence, public.b62_protected_actions FROM PUBLIC;
+  GRANT USAGE ON SCHEMA public TO $fence_owner, $fence_old, $fence_new;
+  GRANT SELECT ON public.leader_fence, public.b62_resource_fence TO $fence_owner;
+  GRANT UPDATE(term) ON public.leader_fence TO $fence_owner;
+  GRANT UPDATE(term) ON public.b62_resource_fence TO $fence_owner;
+  GRANT INSERT ON public.b62_protected_actions TO $fence_owner;
+  CREATE FUNCTION public.b62_try_protected_action(p_term bigint, p_request text)
+  RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER
+  SET search_path = pg_catalog, pg_temp
+  AS \$b62_fence\$
+  DECLARE expected_endpoint text;
+  BEGIN
+    IF current_setting('transaction_isolation') <> 'read committed'
+       OR p_term IS NULL OR p_term < 1 OR p_request IS NULL
+       OR p_request !~ '^[a-z][a-z0-9-]{0,47}# Deliberate negative-only TOCTOU counterexample, NOT a safe application gate:
+# capture an eligible coordinator decision, change leadership, then show
+# the previously eligible database still returns ALLOW. A fresh review_route
+# call must reject the obsolete leader term. Never emit protected data after
+# the cached decision; the old ALLOW is a demonstrated unsafe intermediate.
+cached_leader="$(coord_read "$standby" \
+  "SELECT endpoint || ':' || term::text FROM leader_fence
+   WHERE authority_key='runtime' AND NOT pg_is_in_recovery()
+     AND expires_at>clock_timestamp()")"
+test "$cached_leader" = "$standby:2"
+coord_write "UPDATE leader_fence SET endpoint='$primary', term=3,
+  expires_at=clock_timestamp()+interval '15 minutes'
+  WHERE authority_key='runtime' AND term=2;" >/dev/null
+test "$(coord_write "SELECT term FROM leader_fence WHERE authority_key='runtime'")" = 3
+# This is the UNSAFE result a caller could reuse between two sequential reads.
+test "$(standby_sql "$new_sql")" = t
+if review_route "$standby" 2 "$new_sql"; then
+  echo "FAIL: cached coordinator term admitted after leadership change" >&2
+  exit 1
+fi
+echo AETHERIS_B62_COORDINATOR_TOCTOU_STALE_LOCAL_ALLOW_NO_GO_PASS
+
+# Coordinator now (deliberately) names the stale former leader at term 3.
+# The resource fencing row still pins the promoted leader at term 2;
+# neither caller can bypass the resource's own durable epoch.
+test "$(fence_as "$standby" "$fence_new" "$fence_new_pw" \
+  "SELECT public.b62_try_protected_action(2,'stale-after-switch')")" = f
+test "$(fence_as "$primary" "$fence_old" "$fence_old_pw" \
+  "SELECT public.b62_try_protected_action(3,'old-primary-term-three')")" = f
+test "$(coord_write 'SELECT count(*) FROM public.b62_protected_actions')" = 1
+
+# Authorized TEST-OWNER updates both authoritative rows atomically.
+# This is NOT an automated promotion, reconciliation or consensus protocol.
+coord_write "BEGIN;
+  UPDATE public.leader_fence SET endpoint='$standby', term=4,
+    expires_at=clock_timestamp()+interval '15 minutes'
+    WHERE authority_key='runtime' AND term=3;
+  UPDATE public.b62_resource_fence SET endpoint='$standby', term=4
+    WHERE resource_key='runtime' AND term=2;
+  COMMIT;" >/dev/null
+test "$(fence_as "$standby" "$fence_new" "$fence_new_pw" \
+  "SELECT public.b62_try_protected_action(4,'term-four-accepted')")" = t
+test "$(fence_as "$standby" "$fence_new" "$fence_new_pw" \
+  "SELECT public.b62_try_protected_action(2,'replayed-term-two')")" = f
+test "$(fence_as "$primary" "$fence_old" "$fence_old_pw" \
+  "SELECT public.b62_try_protected_action(4,'old-primary-term-four')")" = f
+if fence_as "$standby" "$fence_new" "$fence_new_pw" \
+   "SELECT public.b62_try_protected_action(4,'term-four-accepted')" \
+   >/dev/null 2>&1; then
+  echo "FAIL: replayed resource action ID was accepted" >&2
+  exit 1
+fi
+test "$(coord_write 'SELECT count(*) FROM public.b62_protected_actions')" = 2
+echo AETHERIS_B62_RESOURCE_OWNED_MONOTONIC_FENCE_ATOMIC_ACTION_PASS
+
+# EXTERNAL FENCING EXAMPLE ONLY: stop the old server process/container.
+# In real systems, fencing/leases/route control must be independently
+# designed, cryptographically authenticated and operationally tested.
+docker stop "$primary" >/dev/null
+test -z "$(docker ps --filter "name=^/$primary$" --format '{{.Names}}')"
+test "$(standby_sql 'SELECT pg_is_in_recovery()')" = f
+test "$(standby_sql "$promotion_sql")" = f
+echo AETHERIS_B62_DISPOSABLE_OLD_PRIMARY_FENCED_AFTER_PROMOTION_PASS
+ THEN
+      RETURN false;
+    END IF;
+    CASE session_user
+      WHEN '$fence_old' THEN expected_endpoint := '$primary';
+      WHEN '$fence_new' THEN expected_endpoint := '$standby';
+      ELSE RETURN false;
+    END CASE;
+    -- Both rows and the synthetic effect INSERT belong to ONE transaction.
+    -- FOR SHARE serializes term changes with a protected action commit.
+    PERFORM 1 FROM public.leader_fence l
+    JOIN public.b62_resource_fence r ON r.resource_key=l.authority_key
+    WHERE l.authority_key='runtime' AND l.endpoint=expected_endpoint
+      AND r.endpoint=expected_endpoint AND l.term=p_term AND r.term=p_term
+      AND l.expires_at>clock_timestamp() AND NOT pg_is_in_recovery()
+    FOR SHARE OF l, r;
+    IF NOT FOUND THEN RETURN false; END IF;
+    INSERT INTO public.b62_protected_actions(request_id,actor_login,term)
+    VALUES(p_request,session_user,p_term);
+    RETURN true;
+  END
+  \$b62_fence\$;
+  ALTER FUNCTION public.b62_try_protected_action(bigint,text) OWNER TO $fence_owner;
+  REVOKE ALL ON FUNCTION public.b62_try_protected_action(bigint,text) FROM PUBLIC;
+  GRANT EXECUTE ON FUNCTION public.b62_try_protected_action(bigint,text)
+    TO $fence_old, $fence_new;
+  COMMIT;" >/dev/null
+
+fence_as() {
+  local node="$1" role="$2" password="$3" sql="$4"
+  [[ "$node" == "$primary" || "$node" == "$standby" ]] || return 1
+  [[ "$role" == "$fence_old" || "$role" == "$fence_new" ]] || return 1
+  docker exec -e "PGPASSWORD=$password" -e PGCONNECT_TIMEOUT=2 "$node" \
+    psql -X -A -t -w -v ON_ERROR_STOP=1 -h "$authority" -p 5432 \
+      -U "$role" -d "$coord_db" -c "$sql"
+}
+test "$(fence_as "$standby" "$fence_new" "$fence_new_pw" \
+  "SELECT public.b62_try_protected_action(2,'term-two-accepted')")" = t
+test "$(fence_as "$primary" "$fence_old" "$fence_old_pw" \
+  "SELECT public.b62_try_protected_action(1,'old-term-denied')")" = f
+test "$(fence_as "$primary" "$fence_old" "$fence_old_pw" \
+  "SELECT public.b62_try_protected_action(2,'old-endpoint-denied')")" = f
+if fence_as "$standby" "$fence_new" "$fence_new_pw" \
+    "INSERT INTO public.b62_protected_actions VALUES ('forged','actor',2)" \
+    >/dev/null 2>&1; then
+  echo "FAIL: restricted action identity has direct journal INSERT" >&2
+  exit 1
+fi
+if fence_as "$standby" "$fence_new" "$fence_new_pw" \
+    "UPDATE public.b62_resource_fence SET term=1" >/dev/null 2>&1; then
+  echo "FAIL: restricted action identity can lower resource fencing term" >&2
+  exit 1
+fi
+test "$(coord_write 'SELECT count(*) FROM public.b62_protected_actions')" = 1
+
 # Deliberate negative-only TOCTOU counterexample, NOT a safe application gate:
 # capture an eligible coordinator decision, change leadership, then show
 # the previously eligible database still returns ALLOW. A fresh review_route
