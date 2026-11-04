@@ -416,6 +416,10 @@ fi
 test "$(coord_write 'SELECT count(*) FROM public.b62_protected_actions')" = 1
 # The SECURITY DEFINER owner itself must not possess leadership
 # mutation rights; only the synthetic coordinator/admin transitions terms.
+# Assert that SET LOCAL ROLE really changed the effective principal,
+# or later expected UPDATE failures could pass for the wrong reason.
+test "$(coord_write "BEGIN; SET LOCAL ROLE $fence_owner;
+  SELECT current_user='$fence_owner';" | tail -n 1)" = t
 # SET LOCAL ROLE exercises effective function-owner privileges.
 if coord_write "BEGIN; SET LOCAL ROLE $fence_owner;
   UPDATE public.leader_fence SET term=1 WHERE authority_key='runtime';" \
@@ -567,6 +571,12 @@ test "$(local_call "$standby" "$local_new_pw" \
   "SELECT public.b62_local_try_effect(4,'new-local-allow')")" = t
 test "$(primary_sql 'SELECT count(*) FROM public.b62_local_effects')" = 1
 test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 1
+# Independently verify the effective role switches on BOTH writable
+# physical databases before expecting protected-column UPDATE failure.
+test "$(primary_sql "BEGIN; SET LOCAL ROLE $local_owner;
+  SELECT current_user='$local_owner';" | tail -n 1)" = t
+test "$(standby_sql "BEGIN; SET LOCAL ROLE $local_owner;
+  SELECT current_user='$local_owner';" | tail -n 1)" = t
 # Independently verify definer identities cannot mint/swap authority fields
 # on EITHER writable primary even though FOR SHARE remains permitted.
 if primary_sql "BEGIN; SET LOCAL ROLE $local_owner;
