@@ -137,3 +137,68 @@ The database owner can bypass test-only restrictions. No production Java,
 live endpoint, migration, real secret, customer record or protected main is
 changed. Runtime issue #23, Platform #251 and all nine Stage45 release
 gates remain open; **Stage45 NO_GO**.
+
+## 4 November 2026 — physically separate resource database fencing limits
+
+The preceding proof uses ONE PostgreSQL coordinator database for its
+leader, resource-fence and effect journal. This follow-up extends the **same
+disposable three-container CI lab**, after genuine streaming standby
+promotion and intentional split-brain, to install a separate synthetic
+protected-resource schema on EACH of the two diverged PostgreSQL servers.
+No real task, session, customer database, production migration or Runtime
+API is used.
+
+Each physical server independently receives a b62_local_fence row, a
+unique-request b62_local_effects journal, a NOLOGIN function-owner role,
+and a SCRAM-authenticated writer. The writer can EXECUTE a definer
+function but cannot UPDATE the fence or directly INSERT the journal.
+The resource-local function pins its own endpoint, READ COMMITTED, real
+non-standby state, current local term and SELECT FOR SHARE. The definer
+has narrowly scoped SELECT, UPDATE(term) (needed for its locking query)
+and journal INSERT permissions; the caller has no underlying table DML.
+Distinct test-only passwords are used on the two servers.
+
+**Reproduced unsafe case:** the coordinator already names the promoted
+server at term 4. The old physical primary, whose independent local
+resource row remains at term 2, still accepts a term-2 synthetic write.
+This proves that an external coordinator record or the previous
+same-database atomic fencing test does NOT by itself fence an independently
+running stale resource. The promoted resource independently accepts term 4.
+
+**Bounded local denial:** the test then explicitly updates the OLD
+resource row to term 4 with the promoted endpoint. The old database rejects
+both term 2 and term 4 calls; an actual Docker network disconnect leaves
+this resource-local denial intact when probed inside the container over
+loopback. The promoted resource rejects a wrong password, direct
+underlying table writes, wrong terms and duplicate request IDs. The
+old database's accepting write occurred BEFORE this local update; no
+safe automatic transfer or absence of an authorization window is claimed.
+
+**Second unsafe case:** after stopping the independent coordinator,
+the promoted physical resource still accepts a locally matched term-4
+synthetic action. A resource-local fence that does not independently
+verify current authority CANNOT satisfy fail-closed coordinator-outage
+policy. Neither stale-local admission nor coordinator-outage admission
+is acceptable for production; they are deliberate negative findings.
+
+The exact corrected-head physical workflow
+[41826354325](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/41826354325)
+completed SUCCESS at commit eb1832570400e7adbe9b33ef809f5c36b2144ef2
+and printed the separate-database stale-old-ALLOW, partition-fenced DENY,
+coordinator-outage unsafe-ALLOW and Docker cleanup markers. Earlier
+review attempts identified and repaired (a) missing NOLOGIN definer
+UPDATE(term) row-lock rights and (b) an existing pg_isready initialization
+race by requiring successful SQL SELECT 1 on the specific test databases.
+Those failed attempts are NOT green evidence.
+
+**Unresolved:** Real failover requires authoritative fencing of EVERY
+prior leader/resource before new authority is admitted, or universal
+denial while that cannot be proved. There is no atomic transaction across
+these three DB processes; tests intentionally demonstrate the gap.
+Durable consensus/quorum, cryptographically authenticated workload and
+resource identities, revocation history synchronization, network
+fault domains, permissioned operator approval, HTTP/SSE response
+lifecycle, fencing on physically unreachable old nodes and actual
+application JDBC integration remain unproven. Production authorization,
+Runtime issue #23, Platform #251, all nine Stage45 gates and release
+readiness remain NO_GO. This is not a deployment or merge.
