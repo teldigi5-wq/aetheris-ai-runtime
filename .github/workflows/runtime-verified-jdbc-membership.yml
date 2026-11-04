@@ -61,7 +61,11 @@ jobs:
           test=(Path('orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbeTest.java')).read_text()
           assert 'private VerifiedPrincipal(' in auth
           assert 'expiresAt.isAfter(clock.instant())' in auth
-          assert 'scopes, expires, clock' in auth
+          assert 'scopes, issued, expires, signedJti, expectedIssuer,' in auth
+          assert 'expectedKid, clock' in auth
+          assert 'String signedJti = claims.getId()' in auth
+          assert 'verifyBearerForRevocation(' in auth
+          assert 'verified.requireRevocationFacts();' in auth
           assert 'isFresh() && scopes.contains(scope)' in auth
           assert 'cachedPrincipalExpiresBeforeAnotherRealJdbcTaskRead' in test
           assert 'public record VerifiedPrincipal(' not in auth
