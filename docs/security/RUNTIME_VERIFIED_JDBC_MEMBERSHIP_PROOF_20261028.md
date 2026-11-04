@@ -21,3 +21,25 @@ This is a substantial step beyond passing caller-supplied UID strings to SQL, bu
 A legitimate production implementation requires a separately approved versioned database migration reconciled with current Hibernate `ddl-auto=update`, ownerless legacy task migration/quarantine policy, durable authoritative tenant and project membership governance, independently authenticated runtime HTTP resource-server chain and service-to-service mTLS, transactional scoped repository **writes** and mission operations, session/identity revocation and verified tenant/project changes, concurrent write/revoke tests, multi-instance SSE and two-user end-to-end Gateway/direct-port test matrix.
 
 **This branch includes no deployment action, production secret, customer data or JPA schema update. All ownerless task and mission HTTP routes stay 404 in the candidate and Stage45 NO_GO; all nine independent release attestations remain outstanding.**
+
+## 4 November 2026 — deny stale snapshot authorization (draft only)
+
+The standalone SQL authorization probe now requires PostgreSQL transaction
+isolation `read committed` within the same parameterized SQL statement via
+`current_setting('transaction_isolation')`. Even with fresh expiry time,
+REPEATABLE READ or SERIALIZABLE can retain previously committed membership
+rows after a concurrent revocation; the policy now denies those snapshots.
+READ UNCOMMITTED is intentionally also denied instead of relying on its
+PostgreSQL READ COMMITTED implementation equivalence.
+
+New disposable PostgreSQL16 JDBC regression tests compare an allowed
+READ COMMITTED session with matching synthetic owner/task/tenant/project
+TEMP rows against denied REPEATABLE READ, SERIALIZABLE and READ UNCOMMITTED
+sessions with the same matching rows. All sessions roll back and close;
+the source-level workflow gate requires the exact SQL isolation condition.
+
+No runtime controller, HTTP route, SSE, migration, deploy, external permission
+or persistent customer data is introduced. This guard does not prove
+concurrent-revocation race ordering, immediate cancellation of an in-flight
+read, token-session revocation, or production trust boundaries. Runtime
+issue #23 stays OPEN; Stage45 NO_GO.

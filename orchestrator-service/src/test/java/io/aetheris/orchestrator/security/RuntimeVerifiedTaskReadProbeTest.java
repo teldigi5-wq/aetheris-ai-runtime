@@ -270,6 +270,71 @@ class RuntimeVerifiedTaskReadProbeTest {
     }
 
     @Test
+    void matchingMembershipMustRejectStaleTransactionIsolation() throws Exception {
+        // Real PG16 sessions contain valid matching task and membership rows.
+        // A stale-snapshot denial cannot pass merely because a row is absent.
+        assertTrue(ownerReadAtIsolation(Connection.TRANSACTION_READ_COMMITTED));
+        assertFalse(ownerReadAtIsolation(Connection.TRANSACTION_REPEATABLE_READ));
+        assertFalse(ownerReadAtIsolation(Connection.TRANSACTION_SERIALIZABLE));
+        // PG treats this as READ COMMITTED internally, but policy is exact.
+        assertFalse(ownerReadAtIsolation(Connection.TRANSACTION_READ_UNCOMMITTED));
+    }
+
+    private boolean ownerReadAtIsolation(int isolation) throws Exception {
+        try (Connection other = DriverManager.getConnection(
+                "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                "ownerlab_ci", System.getenv("PGPASSWORD"))) {
+            other.setTransactionIsolation(isolation);
+            other.setAutoCommit(false);
+            try {
+                try (var sql = other.createStatement()) {
+                    sql.execute("""
+                        CREATE TEMP TABLE aetheris_tasks AS
+                        SELECT '22222222-2222-4222-8222-222222222222'::uuid AS id,
+                               42::bigint AS owner_identity_uid,
+                               'tenant-alpha'::text AS owner_tenant_key,
+                               'project-red'::text AS owner_project_key,
+                               statement_timestamp() AS owner_verified_at
+                        """);
+                    sql.execute("""
+                        CREATE TEMP TABLE tenant_memberships AS
+                        SELECT 'tenant-alpha'::text AS tenant_key,
+                               42::bigint AS identity_uid,
+                               'ACTIVE'::text AS status,
+                               NULL::timestamptz AS revoked_at,
+                               statement_timestamp() + interval '1 day' AS valid_until
+                        """);
+                    sql.execute("""
+                        CREATE TEMP TABLE project_memberships AS
+                        SELECT 'tenant-alpha'::text AS tenant_key,
+                               'project-red'::text AS project_key,
+                               42::bigint AS identity_uid,
+                               'ACTIVE'::text AS status,
+                               NULL::timestamptz AS revoked_at,
+                               statement_timestamp() + interval '1 day' AS valid_until
+                        """);
+                }
+                try (var sql = other.createStatement();
+                     var settings = sql.executeQuery("SHOW transaction_isolation")) {
+                    assertTrue(settings.next());
+                    String expected = switch (isolation) {
+                        case Connection.TRANSACTION_READ_COMMITTED -> "read committed";
+                        case Connection.TRANSACTION_REPEATABLE_READ -> "repeatable read";
+                        case Connection.TRANSACTION_SERIALIZABLE -> "serializable";
+                        case Connection.TRANSACTION_READ_UNCOMMITTED -> "read uncommitted";
+                        default -> throw new IllegalArgumentException("Unsupported test isolation");
+                    };
+                    assertEquals(expected, settings.getString(1));
+                }
+                return probe.canRead(other, signed(42, List.of("orchestrator:read")),
+                    "tenant-alpha", "project-red", ALICE_ALPHA);
+            } finally {
+                other.rollback(); // TEMP objects and records remain disposable.
+            }
+        }
+    }
+
+    @Test
     void verifiedPrincipalCannotBeManufacturedWithPublicJavaConstructor() {
         assertEquals(0, RuntimePinnedPrincipalVerifier.VerifiedPrincipal.class
             .getConstructors().length);
