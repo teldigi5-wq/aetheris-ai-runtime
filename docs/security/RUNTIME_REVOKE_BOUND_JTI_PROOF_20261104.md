@@ -274,3 +274,49 @@ release review. No production bean, route, filter, dispatch, secret,
 deployment or protected main is changed. Runtime issue #23,
 Platform #251 and all nine release attestations remain open;
 **Stage45 NO_GO**.
+
+## 4 November 2026 — independently pinned RS256 synthetic local-fence lease
+
+The review-only single-statement owner+JTI+resource probe previously took
+its expected endpoint and leadership term as plain method arguments.
+Even correct local SQL cannot authenticate arbitrary caller-selected
+endpoint or term. That interface is now **removed**: canReadSynthetic
+requires a privately constructed VerifiedLease returned by the separate,
+non-Spring RuntimePinnedLocalFenceLeaseVerifier.
+
+The verifier uses an operator-supplied **pinned RSA public key** (minimum
+2048-bit modulus) and requires an actual RS256 JWS with the configured
+key ID, exact issuer, sole audience, signed purpose and resource
+runtime. It validates endpoint syntax, a positive signed term, issued-at
+and expiration times, no future issuance, and lifetime no longer than
+90 seconds. JWT headers are never used to fetch keys. A previously
+verified lease is checked for expiry **again before and after** SQL;
+malformed or missing provenance returns DENY. Signed principal expiry
+is also rechecked. Production HTTP admission remains untouched.
+
+In the opt-in PostgreSQL16 test, a **separate ephemeral 2048-bit RSA key**
+signs synthetic review leases. The existing valid owner/JTI/fence test
+uses only verified lease capabilities, plus signature-based negative
+tests for forged keys, issuer, audience, kid, purpose, resource, malformed
+endpoints, zero term, future issuance, excessive duration, expired
+tokens and retained verified-lease expiry. The test intentionally
+asserts a signed old-endpoint/old-term lease can still match an obsolete
+local fence row. This is **unsafe in a real distributed system**, even
+if its RSA signature is authentic.
+
+These are NOT coordinator-signed production leases: the issuer here is
+created solely inside disposable CI, and the private signing key never
+leaves the synthetic test. A bearer lease is replayable until expiry and
+is not bound to an independently authenticated workload, machine,
+network or resource process. The implementation has no quorum,
+commit-index/epoch freshness attestation, key rotation policy, recovery
+path, safe cross-node failover, durable old-primary isolation, or real
+resource mutation/HTTP/SSE serialization. A snapshot-based SELECT
+cannot itself protect a later response/event/write against a concurrent
+leadership change. Do NOT promote the method to a service or treat a
+positive synthetic verdict as customer authorization.
+
+No public API is enabled, no protected main is touched, and no
+production secrets or deployments are involved. Runtime #23,
+Platform #251 and all nine Stage45 attestations remain outstanding.
+**Stage45 NO_GO**.
