@@ -1,0 +1,67 @@
+name: Runtime B62 real physical-standby stale-read denial (review only)
+# Tests only; no production service, endpoint or real customer database.
+on:
+  push:
+    branches: [security/runtime-quarantine-pathinfo-boundary-20261101]
+permissions:
+  contents: read
+jobs:
+  b62-real-standby-fail-closed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      AETHERIS_B62_REPLICA_CI_ONLY: "yes"
+      AETHERIS_DISPATCHER_ENABLED: "false"
+      AETHERIS_SYNTRA_OWNER_RUNTIME_ENABLED: "false"
+    steps:
+      - name: Checkout exact branch, no persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Prove source SQL and HTTP quarantine unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeB62EpochSignerCompatibilityTest.java").read_text()
+          assert src.count("AND NOT pg_is_in_recovery()") == 2
+          assert "primaryOnlyDecisionRequiresCurrentCommittedPrimaryStatement" in src
+          assert "AND active.state='ACTIVE'" in src
+          assert "AND ? <= reject_issued_at_or_before_epoch" in src
+          root=Path("orchestrator-service/src/main/java/io/aetheris/orchestrator")
+          for file,order in [
+              (root/"api/OwnerlessTaskMissionHttpFilter.java","@Order(Ordered.HIGHEST_PRECEDENCE)"),
+              (root/"security/RuntimeUncertifiedApiHttpFilter.java","@Order(Ordered.HIGHEST_PRECEDENCE + 1)")]:
+              content=file.read_text()
+              assert "@Component" in content and "SC_NOT_FOUND" in content and order in content
+          assert "enum Verdict { QUARANTINED }" in (root/"security/RuntimeRouteAdmissionPolicy.java").read_text()
+          script=Path("scripts/security/runtime_b62_physical_standby_review.sh").read_text()
+          for marker in ("pg_basebackup", "--write-recovery-conf", "pg_is_in_recovery()",
+                         "pg_wal_replay_pause()", "pg_get_wal_replay_pause_state()",
+                         "pg_wal_replay_resume()", "AETHERIS_B62_PAUSED_STALE_STANDBY_FALSE_ALLOW_BLOCKED_PASS"):
+              assert marker in script
+          PY
+          bash -n scripts/security/runtime_b62_physical_standby_review.sh
+          echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
+      - name: Real physical standby with paused stale WAL and primary revocation
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/security/runtime_b62_physical_standby_review.sh
+      - name: Verify synthetic servers, volumes and network destroyed
+        shell: bash
+        run: |
+          set -euo pipefail
+          suffix="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          for role in primary standby; do
+            name="aetheris-b62-$role-$suffix"
+            test -z "$(docker ps -a --filter "name=^/$name$" --format '{{.Names}}')"
+          done
+          ! docker network inspect "aetheris-b62-replica-$suffix" >/dev/null 2>&1
+          echo AETHERIS_B62_REAL_STANDBY_CONTAINERS_NETWORK_CLEANUP_PASS
+      - name: Preserve Stage45 NO_GO; no API admission
+        shell: bash
+        run: |
+          echo AETHERIS_B62_REAL_STANDBY_NONPRODUCTION_STAGE45_NO_GO
