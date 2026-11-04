@@ -603,6 +603,8 @@ source scripts/security/runtime_b62_pg16_revocation_continuity_review.sh
 source scripts/security/runtime_b62_pg16_provenance_authenticity_review.sh
 # A revocation source can commit while an uncommitted resource effect remains.
 source scripts/security/runtime_b62_pg16_inflight_commit_revocation_review.sh
+# Bounded reciprocal proof: reachable resource drains writes before ACK.
+source scripts/security/runtime_b62_pg16_reachable_prepublication_barrier_review.sh
 
 # A local term alone does NOT detect coordinator outage: the promoted
 # database still accepts a locally matched synthetic term while its
