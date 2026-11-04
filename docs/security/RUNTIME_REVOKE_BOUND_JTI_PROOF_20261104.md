@@ -371,3 +371,55 @@ existing early API filter still denies uncertified task, mission, SSE
 and actuator routes. Runtime issue #23, Platform issue #251, the
 unmerged draft PR and nine Stage45 release attestations remain open.
 **Stage45 NO_GO**.
+
+## 4 November 2026 — guarded resource effect in the same SQL statement
+
+The Java synthetic authorization probe previously returned a Boolean
+before any protected resource operation; a caller could incorrectly
+use that result as a cached check-then-act permission. A **separate,
+non-bean** RuntimeSyntheticFencedEffectProbe now uses an explicit
+READ COMMITTED writable PostgreSQL transaction and a single
+data-modifying WITH statement. It SHARE-locks the local resource-fence
+row, checks the signed Identity principal, ACTIVE JTI registration,
+live owner/project/tenant memberships, principal epoch and blocked signer
+cutoffs, checks the signed workload and signed fence lease against each
+other, and conditionally INSERTs a UUID-keyed synthetic effect row.
+A duplicate effect identifier produces no second row. The method
+**never commits** and returns success only for a pending transaction
+effect; the caller must commit or roll back. SQL exceptions propagate
+for mandatory caller rollback.
+
+The actual disposable PostgreSQL16 CI test creates
+synthetic_guarded_task_effects as a **TEMP table within its rolled-back
+savepoint**, never in production. It verifies one positive pending
+effect with the expected task, term and workload, and denies
+duplicate IDs, another signed owner, unregistered JTI, missing
+lease, mismatched signed workload, obsolete local term, ownerless
+task, explicit local fence, expired local lease and revoked session.
+All effects remain disposable; this does **not** establish a deployed
+task mutation or production-reliable journal.
+
+A critical deliberately **unsafe counterexample remains**:
+when the local fence row is itself stale, a still-valid signed
+old-leader lease and matching workload produce a pending INSERT
+into that stale local database. Thus even a one-statement
+resource-fenced write cannot establish global authority after
+uncoordinated failover. The physical two-database lab independently
+demonstrates this wider defect.
+
+Other unresolved gaps: a real service reader/writer authority and
+least-privilege privileges, authenticated workload transport, expiry
+between statement and transaction commit, authority revocation
+propagation, recovery from aborted transactions, durability on
+failover, protection against session changes concurrent with a
+transaction, robust ownership persistence, mission scope, SSE
+emission and real task execution. A row SHARE lock on the local fence
+does not lock an external coordinator, and the task/membership
+predicates are not independently row-locked against concurrent
+revocation. The SQL prototype is neither a reviewed migration nor
+a deployed production authorization mechanism.
+
+All protected APIs remain deny-only; no routes, customers, secrets,
+protected main, release or deployment are modified. Runtime #23,
+Platform #251 and nine Stage45 attestations remain open.
+**Stage45 NO_GO**.
