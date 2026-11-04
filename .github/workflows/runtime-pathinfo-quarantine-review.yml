@@ -138,6 +138,19 @@ jobs:
           for forbidden in ("@Component", "@Bean", "@RestController",
                             "request.getHeader(", "System.getenv("):
               assert forbidden not in composite, forbidden
+          for marker in ("JOIN b62_local_resource_fence fence",
+                         "AND fence.endpoint=? AND fence.term=?",
+                         "fence.state='ACTIVE'",
+                         "fence.expires_at>clock_timestamp()",
+                         "String localEndpoint, long localTerm",
+                         "validEndpoint(localEndpoint)", "localTerm <= 0",
+                         "read.setLong(15, iat)"):
+              assert marker in composite, marker
+          for marker in ("CREATE TEMP TABLE b62_local_resource_fence",
+                         "NEGATIVE COUNTEREXAMPLE: caller-selected stale endpoint/term",
+                         "Explicitly fenced resource must deny every positive JTI",
+                         "Expired local lease must deny even without JTI revocation"):
+              assert marker in regression, marker
           restricted=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedRegistryTaskReadProbeTest.java")).read_text()
           assert "actualPrimaryReadCommittedRegistryProbeStillAllowsExactSignedOwner" in restricted
           assert "DROP SCHEMA IF EXISTS " in regression
