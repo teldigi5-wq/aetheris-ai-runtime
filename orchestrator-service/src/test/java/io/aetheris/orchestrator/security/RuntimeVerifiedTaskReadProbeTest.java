@@ -197,6 +197,17 @@ class RuntimeVerifiedTaskReadProbeTest {
         return verifier.verifyBearerForRevocation("Bearer " + token);
     }
 
+    private static final String REVIEW_LOCAL_ENDPOINT = "b62-review-promoted";
+    private static final long REVIEW_LOCAL_TERM = 7L;
+
+    private static boolean fenced(
+            RuntimeVerifiedTaskSessionReadProbe combined, Connection c,
+            RuntimePinnedPrincipalVerifier.VerifiedPrincipal signed,
+            String tenant, String project, UUID id) {
+        return combined.canReadSynthetic(c, signed, tenant, project, id,
+            REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM);
+    }
+
     @Test
     void signedJtiTaskOwnerSessionAndEmergencyRevocationMustAgreeAtomically()
             throws Exception {
@@ -224,6 +235,14 @@ class RuntimeVerifiedTaskReadProbeTest {
                       principal_id bigint PRIMARY KEY,
                       reject_issued_at_or_before_epoch bigint NOT NULL)
                     """);
+                setup.execute("""
+                    CREATE TEMP TABLE b62_local_resource_fence(
+                      resource_key text PRIMARY KEY,
+                      endpoint text NOT NULL,
+                      term bigint NOT NULL CHECK(term>0),
+                      state text NOT NULL CHECK(state IN ('ACTIVE','FENCED')),
+                      expires_at timestamptz NOT NULL)
+                    """);
             }
 
             var alice = signedJti(42, UUID.randomUUID().toString());
@@ -236,7 +255,7 @@ class RuntimeVerifiedTaskReadProbeTest {
             // substitutes for an explicitly registered active session.
             assertTrue(probe.canRead(connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA));
-            assertFalse(combined.canReadSynthetic(connection, alice,
+            assertFalse(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA));
             try (var register = connection.prepareStatement("""
                     INSERT INTO synthetic_session_registration
@@ -250,25 +269,79 @@ class RuntimeVerifiedTaskReadProbeTest {
                 register.setLong(5, iat);
                 assertEquals(1, register.executeUpdate());
             }
-            assertTrue(combined.canReadSynthetic(connection, alice,
+            assertFalse(fenced(combined, connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "An ACTIVE JTI and owner are insufficient without a resource fence");
+            try (var local = connection.prepareStatement("""
+                    INSERT INTO b62_local_resource_fence
+                      (resource_key,endpoint,term,state,expires_at)
+                    VALUES ('runtime',?,?,'ACTIVE',clock_timestamp()+interval '30 minutes')
+                    """)) {
+                local.setString(1, REVIEW_LOCAL_ENDPOINT);
+                local.setLong(2, REVIEW_LOCAL_TERM);
+                assertEquals(1, local.executeUpdate());
+            }
+            assertTrue(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA));
-            assertFalse(combined.canReadSynthetic(connection, alice,
+            assertFalse(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", LEGACY));
-            assertFalse(combined.canReadSynthetic(connection, alice,
+            assertFalse(fenced(combined, connection, alice,
                 "tenant-alpha", "project-blue", BOB_ALPHA));
-            assertFalse(combined.canReadSynthetic(connection, alice,
+            assertFalse(fenced(combined, connection, alice,
                 "tenant-beta", "project-red", ALICE_ALPHA));
-            assertFalse(combined.canReadSynthetic(connection, bob,
+            assertFalse(fenced(combined, connection, bob,
                 "tenant-alpha", "project-red", ALICE_ALPHA));
-            assertFalse(combined.canReadSynthetic(connection, anotherAliceSession,
+            assertFalse(fenced(combined, connection, anotherAliceSession,
                 "tenant-alpha", "project-red", ALICE_ALPHA),
                 "An unregistered signed JTI must not borrow another valid JTI");
-            assertFalse(combined.canReadSynthetic(connection, alice,
+            assertFalse(fenced(combined, connection, alice,
                 "invalid' OR true --", "project-red", ALICE_ALPHA));
-            assertFalse(combined.canReadSynthetic(connection,
+            assertFalse(fenced(combined, connection,
                 signed(42, List.of("orchestrator:read")),
                 "tenant-alpha", "project-red", ALICE_ALPHA),
                 "A signed token with no JTI cannot supply active-session proof");
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA,
+                "b62-review-other", REVIEW_LOCAL_TERM),
+                "A different pinned endpoint must not match the local resource");
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA,
+                REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM - 1),
+                "Obsolete term must not match a current local fence");
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA,
+                REVIEW_LOCAL_ENDPOINT, 0),
+                "Nonpositive term is rejected before preparing SQL");
+            try (var change = connection.createStatement()) {
+                assertEquals(1, change.executeUpdate(
+                    "UPDATE b62_local_resource_fence SET state='FENCED'"));
+                assertFalse(fenced(combined, connection, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA),
+                    "Explicitly fenced resource must deny every positive JTI"));
+                assertEquals(1, change.executeUpdate(
+                    "UPDATE b62_local_resource_fence SET state='ACTIVE',"
+                    + " expires_at=clock_timestamp()-interval '1 minute'"));
+                assertFalse(fenced(combined, connection, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA),
+                    "Expired local lease must deny even without JTI revocation"));
+                assertEquals(1, change.executeUpdate(
+                    "UPDATE b62_local_resource_fence SET "
+                    + "expires_at=clock_timestamp()+interval '30 minutes',"
+                    + "endpoint='b62-review-stale', term=6"));
+                assertFalse(fenced(combined, connection, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA),
+                    "A new expected term cannot accept a stale local row");
+                assertTrue(combined.canReadSynthetic(connection, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA,
+                    "b62-review-stale", 6),
+                    "NEGATIVE COUNTEREXAMPLE: caller-selected stale endpoint/term"
+                    + " still matches its LOCAL row, not global leadership");
+                assertEquals(1, change.executeUpdate(
+                    "UPDATE b62_local_resource_fence SET "
+                    + "endpoint='b62-review-promoted', term=7"));
+            }
+            assertTrue(fenced(combined, connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA));
 
             try (var block = connection.prepareStatement(
                     "INSERT INTO blocked_signer_kids VALUES (?,?)")) {
@@ -276,7 +349,7 @@ class RuntimeVerifiedTaskReadProbeTest {
                 block.setString(2, signed.verifiedKeyId());
                 assertEquals(1, block.executeUpdate());
             }
-            assertFalse(combined.canReadSynthetic(connection, alice,
+            assertFalse(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA),
                 "Emergency signer block must override active session");
             try (var unBlock = connection.createStatement()) {
@@ -290,7 +363,7 @@ class RuntimeVerifiedTaskReadProbeTest {
                 cutoff.setLong(2, iat);
                 assertEquals(1, cutoff.executeUpdate());
             }
-            assertFalse(combined.canReadSynthetic(connection, alice,
+            assertFalse(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA),
                 "Signed issue second equal to emergency cutoff must DENY");
             try (var olderCutoff = connection.prepareStatement(
@@ -298,14 +371,14 @@ class RuntimeVerifiedTaskReadProbeTest {
                 olderCutoff.setLong(1, iat - 1);
                 assertEquals(1, olderCutoff.executeUpdate());
             }
-            assertTrue(combined.canReadSynthetic(connection, alice,
+            assertTrue(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA),
                 "Only issuance strictly after cutoff can pass");
             try (var revoke = connection.createStatement()) {
                 assertEquals(1, revoke.executeUpdate(
                     "UPDATE synthetic_session_registration SET state='REVOKED'"));
             }
-            assertFalse(combined.canReadSynthetic(connection, alice,
+            assertFalse(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA),
                 "Individually revoked JTI must deny despite eligible owner");
 
@@ -313,7 +386,7 @@ class RuntimeVerifiedTaskReadProbeTest {
                     "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
                     "ownerlab_ci", System.getenv("PGPASSWORD"))) {
                 assertTrue(auto.getAutoCommit());
-                assertFalse(combined.canReadSynthetic(auto, alice,
+                assertFalse(fenced(combined, auto, alice,
                     "tenant-alpha", "project-red", ALICE_ALPHA),
                     "Implicit autocommit cannot pass composite admission");
             }
