@@ -87,12 +87,22 @@ jobs:
           ):
               assert mark in barrier
           assert 'source scripts/security/runtime_b62_pg16_reachable_prepublication_barrier_review.sh' in script
+          crash=Path('scripts/security/runtime_b62_pg16_source_crash_recovery_review.sh').read_text()
+          for token in (
+              'AETHERIS_B62_PG16_SOURCE_OUTAGE_AFTER_BARRIER_FAIL_CLOSED_PASS',
+              'AETHERIS_B62_PG16_RESTART_REPLAY_BEFORE_READMISSION_TEST_ONLY_PASS',
+              'docker stop "$authority"',
+              'docker start "$authority"',
+          ):
+              assert token in crash
+          assert 'source scripts/security/runtime_b62_pg16_source_crash_recovery_review.sh' in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           bash -n scripts/security/runtime_b62_pg16_revocation_continuity_review.sh
           bash -n scripts/security/runtime_b62_pg16_provenance_authenticity_review.sh
           bash -n scripts/security/runtime_b62_pg16_inflight_commit_revocation_review.sh
           bash -n scripts/security/runtime_b62_pg16_reachable_prepublication_barrier_review.sh
+          bash -n scripts/security/runtime_b62_pg16_source_crash_recovery_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
       - name: Real physical standby, stale WAL, deliberate isolated dual-primary and old-primary fencing
         shell: bash
