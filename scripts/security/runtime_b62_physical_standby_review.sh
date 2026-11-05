@@ -777,6 +777,40 @@ test "$(local_call "$primary" "$local_old_pw" \
 test "$(primary_sql 'SELECT count(*) FROM public.b62_local_effects')" = 1
 echo AETHERIS_B62_SEPARATE_DATABASE_OLD_RESOURCE_FENCED_DURING_PARTITION_PASS
 
+# Candidate, TEST-ONLY cutover gate. This shell gate is not a resource
+# security boundary: direct SQL still bypasses it, Docker state is not
+# authenticated infrastructure fencing evidence, and checks are non-atomic.
+# A successful rehearsal MUST NOT activate any protected Runtime API.
+review_cutover_effect() {
+  local request="$1" leader local_term old_running
+  [[ "$request" =~ ^[a-z][a-z0-9-]{0,47}$ ]] || return 1
+  # Connection error or missing container must DENY, not imply fencing.
+  old_running="$(docker inspect -f '{{.State.Running}}' "$primary" \
+    2>/dev/null)" || return 1
+  [[ "$old_running" == false ]] || return 1
+  leader="$(coord_read "$standby" "SELECT endpoint || ':' || term::text
+    FROM leader_fence WHERE authority_key='runtime'
+      AND NOT pg_is_in_recovery()
+      AND expires_at>clock_timestamp()" 2>/dev/null)" || return 1
+  [[ "$leader" == "$standby:5" ]] || return 1
+  local_term="$(standby_sql "SELECT endpoint || ':' || term::text
+    FROM public.b62_local_fence WHERE resource_key='runtime'
+      AND NOT pg_is_in_recovery()" 2>/dev/null)" || return 1
+  [[ "$local_term" == "$standby:5" ]] || return 1
+  [[ "$(standby_sql 'SELECT pg_is_in_recovery()' 2>/dev/null)" == f ]] || return 1
+  [[ "$(local_call "$standby" "$local_new_pw" \
+    "SELECT public.b62_local_try_effect(5,'$request')" 2>/dev/null)" == t ]]
+}
+# Old node remains RUNNING even when its bridge is disconnected;
+# unreachable is deliberately not accepted as fencing acknowledgment.
+if review_cutover_effect 'premature-isolated-cutover'; then
+  echo "FAIL: cutover admitted while old isolated writer is alive" >&2
+  exit 1
+fi
+test "$(primary_sql 'SELECT pg_is_in_recovery()')" = f
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 2
+echo AETHERIS_B62_CUTOVER_OLD_ALIVE_FAIL_CLOSED_PASS
+
 # A local term alone does NOT detect coordinator outage: the promoted
 # database still accepts a locally matched synthetic term while its
 # authoritative coordinator is unreachable. This is a deliberate
@@ -786,6 +820,11 @@ test "$(local_call "$standby" "$local_new_pw" \
   "SELECT public.b62_local_try_effect(4,'authority-outage-local-allow')")" = t
 test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 3
 echo AETHERIS_B62_LOCAL_ONLY_FENCE_COORDINATOR_OUTAGE_ALLOW_NO_GO_PASS
+if review_cutover_effect 'coordinator-down-cutover'; then
+  echo "FAIL: cutover admitted with coordinator unavailable" >&2
+  exit 1
+fi
+echo AETHERIS_B62_CUTOVER_COORDINATOR_OUTAGE_FAIL_CLOSED_PASS
 
 # EXTERNAL FENCING EXAMPLE ONLY: stop the old server process/container.
 # In real systems, fencing/leases/route control must be independently
@@ -795,3 +834,46 @@ test -z "$(docker ps --filter "name=^/$primary$" --format '{{.Names}}')"
 test "$(standby_sql 'SELECT pg_is_in_recovery()')" = f
 test "$(standby_sql "$promotion_sql")" = f
 echo AETHERIS_B62_DISPOSABLE_OLD_PRIMARY_FENCED_AFTER_PROMOTION_PASS
+# Old process is stopped, but coordinator still unavailable. A copied
+# "fenced" assertion without a live coordinator cannot grant anything.
+if review_cutover_effect 'coordinator-still-down'; then
+  echo "FAIL: old shutdown incorrectly bypassed coordinator outage" >&2
+  exit 1
+fi
+# Recover coordinator in this disposable lab; never invent a trusted ACK.
+docker start "$authority" >/dev/null
+coord_ready=false
+for attempt in $(seq 1 50); do
+  if test "$(coord_write 'SELECT 1' 2>/dev/null || true)" = 1; then
+    coord_ready=true; break
+  fi
+  sleep 1
+done
+test "$coord_ready" = true
+test "$(coord_write "SELECT endpoint || ':' || term::text
+  FROM leader_fence WHERE authority_key='runtime'")" = "$standby:5"
+# Still deny: coordinator term 5, new resource still only term 4.
+if review_cutover_effect 'before-new-fence-term'; then
+  echo "FAIL: cutover admitted stale new-resource term" >&2
+  exit 1
+fi
+echo AETHERIS_B62_CUTOVER_STALE_NEW_TERM_FAIL_CLOSED_PASS
+# Only the synthetic disposable operator advances the resource term
+# after confirming old process shutdown. This is NOT an atomic cutover.
+standby_sql "UPDATE public.b62_local_fence SET term=5
+  WHERE resource_key='runtime' AND endpoint='$standby' AND term=4;" >/dev/null
+test "$(standby_sql "SELECT endpoint || ':' || term::text
+  FROM public.b62_local_fence WHERE resource_key='runtime'")" = "$standby:5"
+review_cutover_effect 'rehearsal-post-fence-action'
+test "$(standby_sql "SELECT term FROM public.b62_local_effects
+  WHERE request_id='rehearsal-post-fence-action'")" = 5
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 4
+echo AETHERIS_B62_CUTOVER_ORDERED_OPERATOR_REHEARSAL_PASS
+# A recovered-but-then-lost coordinator cannot admit a second action.
+docker stop "$authority" >/dev/null
+if review_cutover_effect 'rehearsal-coordinator-lost-again'; then
+  echo "FAIL: cutover retried despite coordinator loss" >&2
+  exit 1
+fi
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 4
+echo AETHERIS_B62_CUTOVER_REPEATED_OUTAGE_FAIL_CLOSED_PASS
