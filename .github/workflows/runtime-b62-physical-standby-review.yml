@@ -228,7 +228,7 @@ jobs:
               assert marker in script, marker
           assert "GRANT DELETE ON public.b62_ack_consumed" not in script
           assert "GRANT INSERT ON public.b62_ack_consumed" not in script
-          assert script.count("test \\"$(b62_consume_physical_ack") >= 5
+          assert script.count('test "$(b62_consume_physical_ack') >= 5
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
