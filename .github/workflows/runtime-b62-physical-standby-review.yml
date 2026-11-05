@@ -69,6 +69,9 @@ jobs:
                          "AETHERIS_B62_RESOURCE_GATE_DRAIN_LOCK_SERIALIZES_PASS",
                          "AETHERIS_B62_RESOURCE_LOCAL_GATE_CLOSED_DENIES_DIRECT_SQL_PASS",
                          "AETHERIS_B62_RESOURCE_GATE_DISTRIBUTED_LEADERSHIP_NO_GO",
+                         "AETHERIS_B62_RESOURCE_CLOSED_PERSISTS_RESTART_AND_OUTAGE_PASS",
+                         "AETHERIS_B62_CLOSED_GATE_GLOBAL_LEADERSHIP_NO_GO",
+                         "restarted-closed-direct-deny",
                          "CREATE TABLE public.b62_writer_gate",
                          "GRANT UPDATE(lock_guard) ON public.b62_writer_gate TO $local_owner",
                          "JOIN public.b62_writer_gate g",
@@ -143,6 +146,11 @@ jobs:
           assert script.count("grep -Fq 'canceling statement due to lock timeout'") == 3
           assert "GRANT UPDATE(state)" not in script
           assert "GRANT ALL ON public.b62_writer_gate" not in script
+          assert "pg_ctl \\" not in script or "pg_ctl" in script
+          assert '-m fast -w -t 30 stop' in script
+          assert '-w -t 30 start' in script
+          assert "SELECT public.b62_local_try_effect(5,'restarted-closed-direct-deny')" in script
+          assert "AETHERIS_B62_RESOURCE_CLOSED_PERSISTS_RESTART_AND_OUTAGE_PASS" in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
