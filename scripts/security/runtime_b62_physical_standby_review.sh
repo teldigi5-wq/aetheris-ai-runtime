@@ -18,6 +18,7 @@ replica_password="$(openssl rand -hex 24)"
 held_action_output=""
 transition_output=""
 detached_action_output=""
+cutover_race_dir=""
 
 cleanup() {
   local code=$?
@@ -27,6 +28,7 @@ cleanup() {
   [[ -z "$held_action_output" ]] || rm -f -- "$held_action_output"
   [[ -z "$transition_output" ]] || rm -f -- "$transition_output"
   [[ -z "$detached_action_output" ]] || rm -f -- "$detached_action_output"
+  [[ -z "$cutover_race_dir" ]] || rm -rf -- "$cutover_race_dir"
   if test "$code" -eq 0; then
     echo AETHERIS_B62_PHYSICAL_REPLICA_CONTAINERS_NETWORK_DESTROYED_PASS
   fi
@@ -798,6 +800,21 @@ review_cutover_effect() {
       AND NOT pg_is_in_recovery()" 2>/dev/null)" || return 1
   [[ "$local_term" == "$standby:5" ]] || return 1
   [[ "$(standby_sql 'SELECT pg_is_in_recovery()' 2>/dev/null)" == f ]] || return 1
+  # Controlled fixture hook ONLY: pause after all non-atomic checks, before
+  # the real resource-side SQL write, so the coordinator may change first.
+  # Not an authentication or production fencing mechanism.
+  if [[ "$request" == 'race-after-gate-checks' ]]; then
+    [[ -n "$cutover_race_dir" && -d "$cutover_race_dir" ]] || return 1
+    printf 'checked\n' > "$cutover_race_dir/checked"
+    local released=false
+    for poll in $(seq 1 100); do
+      if [[ -f "$cutover_race_dir/release" ]]; then
+        released=true; break
+      fi
+      sleep 0.1
+    done
+    [[ "$released" == true ]] || return 1
+  fi
   [[ "$(local_call "$standby" "$local_new_pw" \
     "SELECT public.b62_local_try_effect(5,'$request')" 2>/dev/null)" == t ]]
 }
@@ -869,11 +886,63 @@ test "$(standby_sql "SELECT term FROM public.b62_local_effects
   WHERE request_id='rehearsal-post-fence-action'")" = 5
 test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 4
 echo AETHERIS_B62_CUTOVER_ORDERED_OPERATOR_REHEARSAL_PASS
+# Negative, deterministic check-then-act experiment on the shell gate:
+# complete its admission checks, advance the INDEPENDENT coordinator
+# from term 5 to 6, then release the paused resource write. A term-5
+# effect is still committed. This is a release-blocking TOCTOU failure.
+cutover_race_dir="$(mktemp -d)"
+(
+  review_cutover_effect 'race-after-gate-checks'
+) >"$cutover_race_dir/gate.log" 2>&1 &
+race_pid=$!
+race_ready=false
+for poll in $(seq 1 100); do
+  if [[ -s "$cutover_race_dir/checked" ]]; then
+    race_ready=true; break
+  fi
+  if ! kill -0 "$race_pid" 2>/dev/null; then break; fi
+  sleep 0.1
+done
+if [[ "$race_ready" != true ]]; then
+  echo "FAIL: cutover gate never reached the observed pre-write barrier" >&2
+  exit 1
+fi
+test "$(coord_write "SELECT endpoint || ':' || term::text FROM leader_fence
+  WHERE authority_key='runtime'")" = "$standby:5"
+coord_write "BEGIN; SET LOCAL lock_timeout='400ms';
+  UPDATE public.leader_fence SET term=6,
+    expires_at=clock_timestamp()+interval '15 minutes'
+    WHERE authority_key='runtime' AND endpoint='$standby' AND term=5;
+  COMMIT;" >/dev/null
+test "$(coord_write "SELECT endpoint || ':' || term::text FROM leader_fence
+  WHERE authority_key='runtime'")" = "$standby:6"
+test "$(standby_sql "SELECT endpoint || ':' || term::text
+  FROM public.b62_local_fence WHERE resource_key='runtime'")" = "$standby:5"
+touch "$cutover_race_dir/release"
+wait "$race_pid"
+test "$(standby_sql "SELECT term FROM public.b62_local_effects
+  WHERE request_id='race-after-gate-checks'")" = 5
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 5
+if review_cutover_effect 'race-fresh-recheck-must-deny'; then
+  echo "FAIL: a fresh cutover probe admitted obsolete coordinator term" >&2
+  exit 1
+fi
+echo AETHERIS_B62_CUTOVER_GATE_CHECK_THEN_WRITE_RACE_NO_GO_PASS
 # A recovered-but-then-lost coordinator cannot admit a second action.
 docker stop "$authority" >/dev/null
 if review_cutover_effect 'rehearsal-coordinator-lost-again'; then
   echo "FAIL: cutover retried despite coordinator loss" >&2
   exit 1
 fi
-test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 4
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 5
 echo AETHERIS_B62_CUTOVER_REPEATED_OUTAGE_FAIL_CLOSED_PASS
+# Even after successful ordered cutover, the restricted resource actor
+# can BYPASS the shell gate through the separately hosted SQL function.
+# Coordinator is DOWN and old credentials are already fenced, yet an
+# independent local-only term-5 operation still succeeds: NOT safe.
+test "$(local_call "$standby" "$local_new_pw" \
+  "SELECT public.b62_local_try_effect(5,'post-cutover-direct-sql-bypass')")" = t
+test "$(standby_sql "SELECT term FROM public.b62_local_effects
+  WHERE request_id='post-cutover-direct-sql-bypass'")" = 5
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 6
+echo AETHERIS_B62_CUTOVER_DIRECT_SQL_BYPASS_OUTAGE_NO_GO_PASS
