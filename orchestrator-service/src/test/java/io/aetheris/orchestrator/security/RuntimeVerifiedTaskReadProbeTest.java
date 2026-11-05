@@ -1322,11 +1322,17 @@ class RuntimeVerifiedTaskReadProbeTest {
                             rivalPid = pid.getInt(1);
                         }
                     }
-                    // Winner inserts but deliberately holds the transaction
-                    // OPEN. The other session must wait for its unique-key
-                    // conflict; no timer-based claim of concurrency is enough.
+                    // A pending one-time consume must NOT be permanently burned
+                    // by rollback; the same durable closure receipt must not
+                    // be rewritten or forged to exercise legitimate retry.
                     assertTrue(consumer.consumeReview(db, ack, node, term,
-                        receipt, challenge), "First real transaction creates the pending claim");
+                        receipt, challenge), "First claim is not committed");
+                    db.rollback();
+                    assertTrue(consumer.consumeReview(db, ack, node, term,
+                        receipt, challenge), "Rolled-back claim may be retried");
+                    // Winner holds the second claim OPEN. The concurrent
+                    // session must wait on the actual uniqueness conflict.
+                    // A timer-only claim of concurrency is insufficient.
                     assertFalse(consumer.consumeReview(db, ack, node, term,
                         receipt, challenge), "Same transaction replay must deny");
                     AtomicReference<Boolean> rivalResult = new AtomicReference<>();
@@ -1422,69 +1428,6 @@ class RuntimeVerifiedTaskReadProbeTest {
                     assertEquals(1L, rows.getLong(1));
                 }
                 fresh.rollback();
-                // A pending one-time claim which ROLLS BACK must be
-                // available for a legitimate retry, not permanently burned.
-                // Unlike a replay of a committed receipt, this is recovery
-                // after an abandoned transaction on a separate connection.
-                UUID retryReceipt = UUID.randomUUID();
-                UUID retryChallenge = UUID.randomUUID();
-                try (var sql = fresh.createStatement()) {
-                    sql.execute("SET search_path TO " + schema);
-                }
-                try (var insert = fresh.prepareStatement("""
-                        INSERT INTO b62_closure_receipts
-                            (resource_key,node_identity,fence_term,receipt_nonce)
-                        VALUES('runtime',?,?,?)
-                        ON CONFLICT(resource_key) DO UPDATE
-                            SET receipt_nonce=EXCLUDED.receipt_nonce
-                        """)) {
-                    insert.setString(1, node);
-                    insert.setLong(2, term);
-                    insert.setObject(3, retryReceipt);
-                    assertEquals(1, insert.executeUpdate());
-                }
-                try (var insert = fresh.prepareStatement("""
-                        INSERT INTO b62_pending_closure_challenges
-                            (challenge_id,resource_key,expected_node,
-                             expected_term,receipt_nonce,expires_at)
-                        VALUES(?,'runtime',?,?,?,clock_timestamp()+interval '1 minute')
-                        """)) {
-                    insert.setObject(1, retryChallenge);
-                    insert.setString(2, node);
-                    insert.setLong(3, term);
-                    insert.setObject(4, retryReceipt);
-                    assertEquals(1, insert.executeUpdate());
-                }
-                fresh.commit();
-                var retryAck = ackVerifier.verifySignedAck(signedClosureAckJwt(
-                    ackSigner, node, term, retryReceipt, retryChallenge,
-                    issuer, audience, kid, "runtime-resource-closure-review",
-                    Instant.now().minusSeconds(2), Instant.now().plusSeconds(55)));
-                try (Connection abandoned = DriverManager.getConnection(
-                        "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
-                        "ownerlab_ci", password)) {
-                    abandoned.setAutoCommit(false);
-                    try (var sql = abandoned.createStatement()) {
-                        sql.execute("SET search_path TO " + schema);
-                    }
-                    assertTrue(consumer.consumeReview(abandoned, retryAck,
-                        node, term, retryReceipt, retryChallenge));
-                    abandoned.rollback(); // no durable replay claim exists
-                }
-                assertTrue(consumer.consumeReview(fresh, retryAck,
-                    node, term, retryReceipt, retryChallenge),
-                    "Rolled-back consumption must allow a genuine retry");
-                fresh.commit();
-                assertFalse(consumer.consumeReview(fresh, retryAck,
-                    node, term, retryReceipt, retryChallenge),
-                    "Once retry commits, its further replay must DENY");
-                try (var sql = fresh.createStatement();
-                     var rows = sql.executeQuery(
-                         "SELECT count(*) FROM b62_consumed_closure_acks")) {
-                    assertTrue(rows.next());
-                    assertEquals(2L, rows.getLong(1),
-                        "Exactly two unique, committed receipt claims expected");
-                }
                 fresh.rollback();
             }
         } finally {
