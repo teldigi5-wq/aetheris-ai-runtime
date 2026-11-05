@@ -995,3 +995,66 @@ different node's durable closure receipt. No real Runtime route,
 service task effect or leadership transfer has been activated.
 Runtime #23, Platform #251 and Stage45 attestations remain open.
 **Stage45 NO_GO.**
+
+## 5 November 2026 — physical PostgreSQL restart replay-ledger test and privileged erasure failure
+
+The earlier Java/JDBC proof showed a signed closure ACK could be
+consumed once in a uniquely named disposable PostgreSQL schema,
+including concurrent SQL uniqueness and cross-session replay denial.
+It did **not** establish whether the consumption journal persisted
+through a physical database process restart.
+
+The existing disposable B62 **physical PostgreSQL16 promoted resource**
+now creates separate public.b62_ack_pending and
+public.b62_ack_consumed test tables. The latter enforces UNIQUE
+constraints on both challenge_id and receipt_nonce. Only the
+disposable database operator can populate challenges and invoke a
+local SQL correlation statement; the restricted resource writer is
+not granted direct journal modification rights. The SQL statement
+requires the local gate to be CLOSED, a matching local closure receipt
+and expected endpoint/term, an unexpired registered challenge,
+and PostgreSQL row locks on the same local objects before its
+conditional INSERT. It uses ON CONFLICT DO NOTHING to deny reuse.
+
+CI confirms the first consumption returns true and a second use
+returns false. It then stops and restarts the **actual promoted PG16
+server process with the same persistent data directory**, while the
+independent coordinator remains stopped. The committed consumption
+record, node/term and receipt nonce remain stored; the original
+challenge replay is denied. A separately registered challenge for
+the same already-consumed receipt is also denied. A restricted
+writer's attempted DELETE of that ledger is denied. The following
+physical CI signals capture these facts:
+
+- AETHERIS_B62_PHYSICAL_ACK_LEDGER_ONCE_COMMITTED_PASS
+- AETHERIS_B62_ACK_LEDGER_PERSISTS_PHYSICAL_RESTART_REPLAY_DENIED_PASS
+- AETHERIS_B62_RESTRICTED_WRITER_CANNOT_ERASE_ACK_LEDGER_PASS
+
+**Counterexample, explicitly NO_GO:** The privileged local database
+operator can DELETE the consumed row, after which the same
+previously spent challenge and receipt become consumable again.
+The test deliberately performs this reset on the disposable
+promoted physical resource, verifies the replay returns true and
+marks it
+AETHERIS_B62_PRIVILEGED_ACK_LEDGER_ERASURE_REPLAY_NO_GO_PASS.
+The prior privileged-old-primary restart/rebind counterexample is
+also retained; a receipt on the promoted node says nothing about
+the safety of the old writable resource.
+
+**Scope and limitations:** This physical shell fixture does NOT
+validate an RS256 signature, authenticate the challenge issuer,
+enforce resource TLS/workload binding, protect the journal from
+database owners or snapshot rollback, verify a trusted anti-replay
+store across nodes, or make leadership safe across partitions.
+The separate Java pinned-signer/JDBC proof is still synthetic and
+not connected to the physical shell fixture. Restart durability
+protects against an ordinary process restart on one database, not
+a privileged replay-journal rollback or restored disk image.
+A trustworthy production cutover would require independently
+enforced old-writer fencing and a replay/epoch authority that cannot
+be reset by the writer or resource administrator.
+
+No protected Runtime API, real database, credential, deployment,
+merge or release gate was activated. Runtime #23, Platform #251,
+PR #257 independent review and the Stage45 attestations remain
+outstanding. **Stage45 NO_GO**.
