@@ -228,7 +228,9 @@ jobs:
                          "current_setting('transaction_isolation')='read committed'",
                          "connection.getAutoCommit()", "connection.isReadOnly()",
                          "ack.matches(", "ack.isFresh()",
-                         "rollback required"):
+                         "rollback required",
+                         "competing uncommitted writer",
+                         "snapshot restoration"):
               assert marker in closure_consume, marker
           for source in (closure_ack, closure_consume):
               for forbidden in ("@Component", "@Bean", "@RestController",
@@ -240,6 +242,11 @@ jobs:
                          "Same transaction replay must deny",
                          "A committed ACK replay denies on another real DB session",
                          "Reusing one receipt with a NEW signed challenge must deny",
+                         "Rolled-back claim may be retried",
+                         "The losing PG16 session must visibly wait on a real SQL lock",
+                         "Committed winner must cause the concurrent replay to DENY",
+                         "pg_stat_activity", "wait_event_type='Lock'",
+                         "rivalThread.join(5000)",
                          "DROP SCHEMA IF EXISTS "):
               assert marker in regression, marker
           restricted=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedRegistryTaskReadProbeTest.java")).read_text()
