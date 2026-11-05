@@ -750,3 +750,61 @@ its review workflow and this documentation, with no production schema
 migration, live worker, runtime route, key or user database change.
 Runtime issue #23, Platform issue #251 and the nine Stage45 release
 attestations remain outstanding. **Stage45 NO_GO.**
+
+## 5 November 2026 — terminal local CLOSED gate against DML reopens
+
+The previous B62 physical lab added a resource-enforced local
+OPEN/CLOSED writer gate, locked by the restricted SECURITY DEFINER
+effect function in the same PostgreSQL transaction as each synthetic
+effect. It demonstrated that closing the gate drains existing local
+transactions and that a committed CLOSED gate survives an actual
+PostgreSQL16 process restart while the coordinator is unavailable.
+However, a privileged local database operator could still
+accidentally reopen a CLOSED gate at the same local fencing term.
+
+This review-only iteration adds local PostgreSQL trigger guards on
+**both** disposable physical resource databases:
+
+- A BEFORE UPDATE OR DELETE row trigger rejects a CLOSED-to-OPEN
+  state transition, a resource-key change, and gate-row deletion.
+  Each denial uses a distinct, checked SQLSTATE 23514 error marker.
+- A BEFORE TRUNCATE statement trigger refuses to clear the gate
+  table, even when the operator can normally issue TRUNCATE.
+- Trigger-helper EXECUTE permissions are revoked from PUBLIC.
+  The existing restricted writer and NOLOGIN effect-function owner
+  still cannot update the gate state or authority term.
+- After the promoted resource is CLOSED, physical PostgreSQL16 CI
+  attempts a genuine operator UPDATE reopen, DELETE, and TRUNCATE;
+  each must fail with its **specific expected** trigger error.
+  The gate row must remain unique and CLOSED and the effect journal
+  must not grow.
+- The same resource process is stopped and restarted with the
+  independent coordinator still offline. CI then attempts a new
+  operator reopen, which must fail with the same terminal-state
+  trigger error. A fresh direct SQL effect invocation must also
+  return false with no new synthetic effect row.
+
+CI proof markers:
+
+- AETHERIS_B62_CLOSED_GATE_RESISTS_ADMIN_DML_REOPEN_PASS
+- AETHERIS_B62_CLOSED_GATE_REOPEN_AFTER_RESTART_DENIED_PASS
+
+These tests prevent **ordinary SQL DML** from reversing local
+closure in the disposable prototype. They do NOT defend against
+an owner/superuser with DDL privileges disabling triggers, replacing
+the table, restoring an old database snapshot, changing the data
+directory, or otherwise bypassing this synthetic gate. A terminal
+CLOSED state also intentionally cannot be used as an unreviewed
+failback mechanism: a real service would require an independent,
+authorized new-resource lifecycle and durable cutover evidence.
+
+Critically, the lab still reproduces unsafe writes from a different
+physical primary whose gate stays OPEN, stale in-flight operations
+after an independent coordinator term change, and direct SQL during
+authority outage before the local closure. Terminal local closure
+cannot force remote shutdown or establish globally linearizable
+leadership. No credential-bound fencing acknowledgement, quorum,
+mandatory cross-resource gate controller, production DDL migration,
+HTTP/SSE/Mission release or real task effect has been created.
+Runtime #23, Platform #251, PR #257 review and the nine Stage45
+release attestations remain pending. **Stage45 NO_GO**.
