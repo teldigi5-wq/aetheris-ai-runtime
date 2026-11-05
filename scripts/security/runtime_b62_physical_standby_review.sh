@@ -651,6 +651,23 @@ local_setup() {
       receipt_nonce uuid NOT NULL UNIQUE,
       recorded_at timestamptz NOT NULL);
     REVOKE ALL ON public.b62_closure_receipts FROM PUBLIC;
+    -- A separate, disposable RESOURCE-SIDE SQL ledger is used to test
+    -- restart persistence of consumption. No signed ACK is validated
+    -- by this SQL fixture: the standalone Java verifier is separate.
+    CREATE TABLE public.b62_ack_pending(
+      challenge_id uuid PRIMARY KEY,
+      resource_key text NOT NULL,
+      expected_node text NOT NULL,
+      expected_term bigint NOT NULL CHECK(expected_term>0),
+      receipt_nonce uuid NOT NULL,
+      expires_at timestamptz NOT NULL);
+    CREATE TABLE public.b62_ack_consumed(
+      challenge_id uuid PRIMARY KEY,
+      receipt_nonce uuid NOT NULL UNIQUE,
+      node_identity text NOT NULL,
+      fence_term bigint NOT NULL CHECK(fence_term>0));
+    REVOKE ALL ON public.b62_ack_pending,
+      public.b62_ack_consumed FROM PUBLIC;
     CREATE FUNCTION public.b62_record_closure_receipt()
     RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
     SET search_path=pg_catalog,pg_temp
@@ -1151,6 +1168,53 @@ test "$ack_node" = "$standby"
 test "$ack_term" = 5
 [[ "$ack_nonce" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
 test "$(standby_sql 'SELECT count(*) FROM public.b62_closure_receipts')" = 1
+# This is a deliberately admin-driven SQL correlation, NOT an actual
+# cryptographic ACK acceptance path. Only closed resource-local receipts
+# can satisfy an unexpired, separately registered challenge.
+b62_replay_challenge="$(standby_sql 'SELECT pg_catalog.gen_random_uuid()')"
+[[ "$b62_replay_challenge" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
+standby_sql "INSERT INTO public.b62_ack_pending VALUES(
+  '$b62_replay_challenge'::uuid,'runtime','$standby',5,
+  '$ack_nonce'::uuid,clock_timestamp()+interval '30 minutes');" >/dev/null
+b62_consume_physical_ack() {
+  local challenge="$1" receipt="$2"
+  [[ "$challenge" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || return 1
+  [[ "$receipt" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || return 1
+  standby_sql "WITH eligible AS MATERIALIZED (
+    SELECT c.challenge_id,r.receipt_nonce,r.node_identity,r.fence_term
+      FROM public.b62_ack_pending c
+      JOIN public.b62_closure_receipts r
+        ON r.resource_key=c.resource_key
+       AND r.node_identity=c.expected_node
+       AND r.fence_term=c.expected_term
+       AND r.receipt_nonce=c.receipt_nonce
+      JOIN public.b62_writer_gate g ON g.resource_key=r.resource_key
+     WHERE c.challenge_id='$challenge'::uuid
+       AND c.resource_key='runtime'
+       AND c.expected_node='$standby'
+       AND c.expected_term=5
+       AND c.receipt_nonce='$receipt'::uuid
+       AND c.expires_at>clock_timestamp()
+       AND g.state='CLOSED'
+       AND NOT pg_is_in_recovery()
+     FOR SHARE OF c,r,g
+  ), consumed AS (
+    INSERT INTO public.b62_ack_consumed
+      (challenge_id,receipt_nonce,node_identity,fence_term)
+    SELECT challenge_id,receipt_nonce,node_identity,fence_term
+      FROM eligible
+    ON CONFLICT DO NOTHING
+    RETURNING challenge_id
+  )
+  SELECT EXISTS(SELECT 1 FROM consumed);"
+}
+test "$(b62_consume_physical_ack "$b62_replay_challenge" "$ack_nonce")" = t
+test "$(b62_consume_physical_ack "$b62_replay_challenge" "$ack_nonce")" = f
+test "$(standby_sql "SELECT count(*) FROM public.b62_ack_consumed
+  WHERE challenge_id='$b62_replay_challenge'::uuid
+    AND receipt_nonce='$ack_nonce'::uuid
+    AND node_identity='$standby' AND fence_term=5")" = 1
+echo AETHERIS_B62_PHYSICAL_ACK_LEDGER_ONCE_COMMITTED_PASS
 # Neither the restricted login nor its separate function owner may
 # issue a second record directly under this identity.
 if local_call "$standby" "$local_new_pw" \
@@ -1267,6 +1331,42 @@ test "$(standby_sql "SELECT resource_key || '|' || node_identity || '|'
   = "$closure_receipt_row"
 test "$(standby_sql 'SELECT count(*) FROM public.b62_closure_receipts')" = 1
 echo AETHERIS_B62_CLOSURE_RECEIPT_DURABLE_RESTART_PASS
+# The same committed one-time challenge and consumption record survived
+# the actual PG16 STOP/START on the promoted resource. A replay
+# must still fail, including if the challenger creates a NEW UUID
+# bound to the already-spent original receipt.
+test "$(standby_sql "SELECT count(*) FROM public.b62_ack_consumed
+  WHERE challenge_id='$b62_replay_challenge'::uuid
+    AND receipt_nonce='$ack_nonce'::uuid
+    AND node_identity='$standby' AND fence_term=5")" = 1
+test "$(b62_consume_physical_ack "$b62_replay_challenge" "$ack_nonce")" = f
+b62_replay_new_challenge="$(standby_sql 'SELECT pg_catalog.gen_random_uuid()')"
+[[ "$b62_replay_new_challenge" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
+standby_sql "INSERT INTO public.b62_ack_pending VALUES(
+  '$b62_replay_new_challenge'::uuid,'runtime','$standby',5,
+  '$ack_nonce'::uuid,clock_timestamp()+interval '30 minutes');" >/dev/null
+test "$(b62_consume_physical_ack "$b62_replay_new_challenge" "$ack_nonce")" = f
+test "$(standby_sql 'SELECT count(*) FROM public.b62_ack_consumed')" = 1
+echo AETHERIS_B62_ACK_LEDGER_PERSISTS_PHYSICAL_RESTART_REPLAY_DENIED_PASS
+
+# The restricted resource writer cannot delete its own replay record.
+if local_call "$standby" "$local_new_pw" \
+  "DELETE FROM public.b62_ack_consumed
+   WHERE receipt_nonce='$ack_nonce'::uuid" >/dev/null 2>&1; then
+  echo "FAIL: restricted writer erased replay journal" >&2; exit 1
+fi
+test "$(standby_sql 'SELECT count(*) FROM public.b62_ack_consumed')" = 1
+echo AETHERIS_B62_RESTRICTED_WRITER_CANNOT_ERASE_ACK_LEDGER_PASS
+
+# Critical negative proof: this local DB is not a trusted external
+# replay authority. Its privileged owner can delete one spent claim.
+# The SAME old nonce+challenge then becomes consumable again.
+standby_sql "DELETE FROM public.b62_ack_consumed
+  WHERE receipt_nonce='$ack_nonce'::uuid;" >/dev/null
+test "$(standby_sql 'SELECT count(*) FROM public.b62_ack_consumed')" = 0
+test "$(b62_consume_physical_ack "$b62_replay_challenge" "$ack_nonce")" = t
+test "$(standby_sql 'SELECT count(*) FROM public.b62_ack_consumed')" = 1
+echo AETHERIS_B62_PRIVILEGED_ACK_LEDGER_ERASURE_REPLAY_NO_GO_PASS
 
 # NEGATIVE COUNTEREXAMPLE: a closure receipt from the promoted node
 # cannot prove that ANOTHER physical primary is irreversibly fenced.
