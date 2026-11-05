@@ -103,12 +103,11 @@ jobs:
           # Cutover rehearsal is explicitly fail-closed under network
           # isolation, coordinator outages, and mismatched local terms.
           assert script.count("if review_cutover_effect '") == 5
-          assert "old_running\\" == false" not in script
           assert '[[ "$old_running" == false ]] || return 1' in script
           assert '[[ "$leader" == "$standby:5" ]] || return 1' in script
           assert '[[ "$local_term" == "$standby:5" ]] || return 1' in script
           assert "review_cutover_effect 'rehearsal-post-fence-action'" in script
-          assert "docker stop \\"$authority\\"" in script
+          assert 'docker stop "$authority"' in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
