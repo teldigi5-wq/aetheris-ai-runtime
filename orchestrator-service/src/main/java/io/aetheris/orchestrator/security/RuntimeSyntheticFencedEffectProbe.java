@@ -91,7 +91,7 @@ public final class RuntimeSyntheticFencedEffectProbe {
         if (connection == null || principal == null || taskId == null
                 || effectId == null || lease == null || workload == null
                 || !valid(tenant) || !valid(project)
-                || !principal.hasScope("orchestrator:read")
+                || !principal.hasScope("orchestrator:write")
                 || !lease.isBoundTo(workload)) return false;
         if (connection.getAutoCommit() || connection.isReadOnly()) return false;
         final RuntimePinnedPrincipalVerifier.VerifiedRevocationFacts signed;
