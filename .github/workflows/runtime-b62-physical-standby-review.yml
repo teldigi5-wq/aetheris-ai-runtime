@@ -146,7 +146,7 @@ jobs:
           assert script.count("grep -Fq 'canceling statement due to lock timeout'") == 3
           assert "GRANT UPDATE(state)" not in script
           assert "GRANT ALL ON public.b62_writer_gate" not in script
-          assert "pg_ctl \\" not in script or "pg_ctl" in script
+          assert script.count('docker exec -u postgres "$standby" pg_ctl') == 2
           assert '-m fast -w -t 30 stop' in script
           assert '-w -t 30 start' in script
           assert "SELECT public.b62_local_try_effect(5,'restarted-closed-direct-deny')" in script
