@@ -1036,17 +1036,24 @@ test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 7
 echo AETHERIS_B62_RESOURCE_GATE_DRAIN_LOCK_SERIALIZES_PASS
 
 # The admin can CLOSE only after the in-flight effect commits.
-test "$(standby_sql "UPDATE public.b62_writer_gate SET state='CLOSED'
-  WHERE resource_key='runtime' AND state='OPEN'
-  RETURNING state;")" = CLOSED
-test "$(standby_sql "SELECT state FROM public.b62_writer_gate
-  WHERE resource_key='runtime'")" = CLOSED
+standby_sql "UPDATE public.b62_writer_gate SET state='CLOSED'
+  WHERE resource_key='runtime' AND state='OPEN';" >/dev/null
+closed_state="$(standby_sql "SELECT state FROM public.b62_writer_gate
+  WHERE resource_key='runtime'")"
+if test "$closed_state" != CLOSED; then
+  echo "FAIL: committed writer gate is not CLOSED" >&2; exit 1
+fi
 # The restricted login retains EXECUTE permission on its SQL function,
 # yet its direct SQL call MUST return false once the resource-local
 # gate closure is committed. No optional shell admission is involved.
-test "$(local_call "$standby" "$local_new_pw" \
-  "SELECT public.b62_local_try_effect(5,'direct-after-closed')")" = f
-test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 7
+closed_sql_result="$(local_call "$standby" "$local_new_pw" \
+  "SELECT public.b62_local_try_effect(5,'direct-after-closed')")"
+if test "$closed_sql_result" != f; then
+  echo "FAIL: CLOSED local resource admitted restricted SQL effect" >&2; exit 1
+fi
+if test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" != 7; then
+  echo "FAIL: effect journal changed after resource gate CLOSED" >&2; exit 1
+fi
 if local_call "$standby" "$local_new_pw" \
   "UPDATE public.b62_writer_gate SET state='OPEN'
    WHERE resource_key='runtime'" >/dev/null 2>&1; then
