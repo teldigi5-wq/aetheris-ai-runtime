@@ -789,13 +789,26 @@ class RuntimeVerifiedTaskReadProbeTest {
             assertTrue(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA),
                 "Only issuance strictly after cutoff can pass");
-            try (var revoke = connection.createStatement()) {
-                assertEquals(1, revoke.executeUpdate(
-                    "UPDATE synthetic_session_registration SET state='REVOKED'"));
+            try (var revoke = connection.prepareStatement(
+                    "UPDATE synthetic_session_registration SET state='REVOKED' "
+                    + "WHERE issuer=? AND kid=? AND jti=?")) {
+                revoke.setString(1, signed.verifiedIssuer());
+                revoke.setString(2, signed.verifiedKeyId());
+                revoke.setString(3, signed.signedTokenId());
+                assertEquals(1, revoke.executeUpdate(),
+                    "Only the targeted write-scoped JTI must be revoked");
             }
             assertFalse(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA),
                 "Individually revoked JTI must deny despite eligible owner");
+            assertTrue(fenced(combined, connection, readOnlyAlice,
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "Independent read-only JTI must retain its own read access");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, readOnlyAlice,
+                "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Other ACTIVE read-only JTI still cannot insert an effect");
             assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
                 signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
