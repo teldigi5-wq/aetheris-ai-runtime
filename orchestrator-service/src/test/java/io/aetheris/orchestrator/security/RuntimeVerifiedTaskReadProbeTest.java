@@ -1307,11 +1307,72 @@ class RuntimeVerifiedTaskReadProbeTest {
                     term + 1, receipt, challenge));
                 assertFalse(consumer.consumeReview(db, ack, node,
                     term, receipt, UUID.randomUUID()));
-                assertTrue(consumer.consumeReview(db, ack, node, term,
-                    receipt, challenge), "Only a CLOSED matching local receipt is consumable");
-                assertFalse(consumer.consumeReview(db, ack, node, term,
-                    receipt, challenge), "Same transaction replay must deny");
+                // Make the local CLOSED state visible to a second REAL JDBC
+                // connection, but do not yet consume this one-time ACK.
                 db.commit();
+                try (Connection rival = DriverManager.getConnection(
+                        "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                        "ownerlab_ci", password)) {
+                    rival.setAutoCommit(false);
+                    int rivalPid;
+                    try (var sql = rival.createStatement()) {
+                        sql.execute("SET search_path TO " + schema);
+                        try (var pid = sql.executeQuery("SELECT pg_backend_pid()")) {
+                            assertTrue(pid.next());
+                            rivalPid = pid.getInt(1);
+                        }
+                    }
+                    // Winner inserts but deliberately holds the transaction
+                    // OPEN. The other session must wait for its unique-key
+                    // conflict; no timer-based claim of concurrency is enough.
+                    assertTrue(consumer.consumeReview(db, ack, node, term,
+                        receipt, challenge), "First real transaction creates the pending claim");
+                    assertFalse(consumer.consumeReview(db, ack, node, term,
+                        receipt, challenge), "Same transaction replay must deny");
+                    AtomicReference<Boolean> rivalResult = new AtomicReference<>();
+                    AtomicReference<Throwable> rivalFailure = new AtomicReference<>();
+                    Thread rivalThread = new Thread(() -> {
+                        try {
+                            rivalResult.set(consumer.consumeReview(rival, ack,
+                                node, term, receipt, challenge));
+                        } catch (Throwable failure) {
+                            rivalFailure.set(failure);
+                        }
+                    }, "disposable-b62-ack-concurrent-replay");
+                    rivalThread.setDaemon(true);
+                    rivalThread.start();
+                    boolean observedRealLockWait = false;
+                    try {
+                        for (int attempt = 0; attempt < 35; attempt++) {
+                            try (var monitor = db.prepareStatement("""
+                                    SELECT count(*) FROM pg_stat_activity
+                                    WHERE pid=? AND wait_event_type='Lock'
+                                    """)) {
+                                monitor.setInt(1, rivalPid);
+                                try (var state = monitor.executeQuery()) {
+                                    assertTrue(state.next());
+                                    if (state.getLong(1) == 1L) {
+                                        observedRealLockWait = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!rivalThread.isAlive()) break;
+                            Thread.sleep(40);
+                        }
+                    } finally {
+                        // Release the competing claim even when monitoring
+                        // fails; never strand a CI transaction or worker.
+                        try { db.commit(); } finally { rivalThread.join(5000); }
+                    }
+                    assertTrue(observedRealLockWait,
+                        "The losing PG16 session must visibly wait on a real SQL lock");
+                    assertFalse(rivalThread.isAlive(), "Competing session must finish");
+                    assertNull(rivalFailure.get(), "Racing SQL query must not fail");
+                    assertEquals(Boolean.FALSE, rivalResult.get(),
+                        "Committed winner must cause the concurrent replay to DENY");
+                    rival.commit();
+                }
             }
             try (Connection fresh = DriverManager.getConnection(
                     "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
@@ -1359,6 +1420,70 @@ class RuntimeVerifiedTaskReadProbeTest {
                          "SELECT count(*) FROM b62_consumed_closure_acks")) {
                     assertTrue(rows.next());
                     assertEquals(1L, rows.getLong(1));
+                }
+                fresh.rollback();
+                // A pending one-time claim which ROLLS BACK must be
+                // available for a legitimate retry, not permanently burned.
+                // Unlike a replay of a committed receipt, this is recovery
+                // after an abandoned transaction on a separate connection.
+                UUID retryReceipt = UUID.randomUUID();
+                UUID retryChallenge = UUID.randomUUID();
+                try (var sql = fresh.createStatement()) {
+                    sql.execute("SET search_path TO " + schema);
+                }
+                try (var insert = fresh.prepareStatement("""
+                        INSERT INTO b62_closure_receipts
+                            (resource_key,node_identity,fence_term,receipt_nonce)
+                        VALUES('runtime',?,?,?)
+                        ON CONFLICT(resource_key) DO UPDATE
+                            SET receipt_nonce=EXCLUDED.receipt_nonce
+                        """)) {
+                    insert.setString(1, node);
+                    insert.setLong(2, term);
+                    insert.setObject(3, retryReceipt);
+                    assertEquals(1, insert.executeUpdate());
+                }
+                try (var insert = fresh.prepareStatement("""
+                        INSERT INTO b62_pending_closure_challenges
+                            (challenge_id,resource_key,expected_node,
+                             expected_term,receipt_nonce,expires_at)
+                        VALUES(?,'runtime',?,?,?,clock_timestamp()+interval '1 minute')
+                        """)) {
+                    insert.setObject(1, retryChallenge);
+                    insert.setString(2, node);
+                    insert.setLong(3, term);
+                    insert.setObject(4, retryReceipt);
+                    assertEquals(1, insert.executeUpdate());
+                }
+                fresh.commit();
+                var retryAck = ackVerifier.verifySignedAck(signedClosureAckJwt(
+                    ackSigner, node, term, retryReceipt, retryChallenge,
+                    issuer, audience, kid, "runtime-resource-closure-review",
+                    Instant.now().minusSeconds(2), Instant.now().plusSeconds(55)));
+                try (Connection abandoned = DriverManager.getConnection(
+                        "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                        "ownerlab_ci", password)) {
+                    abandoned.setAutoCommit(false);
+                    try (var sql = abandoned.createStatement()) {
+                        sql.execute("SET search_path TO " + schema);
+                    }
+                    assertTrue(consumer.consumeReview(abandoned, retryAck,
+                        node, term, retryReceipt, retryChallenge));
+                    abandoned.rollback(); // no durable replay claim exists
+                }
+                assertTrue(consumer.consumeReview(fresh, retryAck,
+                    node, term, retryReceipt, retryChallenge),
+                    "Rolled-back consumption must allow a genuine retry");
+                fresh.commit();
+                assertFalse(consumer.consumeReview(fresh, retryAck,
+                    node, term, retryReceipt, retryChallenge),
+                    "Once retry commits, its further replay must DENY");
+                try (var sql = fresh.createStatement();
+                     var rows = sql.executeQuery(
+                         "SELECT count(*) FROM b62_consumed_closure_acks")) {
+                    assertTrue(rows.next());
+                    assertEquals(2L, rows.getLong(1),
+                        "Exactly two unique, committed receipt claims expected");
                 }
                 fresh.rollback();
             }
