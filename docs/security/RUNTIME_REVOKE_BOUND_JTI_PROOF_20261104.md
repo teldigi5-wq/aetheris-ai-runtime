@@ -613,3 +613,65 @@ state transitions and failback/rollback procedures. No Runtime
 task/mission/SSE route, customer database or production credential
 was enabled or modified. Runtime #23, Platform #251 and nine Stage45
 attestations remain outstanding. **Stage45 NO_GO.**
+
+## 5 November 2026 — non-atomic cutover TOCTOU and SQL bypass (NO_GO)
+
+The prior disposable cutover rehearsal provided only a **shell-client**
+gate: it checked that the old PostgreSQL container was stopped,
+that the coordinator reported promoted resource term 5, and that
+the promoted resource-local fence also reported term 5. It then
+called an independently accessible protected-effect SQL function.
+No step was an atomic, resource-owned, globally authoritative
+admission barrier. Passing this rehearsal is *not* a production
+authorization verdict.
+
+Two new **real PostgreSQL16 negative tests** independently establish
+why these observations are insufficient:
+
+1. **Check/write TOCTOU.** After the shell gate checks all three
+   conditions, a CI-only barrier makes it pause *before* its real
+   effect call. The test verifies that barrier was reached, then
+   advances the separate coordinator from term 5 to term 6.
+   The resource still retains local term 5. On releasing the
+   barrier, the original gate invocation successfully inserts
+   an effect whose stored term is **5**, despite live coordinator
+   term **6**. A fresh invocation of the shell gate correctly
+   rejects the mismatch, but cannot undo the stale effect.
+   CI emits
+   AETHERIS_B62_CUTOVER_GATE_CHECK_THEN_WRITE_RACE_NO_GO_PASS.
+
+2. **Unmediated local SQL during coordinator outage.** Following
+   the ordered cutover rehearsal, the coordinator is stopped.
+   The shell gate refuses another call. Nevertheless the separate
+   restricted database actor directly invokes the local
+   SECURITY DEFINER effect function at term 5; the effect is
+   inserted and is independently counted on the physical resource.
+   CI emits
+   AETHERIS_B62_CUTOVER_DIRECT_SQL_BYPASS_OUTAGE_NO_GO_PASS.
+
+These tests intentionally create only synthetic database rows in
+disposable Docker-isolated CI. The test-only pause hook is keyed
+to a single synthetic request ID and cannot activate real Runtime
+routes or tenant operations. Both counterexamples remain required
+by the physical-standby workflow's source guards. Earlier positive
+within-one-database row-lock serialization and prior unsafe detached
+in-flight and stale old-primary examples remain intact.
+
+**Minimum design obligations before any release proposal:**
+the protected **resource itself**, not an optional shell/API
+pre-check, must unconditionally enforce authenticated writer
+identity, monotonic non-replayable authority, fenced cutover and
+concurrent operation serialization; an independently verifiable
+and durable old-writer shutdown/epoch barrier must precede new
+admission; coordinator loss, split brain, lease replay and failback
+must deny unsafe operations or trigger externally enforced fencing.
+A final design must cover all side-effect sinks, event streams,
+transaction commit/durability and workload credential revocation,
+and supply real cross-node fault-injection evidence. Signatures,
+Docker state, local rows and manual checks alone do not satisfy
+these obligations. No such production enforcement has been built.
+
+Runtime PR #257 is still a draft review; Runtime issue #23 and
+Platform issue #251 remain unresolved, production HTTP/Mission/SSE
+remain quarantined, and the nine Stage45 attestations have not
+been supplied. **Stage45 NO_GO.**
