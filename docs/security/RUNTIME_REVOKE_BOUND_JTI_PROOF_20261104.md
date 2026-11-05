@@ -675,3 +675,78 @@ Runtime PR #257 is still a draft review; Runtime issue #23 and
 Platform issue #251 remain unresolved, production HTTP/Mission/SSE
 remain quarantined, and the nine Stage45 attestations have not
 been supplied. **Stage45 NO_GO.**
+
+## 5 November 2026 — resource-enforced local CLOSED gate, transaction drain and restart persistence
+
+The prior shell-only cutover admission was bypassable through the
+resource's callable SQL effect function. This new **disposable-only**
+PostgreSQL16 experiment adds a resource-local b62_writer_gate table,
+created with state OPEN on **each** independently writable physical
+resource database. The existing SECURITY DEFINER
+b62_local_try_effect function now **must** JOIN that row, require
+state OPEN, and acquire FOR SHARE locks on both the local fencing row
+and the gate row in the same transaction as its synthetic effect
+INSERT. The gate is not an HTTP pre-check or an optional shell policy.
+
+The restricted writer login can only EXECUTE the narrow function;
+it has no direct INSERT into the effects table or gate UPDATE.
+The separate NOLOGIN function owner receives SELECT and a constrained
+UPDATE(lock_guard) permission needed for FOR SHARE, but no permission
+to modify admission state, leader endpoint or term. Only the
+disposable PostgreSQL operator role can change OPEN to CLOSED.
+
+CI deliberately **retains the earlier unsafe tests while the gate
+is OPEN**: split-brain old-primary effect acceptance, stale in-flight
+effect commit after remote coordinator advancement, coordinator-loss
+local-effect acceptance and optional shell admission bypass.
+Adding a local gate does NOT silently make any of these safe.
+
+After those negative examples, a separate physical database writer
+opens a transaction, executes one permitted term-5 effect and sleeps
+with the gate and local fence locked. The harness observes its real
+pg_stat_activity wait event. A competing operator attempts to
+close the gate with a 400 ms lock timeout, which must fail
+**specifically** on the row lock rather than for an unrelated error.
+After the writer's COMMIT, the administrator commits CLOSED.
+The same restricted writer's direct SQL function then returns
+false and the effects table retains its prior row count. Attempts
+to change the gate by the restricted login or the function-definer
+identity fail. CI emits:
+
+- AETHERIS_B62_RESOURCE_GATE_DRAIN_LOCK_SERIALIZES_PASS
+- AETHERIS_B62_RESOURCE_LOCAL_GATE_CLOSED_DENIES_DIRECT_SQL_PASS
+
+The disposable promoted PostgreSQL16 process is then shut down and
+restarted using its **same persisted data directory** with the
+independent coordinator still stopped. The committed gate remains
+CLOSED, a fresh restricted database session receives false from
+the original SQL effect function, and no new journal row appears.
+CI emits:
+
+- AETHERIS_B62_RESOURCE_CLOSED_PERSISTS_RESTART_AND_OUTAGE_PASS
+
+**Precisely established property:** while this **specific physical
+resource** remains uncompromised and CLOSED, its existing restricted
+SQL function does not admit another effect; an administrator cannot
+commit the local CLOSED transition while an earlier protected
+transaction retains its gate lock; closure persists across the
+exercised process restart. This is a bounded local containment and
+durability proof, not a globally valid authority certificate.
+
+**Open release blockers:** the old independent physical primary may
+still be alive and OPEN; a remote coordinator's term change does
+not automatically or atomically close either gate; an independent
+resource can still write through the function during coordinator
+outage **when the local gate is OPEN**. The operator is not a real
+authenticated multi-resource fence controller and supplies no
+cryptographically bound proof of old-writer shutdown, no durable
+quorum approval, no cross-resource transaction or distributed
+revocation, no independent side-effect sink barrier, and no certified
+failover or rollback. Administrators can manually reopen this local
+gate; that transition is not a validated production protocol.
+
+The lab changes only the existing disposable physical-standby script,
+its review workflow and this documentation, with no production schema
+migration, live worker, runtime route, key or user database change.
+Runtime issue #23, Platform issue #251 and the nine Stage45 release
+attestations remain outstanding. **Stage45 NO_GO.**
