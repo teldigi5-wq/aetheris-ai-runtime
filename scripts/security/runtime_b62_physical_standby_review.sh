@@ -801,6 +801,16 @@ test "$(local_call "$primary" "$local_old_pw" \
 test "$(local_call "$standby" "$local_new_pw" \
   "SELECT public.b62_local_try_effect(2,'wrong-new-term')")" = f
 
+# Combined nonproduction B62 replay review: coordinator is still at term 4.
+source scripts/security/runtime_b62_pg16_revocation_continuity_review.sh
+source scripts/security/runtime_b62_pg16_provenance_authenticity_review.sh
+source scripts/security/runtime_b62_pg16_inflight_commit_revocation_review.sh
+source scripts/security/runtime_b62_pg16_reachable_prepublication_barrier_review.sh
+source scripts/security/runtime_b62_pg16_source_crash_recovery_review.sh
+source scripts/security/runtime_b62_pg16_prebarrier_coordinator_loss_review.sh
+source scripts/security/runtime_b62_pg16_local_permit_expiry_review.sh
+source scripts/security/runtime_b62_pg16_deferred_commit_guard_review.sh
+
 # DISPOSABLE NEGATIVE COUNTEREXAMPLE: a protected effect on an
 # INDEPENDENT promoted resource node remains in-flight while the separate
 # coordinator advances its term. Same-node FOR SHARE locks cannot serialize

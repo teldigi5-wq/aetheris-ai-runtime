@@ -2,7 +2,7 @@ name: Runtime S0-D2 Restricted Signed Registry Read (Disposable PG16)
 on:
   # Reverify the exact stacked security draft head after every source/test edit.
   push:
-    branches: [security/runtime-quarantine-pathinfo-boundary-20261101]
+    branches: [security/runtime-quarantine-pathinfo-boundary-20261101, test/b62-integrated-pinned-6caa4df-20261105]
   pull_request:
     branches:
       - security/s0-verified-jdbc-task-write-race-20261029

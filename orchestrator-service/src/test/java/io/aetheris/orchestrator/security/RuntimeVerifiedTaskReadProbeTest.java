@@ -197,12 +197,17 @@ class RuntimeVerifiedTaskReadProbeTest {
 
     private static RuntimePinnedPrincipalVerifier.VerifiedPrincipal signedJti(
             long uid, String jti) {
+        return signedJtiWithScopes(uid, jti, List.of("orchestrator:read"));
+    }
+
+    private static RuntimePinnedPrincipalVerifier.VerifiedPrincipal signedJtiWithScopes(
+            long uid, String jti, List<String> scopes) {
         Instant issued = Instant.now().minusSeconds(10);
         String token = Jwts.builder().header().keyId(KEY_ID).and()
             .subject("synthetic-owner-" + uid + "@example.invalid")
             .issuer(ISSUER).claim("aud", List.of(AUDIENCE))
             .claim("uid", uid).claim("role", "DEVELOPER")
-            .claim("scopes", List.of("orchestrator:read"))
+            .claim("scopes", scopes)
             .id(jti).issuedAt(Date.from(issued))
             .expiration(Date.from(issued.plusSeconds(180)))
             .signWith(signingKey.getPrivate(), Jwts.SIG.RS256).compact();
@@ -538,7 +543,11 @@ class RuntimeVerifiedTaskReadProbeTest {
                     """);
             }
 
-            var alice = signedJti(42, UUID.randomUUID().toString());
+            // The test-only effect requires the already-defined write scope.
+            // A second, separately registered JTI retains read-only rights.
+            var alice = signedJtiWithScopes(42, UUID.randomUUID().toString(),
+                List.of("orchestrator:read", "orchestrator:write"));
+            var readOnlyAlice = signedJti(42, UUID.randomUUID().toString());
             var anotherAliceSession = signedJti(42, UUID.randomUUID().toString());
             var bob = signedJti(77, UUID.randomUUID().toString());
             var signed = alice.requireRevocationFacts();
@@ -562,6 +571,19 @@ class RuntimeVerifiedTaskReadProbeTest {
                 register.setLong(5, iat);
                 assertEquals(1, register.executeUpdate());
             }
+            var readOnlyFacts = readOnlyAlice.requireRevocationFacts();
+            try (var registerReadOnly = connection.prepareStatement("""
+                    INSERT INTO synthetic_session_registration
+                      (issuer,kid,jti,uid,iat_seconds,state)
+                    VALUES (?,?,?,?,?,'ACTIVE')
+                    """)) {
+                registerReadOnly.setString(1, readOnlyFacts.verifiedIssuer());
+                registerReadOnly.setString(2, readOnlyFacts.verifiedKeyId());
+                registerReadOnly.setString(3, readOnlyFacts.signedTokenId());
+                registerReadOnly.setLong(4, readOnlyFacts.signedIdentityUid());
+                registerReadOnly.setLong(5, readOnlyFacts.signedIssuedAt().getEpochSecond());
+                assertEquals(1, registerReadOnly.executeUpdate());
+            }
             assertFalse(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA),
                 "An ACTIVE JTI and owner are insufficient without a resource fence");
@@ -577,6 +599,22 @@ class RuntimeVerifiedTaskReadProbeTest {
             assertTrue(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA));
             var guardedEffects = new RuntimeSyntheticFencedEffectProbe();
+            // This is an ACTIVE signed owner/JTI with matching task and fence.
+            // Its only missing capability is orchestrator:write.
+            assertTrue(fenced(combined, connection, readOnlyAlice,
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "Read-only signed JTI must still read its own task");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, readOnlyAlice,
+                "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Read-only signed JTI must never insert a protected effect");
+            try (var noReadEffect = connection.createStatement().executeQuery(
+                    "SELECT count(*) FROM synthetic_guarded_task_effects")) {
+                assertTrue(noReadEffect.next());
+                assertEquals(0L, noReadEffect.getLong(1),
+                    "Read-only owner must produce zero synthetic effects");
+            }
             var firstEffect = UUID.randomUUID();
             assertTrue(guardedEffects.recordEffectSynthetic(connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA, firstEffect,
@@ -751,13 +789,26 @@ class RuntimeVerifiedTaskReadProbeTest {
             assertTrue(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA),
                 "Only issuance strictly after cutoff can pass");
-            try (var revoke = connection.createStatement()) {
-                assertEquals(1, revoke.executeUpdate(
-                    "UPDATE synthetic_session_registration SET state='REVOKED'"));
+            try (var revoke = connection.prepareStatement(
+                    "UPDATE synthetic_session_registration SET state='REVOKED' "
+                    + "WHERE issuer=? AND kid=? AND jti=?")) {
+                revoke.setString(1, signed.verifiedIssuer());
+                revoke.setString(2, signed.verifiedKeyId());
+                revoke.setString(3, signed.signedTokenId());
+                assertEquals(1, revoke.executeUpdate(),
+                    "Only the targeted write-scoped JTI must be revoked");
             }
             assertFalse(fenced(combined, connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA),
                 "Individually revoked JTI must deny despite eligible owner");
+            assertTrue(fenced(combined, connection, readOnlyAlice,
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "Independent read-only JTI must retain its own read access");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, readOnlyAlice,
+                "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Other ACTIVE read-only JTI still cannot insert an effect");
             assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
                 "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
                 signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
