@@ -21,6 +21,7 @@ detached_action_output=""
 cutover_race_dir=""
 writer_drain_output=""
 writer_drain_error=""
+gate_tamper_error=""
 
 cleanup() {
   local code=$?
@@ -33,6 +34,7 @@ cleanup() {
   [[ -z "$cutover_race_dir" ]] || rm -rf -- "$cutover_race_dir"
   [[ -z "$writer_drain_output" ]] || rm -f -- "$writer_drain_output"
   [[ -z "$writer_drain_error" ]] || rm -f -- "$writer_drain_error"
+  [[ -z "$gate_tamper_error" ]] || rm -f -- "$gate_tamper_error"
   if test "$code" -eq 0; then
     echo AETHERIS_B62_PHYSICAL_REPLICA_CONTAINERS_NETWORK_DESTROYED_PASS
   fi
@@ -598,6 +600,47 @@ local_setup() {
       lock_guard smallint NOT NULL DEFAULT 0 CHECK(lock_guard=0));
     INSERT INTO public.b62_writer_gate(resource_key,state)
       VALUES('runtime','OPEN');
+    -- Review-only local terminal-state guard. Ordinary administrator DML
+    -- cannot reopen, delete or truncate the CLOSED gate. A PostgreSQL
+    -- superuser/schema owner can still disable triggers or alter schema:
+    -- this is NOT independently authenticated infrastructure fencing.
+    CREATE FUNCTION public.b62_gate_transition_guard()
+    RETURNS trigger LANGUAGE plpgsql
+    SET search_path=pg_catalog,pg_temp
+    AS \$b62_gate\$
+    BEGIN
+      IF TG_OP='DELETE' THEN
+        RAISE EXCEPTION 'B62_GATE_DELETE_FORBIDDEN'
+          USING ERRCODE='23514';
+      END IF;
+      IF NEW.resource_key IS DISTINCT FROM OLD.resource_key THEN
+        RAISE EXCEPTION 'B62_GATE_RESOURCE_REKEY_FORBIDDEN'
+          USING ERRCODE='23514';
+      END IF;
+      IF OLD.state='CLOSED' AND NEW.state<>'CLOSED' THEN
+        RAISE EXCEPTION 'B62_GATE_REOPEN_FORBIDDEN'
+          USING ERRCODE='23514';
+      END IF;
+      RETURN NEW;
+    END
+    \$b62_gate\$;
+    CREATE TRIGGER b62_gate_no_reopen_delete
+      BEFORE UPDATE OR DELETE ON public.b62_writer_gate
+      FOR EACH ROW EXECUTE FUNCTION public.b62_gate_transition_guard();
+    CREATE FUNCTION public.b62_gate_truncate_guard()
+    RETURNS trigger LANGUAGE plpgsql
+    SET search_path=pg_catalog,pg_temp
+    AS \$b62_gate_truncate\$
+    BEGIN
+      RAISE EXCEPTION 'B62_GATE_TRUNCATE_FORBIDDEN'
+        USING ERRCODE='23514';
+    END
+    \$b62_gate_truncate\$;
+    CREATE TRIGGER b62_gate_no_truncate
+      BEFORE TRUNCATE ON public.b62_writer_gate
+      FOR EACH STATEMENT EXECUTE FUNCTION public.b62_gate_truncate_guard();
+    REVOKE ALL ON FUNCTION public.b62_gate_transition_guard() FROM PUBLIC;
+    REVOKE ALL ON FUNCTION public.b62_gate_truncate_guard() FROM PUBLIC;
     CREATE ROLE $local_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
     CREATE ROLE $local_writer LOGIN PASSWORD '$password';
     REVOKE ALL ON public.b62_local_fence,public.b62_local_effects,
@@ -1065,6 +1108,36 @@ test "$(standby_sql "SELECT state FROM public.b62_writer_gate
 test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 7
 echo AETHERIS_B62_RESOURCE_LOCAL_GATE_CLOSED_DENIES_DIRECT_SQL_PASS
 
+# The resource gate becomes a terminal local CLOSED state under ordinary
+# SQL DML: even the disposable DB operator cannot accidentally reverse
+# it through UPDATE, DELETE or TRUNCATE. Check the exact trigger markers
+# to distinguish expected denial from an unrelated database error.
+gate_tamper_error="$(mktemp)"
+if standby_sql "UPDATE public.b62_writer_gate SET state='OPEN'
+  WHERE resource_key='runtime' AND state='CLOSED';" \
+  > /dev/null 2>"$gate_tamper_error"; then
+  echo "FAIL: local CLOSED writer gate reopened via UPDATE" >&2; exit 1
+fi
+grep -Fq 'B62_GATE_REOPEN_FORBIDDEN' "$gate_tamper_error" ||
+  { echo "FAIL: reopen denied for unrelated reason" >&2; exit 1; }
+if standby_sql "DELETE FROM public.b62_writer_gate
+  WHERE resource_key='runtime';" > /dev/null 2>"$gate_tamper_error"; then
+  echo "FAIL: local writer gate deleted" >&2; exit 1
+fi
+grep -Fq 'B62_GATE_DELETE_FORBIDDEN' "$gate_tamper_error" ||
+  { echo "FAIL: deletion denied for unrelated reason" >&2; exit 1; }
+if standby_sql "TRUNCATE public.b62_writer_gate;" \
+  > /dev/null 2>"$gate_tamper_error"; then
+  echo "FAIL: local writer gate truncated" >&2; exit 1
+fi
+grep -Fq 'B62_GATE_TRUNCATE_FORBIDDEN' "$gate_tamper_error" ||
+  { echo "FAIL: truncate denied for unrelated reason" >&2; exit 1; }
+test "$(standby_sql "SELECT state FROM public.b62_writer_gate
+  WHERE resource_key='runtime'")" = CLOSED
+test "$(standby_sql 'SELECT count(*) FROM public.b62_writer_gate')" = 1
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 7
+echo AETHERIS_B62_CLOSED_GATE_RESISTS_ADMIN_DML_REOPEN_PASS
+
 # This does NOT prove fail-closed on a coordinator outage while the gate
 # remains OPEN, nor power-fence independently writable stale resources.
 echo AETHERIS_B62_RESOURCE_GATE_DISTRIBUTED_LEADERSHIP_NO_GO
@@ -1083,6 +1156,18 @@ test "$(local_call "$standby" "$local_new_pw" \
   "SELECT public.b62_local_try_effect(5,'restarted-closed-direct-deny')")" = f
 test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 7
 test -z "$(docker ps --filter "name=^/$authority$" --format '{{.Names}}')"
+# Ordinary SQL DML must remain unable to undo closure after process
+# restart, not just while the original server process is alive.
+if standby_sql "UPDATE public.b62_writer_gate SET state='OPEN'
+  WHERE resource_key='runtime';" > /dev/null 2>"$gate_tamper_error"; then
+  echo "FAIL: gate reopened after resource restart" >&2; exit 1
+fi
+grep -Fq 'B62_GATE_REOPEN_FORBIDDEN' "$gate_tamper_error" ||
+  { echo "FAIL: persisted trigger denied for unrelated reason" >&2; exit 1; }
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 7
+test "$(standby_sql "SELECT state FROM public.b62_writer_gate
+  WHERE resource_key='runtime'")" = CLOSED
 echo AETHERIS_B62_RESOURCE_CLOSED_PERSISTS_RESTART_AND_OUTAGE_PASS
+echo AETHERIS_B62_CLOSED_GATE_REOPEN_AFTER_RESTART_DENIED_PASS
 # This never tests or proves global linearizability, quorum or failback.
 echo AETHERIS_B62_CLOSED_GATE_GLOBAL_LEADERSHIP_NO_GO
