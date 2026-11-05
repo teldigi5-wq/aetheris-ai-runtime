@@ -80,7 +80,13 @@ public final class RuntimeSyntheticClosureAckConsumptionProbe {
             stmt.setLong(3, expectedTerm);
             stmt.setObject(4, expectedReceipt);
             try (ResultSet row = stmt.executeQuery()) {
-                return row.next() && row.getBoolean(1) && ack.isFresh();
+                if (!row.next() || !row.getBoolean(1)) return false;
+                if (!ack.isFresh()) {
+                    // A false return after INSERT could be accidentally committed.
+                    // Throw so the caller MUST roll back the entire transaction.
+                    throw new SQLException("ACK expired during consume; rollback required");
+                }
+                return true;
             }
         }
     }
