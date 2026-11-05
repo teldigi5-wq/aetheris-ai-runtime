@@ -100,7 +100,7 @@ jobs:
           assert "GRANT UPDATE(expires_at)" not in script
           # Ensure both concurrent writer paths are covered and cannot
           # pass merely from any unrelated SQL/permission failure.
-          assert script.count("grep -Fq 'canceling statement due to lock timeout'") == 2
+          assert script.count("grep -Fq 'canceling statement due to lock timeout'") == 3
           assert "wait \"$held_pid\"" in script
           assert script.count("UPDATE public.leader_fence SET term=3") >= 1
           assert script.count("UPDATE public.b62_resource_fence SET term=3") >= 1
