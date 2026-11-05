@@ -1167,6 +1167,17 @@ if standby_sql "BEGIN; SET LOCAL ROLE $local_owner;
 fi
 test "$(standby_sql 'SELECT count(*) FROM public.b62_closure_receipts')" = 1
 echo AETHERIS_B62_COMMITTED_CLOSURE_RECEIPT_BOUNDS_NODE_TERM_PASS
+# Replaying an unchanged CLOSED-state UPDATE must not emit another
+# transition receipt or replace the previously committed UUID. This
+# tests event-generation idempotence, NOT replay of a copied remote ACK.
+standby_sql "UPDATE public.b62_writer_gate SET state='CLOSED'
+  WHERE resource_key='runtime' AND state='CLOSED';" >/dev/null
+test "$(standby_sql "SELECT resource_key || '|' || node_identity || '|'
+  || fence_term::text || '|' || receipt_nonce::text
+  FROM public.b62_closure_receipts WHERE resource_key='runtime'")" \
+  = "$closure_receipt_row"
+test "$(standby_sql 'SELECT count(*) FROM public.b62_closure_receipts')" = 1
+echo AETHERIS_B62_CLOSURE_RECEIPT_DUPLICATE_EVENT_IDEMPOTENT_PASS
 # The restricted login retains EXECUTE permission on its SQL function,
 # yet its direct SQL call MUST return false once the resource-local
 # gate closure is committed. No optional shell admission is involved.
