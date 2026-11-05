@@ -232,6 +232,20 @@ class RuntimeVerifiedTaskReadProbeTest {
             + "\n-----END PUBLIC KEY-----";
     }
 
+    private static String signedClosureAckJwt(KeyPair signer,
+            String node, long term, UUID receipt, UUID challenge,
+            String issuer, String audience, String kid, String purpose,
+            Instant issued, Instant expires) {
+        return Jwts.builder().header().keyId(kid).and()
+            .subject(node).issuer(issuer).claim("aud", List.of(audience))
+            .claim("resource", "runtime").claim("purpose", purpose)
+            .claim("node", node).claim("term", term)
+            .claim("receipt", receipt.toString())
+            .claim("challenge", challenge.toString())
+            .issuedAt(Date.from(issued)).expiration(Date.from(expires))
+            .signWith(signer.getPrivate(), Jwts.SIG.RS256).compact();
+    }
+
     private static String signedFenceJwt(KeyPair signer, String endpoint,
             long term, String issuer, String audience, String kid,
             String purpose, String resource, Instant issued, Instant expires) {
@@ -1194,6 +1208,289 @@ class RuntimeVerifiedTaskReadProbeTest {
         assertFalse(probe.canRead(connection, retained,
             "tenant-alpha", "project-red", ALICE_ALPHA),
             "An expired retained principal must not authorize a fresh SQL read");
+    }
+
+    @Test
+    void signedClosureAckChallengeAndDurableOneShotConsumptionReview()
+            throws Exception {
+        // A separate synthetic authority signs the closure ACK. The signer
+        // is unrelated to the identity, fence and workload keys above.
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        KeyPair ackSigner = generator.generateKeyPair();
+        KeyPair attacker = generator.generateKeyPair();
+        String issuer = "https://closure.aetheris.example.invalid";
+        String audience = "aetheris-runtime-closure-review";
+        String kid = "b62-review-closure-key";
+        String node = "b62-review-promoted";
+        long term = 7;
+        UUID receipt = UUID.randomUUID();
+        UUID challenge = UUID.randomUUID();
+        Instant now = Instant.now();
+        Instant issued = now.minusSeconds(5);
+        Instant expires = now.plusSeconds(55);
+        var ackVerifier = new RuntimePinnedClosureAckVerifier(
+            publicKeyPem(ackSigner), kid, issuer, audience, Clock.systemUTC());
+        String token = signedClosureAckJwt(ackSigner, node, term,
+            receipt, challenge, issuer, audience, kid,
+            "runtime-resource-closure-review", issued, expires);
+        var ack = ackVerifier.verifySignedAck(token);
+        assertEquals(0, RuntimePinnedClosureAckVerifier.VerifiedAck.class
+            .getConstructors().length);
+        assertTrue(ack.matches(node, term, receipt, challenge));
+        assertFalse(ack.matches("b62-review-old-primary", term,
+            receipt, challenge), "A valid peer receipt is not this node");
+        assertFalse(ack.matches(node, term + 1, receipt, challenge));
+        assertFalse(ack.matches(node, term, UUID.randomUUID(), challenge));
+        assertFalse(ack.matches(node, term, receipt, UUID.randomUUID()));
+
+        assertThrows(IllegalArgumentException.class, () ->
+            ackVerifier.verifySignedAck(signedClosureAckJwt(attacker,
+                node, term, receipt, challenge, issuer, audience, kid,
+                "runtime-resource-closure-review", issued, expires)));
+        assertThrows(IllegalArgumentException.class, () ->
+            ackVerifier.verifySignedAck(signedClosureAckJwt(ackSigner,
+                node, term, receipt, challenge, "https://attacker.invalid",
+                audience, kid, "runtime-resource-closure-review",
+                issued, expires)));
+        assertThrows(IllegalArgumentException.class, () ->
+            ackVerifier.verifySignedAck(signedClosureAckJwt(ackSigner,
+                node, term, receipt, challenge, issuer,
+                "wrong-audience", kid, "runtime-resource-closure-review",
+                issued, expires)));
+        assertThrows(IllegalArgumentException.class, () ->
+            ackVerifier.verifySignedAck(signedClosureAckJwt(ackSigner,
+                node, term, receipt, challenge, issuer, audience,
+                "unknown-key", "runtime-resource-closure-review",
+                issued, expires)));
+        assertThrows(IllegalArgumentException.class, () ->
+            ackVerifier.verifySignedAck(signedClosureAckJwt(ackSigner,
+                node, term, receipt, challenge, issuer, audience,
+                kid, "wrong-purpose", issued, expires)));
+        assertThrows(IllegalArgumentException.class, () ->
+            ackVerifier.verifySignedAck(signedClosureAckJwt(ackSigner,
+                node, term, receipt, challenge, issuer, audience, kid,
+                "runtime-resource-closure-review", issued, now.plusSeconds(95))));
+        assertThrows(IllegalArgumentException.class, () ->
+            ackVerifier.verifySignedAck(signedClosureAckJwt(ackSigner,
+                node, term, receipt, challenge, issuer, audience, kid,
+                "runtime-resource-closure-review",
+                now.minusSeconds(90), now.minusSeconds(5))));
+        assertThrows(IllegalArgumentException.class,
+            () -> ackVerifier.verifySignedAck("Bearer " + token));
+
+        // Use a dedicated, DISPOSABLE schema rather than a TEMP table.
+        // A commit and new JDBC session must preserve the unique replay
+        // journal. DROP SCHEMA CASCADE in finally; no production migration.
+        String schema = "b62_ack_" + UUID.randomUUID().toString().replace("-", "");
+        String password = System.getenv("PGPASSWORD");
+        var consumer = new RuntimeSyntheticClosureAckConsumptionProbe();
+        try {
+            try (Connection db = DriverManager.getConnection(
+                    "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                    "ownerlab_ci", password)) {
+                db.setAutoCommit(false);
+                try (var sql = db.createStatement()) {
+                    sql.execute("CREATE SCHEMA " + schema);
+                    sql.execute("SET search_path TO " + schema);
+                    sql.execute("""
+                        CREATE TABLE b62_writer_gate (
+                          resource_key text PRIMARY KEY,
+                          state text NOT NULL CHECK(state IN ('OPEN','CLOSED')))
+                        """);
+                    sql.execute("""
+                        CREATE TABLE b62_closure_receipts (
+                          resource_key text PRIMARY KEY,
+                          node_identity text NOT NULL,
+                          fence_term bigint NOT NULL CHECK(fence_term>0),
+                          receipt_nonce uuid NOT NULL UNIQUE)
+                        """);
+                    sql.execute("""
+                        CREATE TABLE b62_pending_closure_challenges (
+                          challenge_id uuid PRIMARY KEY,
+                          resource_key text NOT NULL,
+                          expected_node text NOT NULL,
+                          expected_term bigint NOT NULL,
+                          receipt_nonce uuid NOT NULL,
+                          expires_at timestamptz NOT NULL)
+                        """);
+                    sql.execute("""
+                        CREATE TABLE b62_consumed_closure_acks (
+                          challenge_id uuid PRIMARY KEY,
+                          receipt_nonce uuid NOT NULL UNIQUE,
+                          node_identity text NOT NULL,
+                          fence_term bigint NOT NULL CHECK(fence_term>0))
+                        """);
+                    sql.execute("INSERT INTO b62_writer_gate VALUES ('runtime','OPEN')");
+                }
+                try (var insert = db.prepareStatement("""
+                        INSERT INTO b62_closure_receipts
+                            (resource_key,node_identity,fence_term,receipt_nonce)
+                        VALUES('runtime',?,?,?)
+                        """)) {
+                    insert.setString(1, node);
+                    insert.setLong(2, term);
+                    insert.setObject(3, receipt);
+                    assertEquals(1, insert.executeUpdate());
+                }
+                try (var insert = db.prepareStatement("""
+                        INSERT INTO b62_pending_closure_challenges
+                            (challenge_id,resource_key,expected_node,
+                             expected_term,receipt_nonce,expires_at)
+                        VALUES(?,'runtime',?,?,?,clock_timestamp()+interval '1 minute')
+                        """)) {
+                    insert.setObject(1, challenge);
+                    insert.setString(2, node);
+                    insert.setLong(3, term);
+                    insert.setObject(4, receipt);
+                    assertEquals(1, insert.executeUpdate());
+                }
+                db.commit();
+                assertFalse(consumer.consumeReview(db, ack, node, term,
+                    receipt, challenge), "OPEN local writer denies ACK consumption");
+                try (var sql = db.createStatement()) {
+                    assertEquals(1, sql.executeUpdate(
+                        "UPDATE b62_writer_gate SET state='CLOSED' WHERE resource_key='runtime'"));
+                }
+                assertFalse(consumer.consumeReview(db, ack,
+                    "b62-review-old-primary", term, receipt, challenge));
+                assertFalse(consumer.consumeReview(db, ack, node,
+                    term + 1, receipt, challenge));
+                assertFalse(consumer.consumeReview(db, ack, node,
+                    term, receipt, UUID.randomUUID()));
+                // Make the local CLOSED state visible to a second REAL JDBC
+                // connection, but do not yet consume this one-time ACK.
+                db.commit();
+                try (Connection rival = DriverManager.getConnection(
+                        "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                        "ownerlab_ci", password)) {
+                    rival.setAutoCommit(false);
+                    int rivalPid;
+                    try (var sql = rival.createStatement()) {
+                        sql.execute("SET search_path TO " + schema);
+                        try (var pid = sql.executeQuery("SELECT pg_backend_pid()")) {
+                            assertTrue(pid.next());
+                            rivalPid = pid.getInt(1);
+                        }
+                    }
+                    // A pending one-time consume must NOT be permanently burned
+                    // by rollback; the same durable closure receipt must not
+                    // be rewritten or forged to exercise legitimate retry.
+                    assertTrue(consumer.consumeReview(db, ack, node, term,
+                        receipt, challenge), "First claim is not committed");
+                    db.rollback();
+                    assertTrue(consumer.consumeReview(db, ack, node, term,
+                        receipt, challenge), "Rolled-back claim may be retried");
+                    // Winner holds the second claim OPEN. The concurrent
+                    // session must wait on the actual uniqueness conflict.
+                    // A timer-only claim of concurrency is insufficient.
+                    assertFalse(consumer.consumeReview(db, ack, node, term,
+                        receipt, challenge), "Same transaction replay must deny");
+                    AtomicReference<Boolean> rivalResult = new AtomicReference<>();
+                    AtomicReference<Throwable> rivalFailure = new AtomicReference<>();
+                    Thread rivalThread = new Thread(() -> {
+                        try {
+                            rivalResult.set(consumer.consumeReview(rival, ack,
+                                node, term, receipt, challenge));
+                        } catch (Throwable failure) {
+                            rivalFailure.set(failure);
+                        }
+                    }, "disposable-b62-ack-concurrent-replay");
+                    rivalThread.setDaemon(true);
+                    rivalThread.start();
+                    boolean observedRealLockWait = false;
+                    try {
+                        for (int attempt = 0; attempt < 35; attempt++) {
+                            try (var monitor = db.prepareStatement("""
+                                    SELECT count(*) FROM pg_stat_activity
+                                    WHERE pid=? AND wait_event_type='Lock'
+                                    """)) {
+                                monitor.setInt(1, rivalPid);
+                                try (var state = monitor.executeQuery()) {
+                                    assertTrue(state.next());
+                                    if (state.getLong(1) == 1L) {
+                                        observedRealLockWait = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!rivalThread.isAlive()) break;
+                            Thread.sleep(40);
+                        }
+                    } finally {
+                        // Release the competing claim even when monitoring
+                        // fails; never strand a CI transaction or worker.
+                        try { db.commit(); } finally { rivalThread.join(5000); }
+                    }
+                    assertTrue(observedRealLockWait,
+                        "The losing PG16 session must visibly wait on a real SQL lock");
+                    assertFalse(rivalThread.isAlive(), "Competing session must finish");
+                    assertNull(rivalFailure.get(), "Racing SQL query must not fail");
+                    assertEquals(Boolean.FALSE, rivalResult.get(),
+                        "Committed winner must cause the concurrent replay to DENY");
+                    rival.commit();
+                }
+            }
+            try (Connection fresh = DriverManager.getConnection(
+                    "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                    "ownerlab_ci", password)) {
+                fresh.setAutoCommit(false);
+                try (var sql = fresh.createStatement()) {
+                    sql.execute("SET search_path TO " + schema);
+                    try (var rows = sql.executeQuery("""
+                            SELECT challenge_id,receipt_nonce,node_identity,fence_term
+                              FROM b62_consumed_closure_acks
+                            """)) {
+                        assertTrue(rows.next());
+                        assertEquals(challenge, rows.getObject(1, UUID.class));
+                        assertEquals(receipt, rows.getObject(2, UUID.class));
+                        assertEquals(node, rows.getString(3));
+                        assertEquals(term, rows.getLong(4));
+                        assertFalse(rows.next());
+                    }
+                }
+                assertFalse(consumer.consumeReview(fresh, ack, node, term,
+                    receipt, challenge),
+                    "A committed ACK replay denies on another real DB session");
+                UUID anotherChallenge = UUID.randomUUID();
+                try (var insert = fresh.prepareStatement("""
+                        INSERT INTO b62_pending_closure_challenges
+                            (challenge_id,resource_key,expected_node,
+                             expected_term,receipt_nonce,expires_at)
+                        VALUES(?,'runtime',?,?,?,clock_timestamp()+interval '1 minute')
+                        """)) {
+                    insert.setObject(1, anotherChallenge);
+                    insert.setString(2, node);
+                    insert.setLong(3, term);
+                    insert.setObject(4, receipt);
+                    assertEquals(1, insert.executeUpdate());
+                }
+                var secondAck = ackVerifier.verifySignedAck(signedClosureAckJwt(
+                    ackSigner, node, term, receipt, anotherChallenge,
+                    issuer, audience, kid, "runtime-resource-closure-review",
+                    Instant.now().minusSeconds(2), Instant.now().plusSeconds(55)));
+                assertFalse(consumer.consumeReview(fresh, secondAck, node, term,
+                    receipt, anotherChallenge),
+                    "Reusing one receipt with a NEW signed challenge must deny");
+                try (var sql = fresh.createStatement();
+                     var rows = sql.executeQuery(
+                         "SELECT count(*) FROM b62_consumed_closure_acks")) {
+                    assertTrue(rows.next());
+                    assertEquals(1L, rows.getLong(1));
+                }
+                fresh.rollback();
+                fresh.rollback();
+            }
+        } finally {
+            // Best-effort cleanup always uses a separate connection so a
+            // failed statement/transaction cannot strand the lab schema.
+            try (Connection cleanup = DriverManager.getConnection(
+                    "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                    "ownerlab_ci", password);
+                 var sql = cleanup.createStatement()) {
+                sql.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
+            }
+        }
     }
 
     @Test

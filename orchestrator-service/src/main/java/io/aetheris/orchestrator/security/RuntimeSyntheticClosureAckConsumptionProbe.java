@@ -13,9 +13,12 @@ import java.util.UUID;
  * pinned expectations: neither a valid signed ACK nor a local receipt
  * establishes global leadership or remote old-writer fencing.
  *
- * The consumption table must be durable and access-controlled in any real
- * design. The tests use TEMP fixtures and roll back all rows; they prove
- * SQL uniqueness and transactional semantics, NOT restart durability.
+ * The consumption ledger must be durable and access-controlled in any real
+ * design. Tests commit a uniquely named disposable PG16 schema and verify
+ * replay denial across separate JDBC sessions (including a competing
+ * uncommitted writer), then DROP the schema. They do NOT prove replay
+ * denial across PostgreSQL process restart, snapshot restoration, physical
+ * failover or independent resource nodes.
  * No routes, Spring beans or production connectors are enabled.
  */
 public final class RuntimeSyntheticClosureAckConsumptionProbe {

@@ -877,3 +877,121 @@ resource cannot prove remote fencing. Real customer/task effects,
 Runtime APIs, Mission/SSE routes, production keys and release
 controls remain unchanged. Runtime #23, Platform #251 and nine
 Stage45 attestations remain unresolved. **Stage45 NO_GO.**
+
+## 5 November 2026 — separately pinned signed closure ACK and PG16 replay journal
+
+The physical B62 resource gate can commit one *local* closure receipt,
+but its row is not a global shutdown or transfer-of-authority
+certificate. This iteration adds two production-tree **non-Spring,
+review-only** classes; neither is wired to real runtime routes:
+
+1. RuntimePinnedClosureAckVerifier requires a **separate pinned
+   >=2048-bit RS256 public key**, exact trusted key ID, issuer,
+   sole audience, purpose runtime-resource-closure-review and
+   resource runtime. The signature binds the canonical resource-node
+   string (also required as subject), positive resource term,
+   canonical receipt UUID, and exact challenge UUID. Issued-at
+   cannot be in the future, expiration must be in the future and
+   signed lifetime must not exceed 90 seconds. A private-constructible
+   VerifiedAck must match independently supplied expected node,
+   term, receipt and challenge; retained objects recheck expiry.
+   Other RSA keys, issuer, audience, key ID, purpose and mismatched
+   signed facts are denied.
+2. RuntimeSyntheticClosureAckConsumptionProbe accepts only a
+   VerifiedAck matching caller-pinned expectations, in an explicit
+   writable READ COMMITTED PostgreSQL transaction. One data-modifying
+   statement requires a matching *locally recorded* receipt, a
+   registered unexpired challenge and a CLOSED local resource gate,
+   while locking the matching SQL rows. It inserts a consumption
+   record only once, with unique challenge ID and receipt UUID
+   constraints. The same JWT/challenge and a newly signed challenge
+   for an already-consumed receipt both deny. A post-insert signature
+   expiry is treated as a **mandatory rollback exception** rather
+   than a false return that could leave an uncommitted effect.
+   The function itself never commits or opens an HTTP/API route.
+
+The opt-in Java regression uses independent randomly generated
+RSA keys for identity, resource lease, workload and closure ACK.
+It runs actual PostgreSQL16 transactions against an isolated,
+uniquely named **disposable schema**. Unlike TEMP-only assertions,
+the consumption ledger is COMMITTED, then tested from a freshly
+opened JDBC connection to establish cross-session replay denial.
+The test also verifies gate OPEN denial, wrong node/term/challenge,
+mismatched signature authority, scope, signed expiry and lifetime,
+and exactly one consumed row. The schema is dropped in a finally
+cleanup block, and CI checks there are no leaked b62_ack_ schemas.
+
+**Precisely established:** independent public-key signature and
+claim verification, strict signed-to-expected-facts equality,
+local CLOSED-gate SQL correlation, and one-time consumption of a
+COMMITTED ledger entry across JDBC sessions in the disposable
+test. This is *not* proof of a resource's real cryptographic
+identity or that a remote sender had possession of the private
+key on the resource. The test key is a synthetic CI signer.
+
+**Not established:** robust across-process database restart,
+quorum-backed global replay prevention, trusted signing key
+custody and rotation, certificate-to-workload binding, challenge
+issuance by a protected cutover authority, availability and
+delivery guarantees for ACKs, durable revocation across snapshots,
+concurrent multi-database cutover, or authority to release any
+other physically writable old primary. A previously valid
+attestation can be copied and replayed into an entirely
+uncoordinated store unless replay protection and cutover
+admission are enforced *at every protected resource*. A malicious
+privileged database administrator may destroy or rewrite the
+local replay ledger. A forged external remote-fencing claim still
+cannot be accepted as a reason to open Runtime Task, Mission,
+SSE or actuator routes.
+
+All prior real physical-standby counterexamples remain mandatory,
+including privileged old-primary failback despite a promoted
+node's durable local closure receipt. No production data, schema,
+keys, services, protected branches, releases or API gates change.
+Runtime issue #23 and Platform issue #251 remain open; PR #257
+is review-only. **Stage45 NO_GO.**
+
+## 5 November 2026 — concurrent replay serialization and rollback recovery in real PG16
+
+The prior signed ACK test confirmed a committed consumption journal
+remained visible from a new JDBC connection. This iteration tightens
+the **same disposable PostgreSQL16 lab** around real concurrency and
+failed transactions, using the existing one-time challenge and receipt
+rather than changing or recreating a closure receipt.
+
+After committing an observed local CLOSED gate, transaction A consumes
+a correctly verified synthetic RS256 acknowledgement, then explicitly
+ROLLS BACK. A subsequent use of the **same** immutable signed receipt
+and challenge succeeds: an abandoned transaction cannot permanently
+burn a claim that never committed.
+
+Transaction A then inserts the pending one-time claim and remains open.
+A distinct, authenticated-by-test-fixture JDBC session B invokes
+the exact same conditional consumption SQL on another thread. CI first
+retrieves B's actual pg_backend_pid() and polls **pg_stat_activity**
+until PostgreSQL exposes a **Lock** wait; merely starting two threads
+does not count as concurrency evidence. A commits while B is blocked.
+B then completes and returns **false**, because the unique challenge
+and receipt entry was already committed. A second same-transaction
+claim is also denied. The test joins the competing thread in a
+bounded interval, checks for SQL exceptions, and closes both JDBC
+connections; the surrounding existing test still verifies that
+another independently signed challenge cannot reuse a consumed receipt.
+
+The workflow guards now require the observed lock-wait assertions,
+rollback-retry case, losing replay result and bounded worker join.
+The uniquely named b62_ack_ schema is removed after the test, with
+CI checking that no disposable schema remains.
+
+This is evidence for **single-PostgreSQL-database unique-index
+serialization and rollback semantics**, not evidence that the
+challenge issuer is authenticated, the synthetic public key belongs
+to a physically fenced resource, ACK transport is trusted, or a
+distributed ledger remains monotonic after failback, restored
+snapshots, physical data loss or independent partitions. The
+separate B62 physical-standby lab continues to prove privileged
+old-primary restart and stale local writer acceptance despite a
+different node's durable closure receipt. No real Runtime route,
+service task effect or leadership transfer has been activated.
+Runtime #23, Platform #251 and Stage45 attestations remain open.
+**Stage45 NO_GO.**
