@@ -116,6 +116,18 @@ jobs:
           ):
               assert marker in deadline
           assert 'source scripts/security/runtime_b62_pg16_local_permit_expiry_review.sh' in script
+          deferred=Path('scripts/security/runtime_b62_pg16_deferred_commit_guard_review.sh').read_text()
+          for marker in (
+              'AETHERIS_B62_PG16_DEFERRED_COMMIT_EXPIRED_PERMIT_ROLLS_BACK_EFFECT_PASS',
+              'AETHERIS_B62_PG16_DEFERRED_COMMIT_FRESH_PERMIT_PRESERVES_DENIAL_PASS',
+              'AETHERIS_B62_PG16_DEFERRED_COMMIT_CANNOT_DETECT_UNREPLAYED_SOURCE_NO_GO_PASS',
+              'AETHERIS_B62_PG16_DEFERRED_COMMIT_REPLAY_RECOVERY_ONLY_TEST_PASS',
+              'DEFERRABLE INITIALLY DEFERRED',
+              'B62_COMMIT_GUARD_DENY',
+              'REVOKE ALL ON FUNCTION public.b62_check_effect_at_deferred_commit()',
+          ):
+              assert marker in deferred
+          assert 'source scripts/security/runtime_b62_pg16_deferred_commit_guard_review.sh' in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           bash -n scripts/security/runtime_b62_pg16_revocation_continuity_review.sh
@@ -125,6 +137,7 @@ jobs:
           bash -n scripts/security/runtime_b62_pg16_source_crash_recovery_review.sh
           bash -n scripts/security/runtime_b62_pg16_prebarrier_coordinator_loss_review.sh
           bash -n scripts/security/runtime_b62_pg16_local_permit_expiry_review.sh
+          bash -n scripts/security/runtime_b62_pg16_deferred_commit_guard_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
       - name: Real physical standby, stale WAL, deliberate isolated dual-primary and old-primary fencing
         shell: bash
