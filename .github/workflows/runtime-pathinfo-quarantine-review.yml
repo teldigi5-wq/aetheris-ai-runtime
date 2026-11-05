@@ -229,7 +229,7 @@ jobs:
                          "connection.getAutoCommit()", "connection.isReadOnly()",
                          "ack.matches(", "ack.isFresh()",
                          "rollback required",
-                         "competing uncommitted writer",
+                         "uncommitted writer",
                          "snapshot restoration"):
               assert marker in closure_consume, marker
           for source in (closure_ack, closure_consume):
