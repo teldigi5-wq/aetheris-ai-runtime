@@ -77,6 +77,15 @@ jobs:
                          "AETHERIS_B62_COMMITTED_CLOSURE_RECEIPT_BOUNDS_NODE_TERM_PASS",
                          "AETHERIS_B62_CLOSURE_RECEIPT_DUPLICATE_EVENT_IDEMPOTENT_PASS",
                          "AETHERIS_B62_CLOSURE_RECEIPT_DURABLE_RESTART_PASS",
+                         "AETHERIS_B62_PHYSICAL_ACK_LEDGER_ONCE_COMMITTED_PASS",
+                         "AETHERIS_B62_ACK_LEDGER_PERSISTS_PHYSICAL_RESTART_REPLAY_DENIED_PASS",
+                         "AETHERIS_B62_RESTRICTED_WRITER_CANNOT_ERASE_ACK_LEDGER_PASS",
+                         "AETHERIS_B62_PRIVILEGED_ACK_LEDGER_ERASURE_REPLAY_NO_GO_PASS",
+                         "CREATE TABLE public.b62_ack_pending",
+                         "CREATE TABLE public.b62_ack_consumed",
+                         "REVOKE ALL ON public.b62_ack_pending",
+                         "ON CONFLICT DO NOTHING",
+                         "b62_consume_physical_ack()",
                          "AETHERIS_B62_PROMOTED_RECEIPT_CANNOT_FENCE_PRIVILEGED_FAILBACK_NO_GO_PASS",
                          "CREATE TABLE public.b62_closure_receipts",
                          "CREATE TRIGGER b62_receipt_on_closed",
@@ -202,6 +211,24 @@ jobs:
           assert "GRANT UPDATE ON public.b62_closure_receipts" not in script
           assert "unsafe-old-operator-rebind" in script
           assert script.count("SELECT count(*) FROM public.b62_closure_receipts") >= 5
+          # A committed resource-local replay ledger survives real PG restart;
+          # database-admin erasure deliberately proves no global anti-replay.
+          for marker in ("AETHERIS_B62_PHYSICAL_ACK_LEDGER_ONCE_COMMITTED_PASS",
+                         "AETHERIS_B62_ACK_LEDGER_PERSISTS_PHYSICAL_RESTART_REPLAY_DENIED_PASS",
+                         "AETHERIS_B62_RESTRICTED_WRITER_CANNOT_ERASE_ACK_LEDGER_PASS",
+                         "AETHERIS_B62_PRIVILEGED_ACK_LEDGER_ERASURE_REPLAY_NO_GO_PASS",
+                         "CREATE TABLE public.b62_ack_pending",
+                         "CREATE TABLE public.b62_ack_consumed",
+                         "UNIQUE",
+                         "g.state='CLOSED'",
+                         "FOR SHARE OF c,r,g",
+                         "ON CONFLICT DO NOTHING",
+                         "b62_replay_new_challenge",
+                         "b62_consume_physical_ack"):
+              assert marker in script, marker
+          assert "GRANT DELETE ON public.b62_ack_consumed" not in script
+          assert "GRANT INSERT ON public.b62_ack_consumed" not in script
+          assert script.count("test \\"$(b62_consume_physical_ack") >= 5
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
