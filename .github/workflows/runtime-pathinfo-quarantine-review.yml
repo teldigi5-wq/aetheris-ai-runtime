@@ -208,6 +208,40 @@ jobs:
                          "Revoked session cannot insert a protected effect",
                          "UNSAFE COUNTEREXAMPLE: an authentic stale leader"):
               assert marker in regression, marker
+          closure_ack=(root/"security/RuntimePinnedClosureAckVerifier.java").read_text()
+          for marker in ("private VerifiedAck(", "verifyWith(trustedKey)",
+                         '!"RS256".equals(signed.getHeader().getAlgorithm())',
+                         "parseCanonicalUuid", "public boolean isFresh()",
+                         "expires.isAfter(issued.plusSeconds(90))",
+                         'claims.get("challenge")', 'claims.get("receipt")',
+                         'claims.get("node")', 'claims.get("term")',
+                         'claims.get("purpose")', 'claims.get("resource")',
+                         "getModulus().bitLength() < 2048", "matches("):
+              assert marker in closure_ack, marker
+          closure_consume=(root/"security/RuntimeSyntheticClosureAckConsumptionProbe.java").read_text()
+          for marker in ("WITH eligible AS MATERIALIZED",
+                         "b62_pending_closure_challenges",
+                         "b62_closure_receipts", "b62_writer_gate",
+                         "g.state='CLOSED'", "FOR SHARE OF c,r,g",
+                         "INSERT INTO b62_consumed_closure_acks",
+                         "ON CONFLICT DO NOTHING",
+                         "current_setting('transaction_isolation')='read committed'",
+                         "connection.getAutoCommit()", "connection.isReadOnly()",
+                         "ack.matches(", "ack.isFresh()",
+                         "rollback required"):
+              assert marker in closure_consume, marker
+          for source in (closure_ack, closure_consume):
+              for forbidden in ("@Component", "@Bean", "@RestController",
+                                "System.getenv(", "HttpServletRequest",
+                                "jku=", "jwks="):
+                  assert forbidden not in source, forbidden
+          for marker in ("signedClosureAckChallengeAndDurableOneShotConsumptionReview",
+                         "CREATE TABLE b62_consumed_closure_acks",
+                         "Same transaction replay must deny",
+                         "A committed ACK replay denies on another real DB session",
+                         "Reusing one receipt with a NEW signed challenge must deny",
+                         "DROP SCHEMA IF EXISTS "):
+              assert marker in regression, marker
           restricted=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedRegistryTaskReadProbeTest.java")).read_text()
           assert "actualPrimaryReadCommittedRegistryProbeStillAllowsExactSignedOwner" in restricted
           assert "DROP SCHEMA IF EXISTS " in regression
@@ -244,7 +278,7 @@ jobs:
             sudo apt-get install -y -qq postgresql-client
           fi
           test "$(psql -X -A -t -c "SELECT count(*) FROM information_schema.tables WHERE table_name IN ('aetheris_tasks','tenant_memberships','project_memberships') AND table_schema NOT LIKE 'pg_temp_%'")" = "0"
-          test "$(psql -X -A -t -c "SELECT count(*) FROM pg_namespace WHERE nspname LIKE 'ownerlab_xconn_%' OR nspname LIKE 'ownerlab_http_%' OR nspname LIKE 'ownerlab_jti_%' OR nspname LIKE 'ownerlab_b62_%'")" = "0"
+          test "$(psql -X -A -t -c "SELECT count(*) FROM pg_namespace WHERE nspname LIKE 'ownerlab_xconn_%' OR nspname LIKE 'ownerlab_http_%' OR nspname LIKE 'ownerlab_jti_%' OR nspname LIKE 'ownerlab_b62_%' OR nspname LIKE 'b62_ack_%'")" = "0"
           test "$(psql -X -A -t -c "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'ownerlab_b62r_%'")" = "0"
           echo 'RUNTIME_DISPOSABLE_PG16_CROSS_SESSION_SCHEMA_CLEANUP_PASS'
       - name: No API admission, deployment or publication
