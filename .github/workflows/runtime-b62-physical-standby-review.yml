@@ -71,6 +71,13 @@ jobs:
                          "AETHERIS_B62_RESOURCE_GATE_DISTRIBUTED_LEADERSHIP_NO_GO",
                          "AETHERIS_B62_RESOURCE_CLOSED_PERSISTS_RESTART_AND_OUTAGE_PASS",
                          "AETHERIS_B62_CLOSED_GATE_GLOBAL_LEADERSHIP_NO_GO",
+                         "AETHERIS_B62_CLOSED_GATE_RESISTS_ADMIN_DML_REOPEN_PASS",
+                         "AETHERIS_B62_CLOSED_GATE_REOPEN_AFTER_RESTART_DENIED_PASS",
+                         "CREATE TRIGGER b62_gate_no_reopen_delete",
+                         "CREATE TRIGGER b62_gate_no_truncate",
+                         "B62_GATE_REOPEN_FORBIDDEN",
+                         "B62_GATE_DELETE_FORBIDDEN",
+                         "B62_GATE_TRUNCATE_FORBIDDEN",
                          "restarted-closed-direct-deny",
                          "CREATE TABLE public.b62_writer_gate",
                          "GRANT UPDATE(lock_guard) ON public.b62_writer_gate TO $local_owner",
@@ -151,6 +158,22 @@ jobs:
           assert '-w -t 30 start' in script
           assert "SELECT public.b62_local_try_effect(5,'restarted-closed-direct-deny')" in script
           assert "AETHERIS_B62_RESOURCE_CLOSED_PERSISTS_RESTART_AND_OUTAGE_PASS" in script
+          # The close must stay terminal for ordinary UPDATE/DELETE/TRUNCATE
+          # and the post-restart denial must inspect the exact trigger marker.
+          assert "BEFORE UPDATE OR DELETE ON public.b62_writer_gate" in script
+          assert "BEFORE TRUNCATE ON public.b62_writer_gate" in script
+          assert "OLD.state='CLOSED' AND NEW.state<>'CLOSED'" in script
+          for marker in ("B62_GATE_REOPEN_FORBIDDEN",
+                         "B62_GATE_DELETE_FORBIDDEN",
+                         "B62_GATE_TRUNCATE_FORBIDDEN",
+                         "AETHERIS_B62_CLOSED_GATE_RESISTS_ADMIN_DML_REOPEN_PASS",
+                         "AETHERIS_B62_CLOSED_GATE_REOPEN_AFTER_RESTART_DENIED_PASS"):
+              assert marker in script, marker
+          assert script.count("grep -Fq 'B62_GATE_REOPEN_FORBIDDEN'") == 2
+          assert script.count("grep -Fq 'B62_GATE_DELETE_FORBIDDEN'") == 1
+          assert script.count("grep -Fq 'B62_GATE_TRUNCATE_FORBIDDEN'") == 1
+          assert "REVOKE ALL ON FUNCTION public.b62_gate_transition_guard()" in script
+          assert "REVOKE ALL ON FUNCTION public.b62_gate_truncate_guard()" in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
