@@ -73,6 +73,14 @@ jobs:
                          "AETHERIS_B62_CLOSED_GATE_GLOBAL_LEADERSHIP_NO_GO",
                          "AETHERIS_B62_CLOSED_GATE_RESISTS_ADMIN_DML_REOPEN_PASS",
                          "AETHERIS_B62_CLOSED_GATE_REOPEN_AFTER_RESTART_DENIED_PASS",
+                         "AETHERIS_B62_CLOSURE_RECEIPT_ROLLBACK_ATOMIC_PASS",
+                         "AETHERIS_B62_COMMITTED_CLOSURE_RECEIPT_BOUNDS_NODE_TERM_PASS",
+                         "AETHERIS_B62_CLOSURE_RECEIPT_DURABLE_RESTART_PASS",
+                         "AETHERIS_B62_PROMOTED_RECEIPT_CANNOT_FENCE_PRIVILEGED_FAILBACK_NO_GO_PASS",
+                         "CREATE TABLE public.b62_closure_receipts",
+                         "CREATE TRIGGER b62_receipt_on_closed",
+                         "CREATE FUNCTION public.b62_record_closure_receipt()",
+                         "REVOKE ALL ON public.b62_closure_receipts FROM PUBLIC",
                          "CREATE TRIGGER b62_gate_no_reopen_delete",
                          "CREATE TRIGGER b62_gate_no_truncate",
                          "B62_GATE_REOPEN_FORBIDDEN",
@@ -174,6 +182,24 @@ jobs:
           assert script.count("grep -Fq 'B62_GATE_TRUNCATE_FORBIDDEN'") == 1
           assert "REVOKE ALL ON FUNCTION public.b62_gate_transition_guard()" in script
           assert "REVOKE ALL ON FUNCTION public.b62_gate_truncate_guard()" in script
+          # A local receipt is created inside the same committed
+          # CLOSED transaction, is bound to the observed node/term,
+          # and is not executable as an off-node release certificate.
+          for marker in (
+              "CREATE TABLE public.b62_closure_receipts",
+              "AFTER UPDATE OF state ON public.b62_writer_gate",
+              "FOR SHARE OF f;",
+              "pg_catalog.gen_random_uuid()",
+              "REVOKE ALL ON public.b62_closure_receipts FROM PUBLIC",
+              "AETHERIS_B62_CLOSURE_RECEIPT_ROLLBACK_ATOMIC_PASS",
+              "AETHERIS_B62_COMMITTED_CLOSURE_RECEIPT_BOUNDS_NODE_TERM_PASS",
+              "AETHERIS_B62_CLOSURE_RECEIPT_DURABLE_RESTART_PASS",
+              "AETHERIS_B62_PROMOTED_RECEIPT_CANNOT_FENCE_PRIVILEGED_FAILBACK_NO_GO_PASS"):
+              assert marker in script, marker
+          assert "GRANT INSERT ON public.b62_closure_receipts" not in script
+          assert "GRANT UPDATE ON public.b62_closure_receipts" not in script
+          assert "unsafe-old-operator-rebind" in script
+          assert script.count("SELECT count(*) FROM public.b62_closure_receipts") >= 5
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
