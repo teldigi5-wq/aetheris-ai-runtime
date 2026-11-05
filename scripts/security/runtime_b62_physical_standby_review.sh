@@ -1068,3 +1068,21 @@ echo AETHERIS_B62_RESOURCE_LOCAL_GATE_CLOSED_DENIES_DIRECT_SQL_PASS
 # This does NOT prove fail-closed on a coordinator outage while the gate
 # remains OPEN, nor power-fence independently writable stale resources.
 echo AETHERIS_B62_RESOURCE_GATE_DISTRIBUTED_LEADERSHIP_NO_GO
+# A committed local CLOSED row should survive a real PostgreSQL process
+# stop/start, including while the independent coordinator is unavailable.
+# This proves only persistence on THIS physical disposable resource.
+docker exec -u postgres "$standby" pg_ctl \
+  -D /tmp/b62-standby -m fast -w -t 30 stop >/dev/null
+docker exec -u postgres "$standby" pg_ctl \
+  -D /tmp/b62-standby -o "-p 5432 -c listen_addresses=127.0.0.1" \
+  -w -t 30 start >/dev/null
+test "$(standby_sql 'SELECT pg_is_in_recovery()')" = f
+test "$(standby_sql "SELECT state FROM public.b62_writer_gate
+  WHERE resource_key='runtime'")" = CLOSED
+test "$(local_call "$standby" "$local_new_pw" \
+  "SELECT public.b62_local_try_effect(5,'restarted-closed-direct-deny')")" = f
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 7
+test -z "$(docker ps --filter "name=^/$authority$" --format '{{.Names}}')"
+echo AETHERIS_B62_RESOURCE_CLOSED_PERSISTS_RESTART_AND_OUTAGE_PASS
+# This never tests or proves global linearizability, quorum or failback.
+echo AETHERIS_B62_CLOSED_GATE_GLOBAL_LEADERSHIP_NO_GO
