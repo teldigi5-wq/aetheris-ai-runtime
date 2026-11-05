@@ -66,6 +66,15 @@ jobs:
                          "AETHERIS_B62_CUTOVER_REPEATED_OUTAGE_FAIL_CLOSED_PASS",
                          "AETHERIS_B62_CUTOVER_GATE_CHECK_THEN_WRITE_RACE_NO_GO_PASS",
                          "AETHERIS_B62_CUTOVER_DIRECT_SQL_BYPASS_OUTAGE_NO_GO_PASS",
+                         "AETHERIS_B62_RESOURCE_GATE_DRAIN_LOCK_SERIALIZES_PASS",
+                         "AETHERIS_B62_RESOURCE_LOCAL_GATE_CLOSED_DENIES_DIRECT_SQL_PASS",
+                         "AETHERIS_B62_RESOURCE_GATE_DISTRIBUTED_LEADERSHIP_NO_GO",
+                         "CREATE TABLE public.b62_writer_gate",
+                         "GRANT UPDATE(lock_guard) ON public.b62_writer_gate TO $local_owner",
+                         "JOIN public.b62_writer_gate g",
+                         "g.state='OPEN'",
+                         "FOR SHARE OF f,g",
+                         "wait \"$drain_pid\"",
                          "wait \"$race_pid\"",
                          "touch \"$cutover_race_dir/release\"",
                          "review_cutover_effect()",
@@ -123,6 +132,17 @@ jobs:
           assert "SELECT public.b62_local_try_effect(5,'post-cutover-direct-sql-bypass')" in script
           assert "WHERE request_id='post-cutover-direct-sql-bypass'" in script
           assert 'AETHERIS_B62_CUTOVER_DIRECT_SQL_BYPASS_OUTAGE_NO_GO_PASS' in script
+          # The protected SQL function, not an optional client gate, must
+          # check a resource-owned write state under the same transaction.
+          assert "g.state='OPEN'" in script
+          assert "FOR SHARE OF f,g;" in script
+          assert "UPDATE public.b62_writer_gate SET state='CLOSED'" in script
+          assert "UPDATE public.b62_writer_gate SET state='OPEN'" in script
+          assert "SELECT public.b62_local_try_effect(5,'direct-after-closed')" in script
+          assert "writer_drain_error" in script
+          assert script.count("grep -Fq 'canceling statement due to lock timeout'") == 3
+          assert "GRANT UPDATE(state)" not in script
+          assert "GRANT ALL ON public.b62_writer_gate" not in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
