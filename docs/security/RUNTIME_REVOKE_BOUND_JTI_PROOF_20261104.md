@@ -562,3 +562,54 @@ No production routes or workers were activated. The PR remains
 draft/unmerged, Runtime issue #23 and Platform issue #251 remain
 unresolved, and Stage45's outstanding release evidence is not
 satisfied. **Stage45 NO_GO.**
+
+## 5 November 2026 — disposable ordered-cutover admission rehearsal
+
+The previous B62 experiment proved that an in-flight resource transaction
+can commit an outdated term-4 effect after a separate coordinator
+already advanced to term 5. That is a confirmed *failure of the
+prototype's distributed safety assumptions*, not a release pass.
+
+The new negative-first lab introduces a **shell-only review gate** for
+synthetic effects. It requires all of these fresh observations before
+calling the restricted resource writer: the old disposable PostgreSQL
+container exists and reports stopped, the independent coordinator is
+reachable and confirms the promoted endpoint at term 5 with an
+unexpired lease, and the promoted physical resource is a writable
+primary with a matching local term 5. Missing observations, an
+unreachable coordinator and mismatched terms fail closed.
+
+Actual disposable PostgreSQL16 CI now verifies the gate denies when
+the old primary is merely disconnected from its Docker bridge but
+remains running, when the coordinator is stopped, after the old
+container stops while the coordinator is still unavailable, and after
+coordinator recovery while the new resource still has term 4. An
+operator-controlled synthetic local update to term 5 **after**
+stopping the old process permits one new, recorded term-5 effect.
+Stopping the coordinator a second time denies further gate calls.
+Existing physical stale-writer and coordinator-outage fail-open
+counterexamples are retained: raw SQL access to the resource is
+**not** constrained by the shell review gate.
+
+**This is NOT a verified production cutover barrier.** The gate's
+checks are separate operations with race windows; Docker's running
+flag is not independently authenticated or durable fencing evidence.
+The temporary operator supplies neither a cryptographically bound
+fencing acknowledgement nor a quorum certificate. No guarantee
+exists that a separate physical writer, hidden replication service,
+external sink or downstream effect is stopped; no session-drain,
+durable ack journal, lease monotonicity across service restart or
+safe authority transition has been constructed. The resource-local
+effect function remains directly callable with old credentials;
+this rehearsal only models the required deny-first ordering for
+a future independent resource-owned implementation.
+
+A production design requires verified ownership and writer
+revocation, mandatory enforcement at *every* protected resource,
+durable/independently attested fencing acknowledgements, bounded
+in-flight effect cancellation or safe completion, authority epoch
+persistence, unavailable-coordinator denial, auditable cutover
+state transitions and failback/rollback procedures. No Runtime
+task/mission/SSE route, customer database or production credential
+was enabled or modified. Runtime #23, Platform #251 and nine Stage45
+attestations remain outstanding. **Stage45 NO_GO.**
