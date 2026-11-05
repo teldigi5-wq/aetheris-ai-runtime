@@ -59,6 +59,13 @@ jobs:
                          "AETHERIS_B62_SEPARATE_DATABASE_OLD_RESOURCE_FENCED_DURING_PARTITION_PASS",
                          "AETHERIS_B62_LOCAL_ONLY_FENCE_COORDINATOR_OUTAGE_ALLOW_NO_GO_PASS",
                          "AETHERIS_B62_DETACHED_INFLIGHT_STALE_EFFECT_COMMITS_NO_GO_PASS",
+                         "AETHERIS_B62_CUTOVER_OLD_ALIVE_FAIL_CLOSED_PASS",
+                         "AETHERIS_B62_CUTOVER_COORDINATOR_OUTAGE_FAIL_CLOSED_PASS",
+                         "AETHERIS_B62_CUTOVER_STALE_NEW_TERM_FAIL_CLOSED_PASS",
+                         "AETHERIS_B62_CUTOVER_ORDERED_OPERATOR_REHEARSAL_PASS",
+                         "AETHERIS_B62_CUTOVER_REPEATED_OUTAGE_FAIL_CLOSED_PASS",
+                         "review_cutover_effect()",
+                         "docker inspect -f '{{.State.Running}}'",
                          "grep -Fxq t \"$detached_action_output\"",
                          "wait \"$detached_pid\"",
                          "detached-inflight-term-four",
@@ -93,6 +100,15 @@ jobs:
           assert "request_id='detached-inflight-term-four'" in script
           assert script.count("SELECT count(*) FROM public.b62_local_effects") >= 4
           assert "AETHERIS_B62_DETACHED_INFLIGHT_STALE_EFFECT_COMMITS_NO_GO_PASS" in script
+          # Cutover rehearsal is explicitly fail-closed under network
+          # isolation, coordinator outages, and mismatched local terms.
+          assert script.count("if review_cutover_effect '") == 5
+          assert "old_running\\" == false" not in script
+          assert '[[ "$old_running" == false ]] || return 1' in script
+          assert '[[ "$leader" == "$standby:5" ]] || return 1' in script
+          assert '[[ "$local_term" == "$standby:5" ]] || return 1' in script
+          assert "review_cutover_effect 'rehearsal-post-fence-action'" in script
+          assert "docker stop \\"$authority\\"" in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
