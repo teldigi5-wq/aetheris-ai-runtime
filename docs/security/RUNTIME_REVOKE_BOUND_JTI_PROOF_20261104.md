@@ -808,3 +808,72 @@ mandatory cross-resource gate controller, production DDL migration,
 HTTP/SSE/Mission release or real task effect has been created.
 Runtime #23, Platform #251, PR #257 review and the nine Stage45
 release attestations remain pending. **Stage45 NO_GO**.
+
+## 5 November 2026 — transactional local closure receipt and false remote-ACK counterexample
+
+The disposable B62 physical PostgreSQL16 lab now creates a
+b62_closure_receipts table **on each independent resource**. A
+resource-owned AFTER UPDATE trigger observes an OPEN-to-CLOSED
+transition on its own b62_writer_gate, selects and SHARE-locks that
+resource's local fencing row, and inserts exactly one record of:
+
+- resource_key, observed node_identity and positive fence_term;
+- a newly generated UUID receipt_nonce (correlation only);
+- recorded_at timestamp.
+
+The receipt insert and gate update happen in **one PostgreSQL
+transaction**. The receipt is visible to other transactions only
+after commit; neither a failed lock-timeout nor an explicitly
+rolled-back closure produces a durable receipt. A repeated,
+same-state CLOSED update does not reissue a UUID or insert another
+receipt. The restricted resource login and separate NOLOGIN
+effect-function owner cannot INSERT a forged receipt: neither
+identity is granted receipt-table write permissions.
+
+In the actual disposable PostgreSQL16 regression the promoted node
+closes at its observed local term 5. CI verifies the receipt's
+resource ID, exact promoted node, term and UUID format; verifies the
+single row after closing; then shuts down and restarts the real
+PostgreSQL process while the coordinator remains down. The exact
+receipt contents, its UUID, and the resource's CLOSED state persist
+across that restart. This establishes local transaction atomicity,
+event-generation idempotence and storage persistence only.
+
+**Negative failback evidence:** An acknowledgement from the promoted
+node is NOT evidence that a different old writable primary remains
+fenced. The physical lab restarts the previously stopped, isolated
+old primary, confirms its own resource gate is still OPEN and it
+has NO closure receipt, and verifies the old fenced endpoint initially
+denies the old writer. An intentionally privileged and therefore
+unsafe local operator then restores the old endpoint/term; the old
+restricted writer successfully records another term-2 effect despite
+the promoted node's durable term-5 receipt. CI marks this outcome
+AETHERIS_B62_PROMOTED_RECEIPT_CANNOT_FENCE_PRIVILEGED_FAILBACK_NO_GO_PASS.
+
+The local positive markers are:
+
+- AETHERIS_B62_CLOSURE_RECEIPT_ROLLBACK_ATOMIC_PASS
+- AETHERIS_B62_COMMITTED_CLOSURE_RECEIPT_BOUNDS_NODE_TERM_PASS
+- AETHERIS_B62_CLOSURE_RECEIPT_DUPLICATE_EVENT_IDEMPOTENT_PASS
+- AETHERIS_B62_CLOSURE_RECEIPT_DURABLE_RESTART_PASS
+
+**Critical trust limitations:** The node identity is copied from
+a local database row; it is NOT mTLS/SPIFFE/hardware attestation.
+The receipt is NOT signed, is transferable/replayable as data, and
+has NO independently authenticated issuer, remote-writer shutdown
+evidence, quorum, replicated monotonic anti-replay journal, cutover
+challenge validation or post-commit delivery proof. A privileged
+database owner/superuser can alter the schema, disable triggers,
+change stored receipt data or restore old snapshots. Resource-local
+receipt presence cannot be consumed as a production release token.
+
+Next review-only work must specify an independently authenticated
+resource-signing workload, pinned trust roots, exact release
+epoch and request/challenge binding, durable one-time consumption,
+bounded failure semantics for lost/duplicated ACKs, and a cutover
+protocol that demonstrates **ALL old writer paths** are fenced
+before assigning new authority. A signed receipt from only one
+resource cannot prove remote fencing. Real customer/task effects,
+Runtime APIs, Mission/SSE routes, production keys and release
+controls remain unchanged. Runtime #23, Platform #251 and nine
+Stage45 attestations remain unresolved. **Stage45 NO_GO.**
