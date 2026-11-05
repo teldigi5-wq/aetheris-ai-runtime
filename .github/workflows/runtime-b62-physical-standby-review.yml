@@ -64,6 +64,10 @@ jobs:
                          "AETHERIS_B62_CUTOVER_STALE_NEW_TERM_FAIL_CLOSED_PASS",
                          "AETHERIS_B62_CUTOVER_ORDERED_OPERATOR_REHEARSAL_PASS",
                          "AETHERIS_B62_CUTOVER_REPEATED_OUTAGE_FAIL_CLOSED_PASS",
+                         "AETHERIS_B62_CUTOVER_GATE_CHECK_THEN_WRITE_RACE_NO_GO_PASS",
+                         "AETHERIS_B62_CUTOVER_DIRECT_SQL_BYPASS_OUTAGE_NO_GO_PASS",
+                         "wait \"$race_pid\"",
+                         "touch \"$cutover_race_dir/release\"",
                          "review_cutover_effect()",
                          "docker inspect -f '{{.State.Running}}'",
                          "grep -Fxq t \"$detached_action_output\"",
@@ -108,6 +112,17 @@ jobs:
           assert '[[ "$local_term" == "$standby:5" ]] || return 1' in script
           assert "review_cutover_effect 'rehearsal-post-fence-action'" in script
           assert 'docker stop "$authority"' in script
+          # Test-only pause makes the check/write TOCTOU deterministic.
+          assert "if [[ \"$request\" == 'race-after-gate-checks' ]]; then" in script
+          assert 'printf \'checked\\n\'' in script
+          assert "cutover_race_dir=\"$(mktemp -d)\"" in script
+          assert '[[ -z "$cutover_race_dir" ]] || rm -rf -- "$cutover_race_dir"' in script
+          assert "UPDATE public.leader_fence SET term=6," in script
+          assert "WHERE request_id='race-after-gate-checks'" in script
+          assert "if review_cutover_effect 'race-fresh-recheck-must-deny'; then" in script
+          assert "SELECT public.b62_local_try_effect(5,'post-cutover-direct-sql-bypass')" in script
+          assert "WHERE request_id='post-cutover-direct-sql-bypass'" in script
+          assert 'AETHERIS_B62_CUTOVER_DIRECT_SQL_BYPASS_OUTAGE_NO_GO_PASS' in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
