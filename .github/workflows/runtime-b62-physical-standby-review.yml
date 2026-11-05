@@ -106,7 +106,7 @@ jobs:
           assert "AETHERIS_B62_DETACHED_INFLIGHT_STALE_EFFECT_COMMITS_NO_GO_PASS" in script
           # Cutover rehearsal is explicitly fail-closed under network
           # isolation, coordinator outages, and mismatched local terms.
-          assert script.count("if review_cutover_effect '") == 5
+          assert script.count("if review_cutover_effect '") == 6
           assert '[[ "$old_running" == false ]] || return 1' in script
           assert '[[ "$leader" == "$standby:5" ]] || return 1' in script
           assert '[[ "$local_term" == "$standby:5" ]] || return 1' in script
