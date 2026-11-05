@@ -19,6 +19,8 @@ held_action_output=""
 transition_output=""
 detached_action_output=""
 cutover_race_dir=""
+writer_drain_output=""
+writer_drain_error=""
 
 cleanup() {
   local code=$?
@@ -29,6 +31,8 @@ cleanup() {
   [[ -z "$transition_output" ]] || rm -f -- "$transition_output"
   [[ -z "$detached_action_output" ]] || rm -f -- "$detached_action_output"
   [[ -z "$cutover_race_dir" ]] || rm -rf -- "$cutover_race_dir"
+  [[ -z "$writer_drain_output" ]] || rm -f -- "$writer_drain_output"
+  [[ -z "$writer_drain_error" ]] || rm -f -- "$writer_drain_error"
   if test "$code" -eq 0; then
     echo AETHERIS_B62_PHYSICAL_REPLICA_CONTAINERS_NETWORK_DESTROYED_PASS
   fi
@@ -585,12 +589,24 @@ local_setup() {
       DEFAULT 0 CHECK(lock_guard=0);
     CREATE TABLE public.b62_local_effects(
       request_id text PRIMARY KEY, term bigint NOT NULL CHECK(term>0));
+    -- Actual enforcement lives inside the resource-side SQL function,
+    -- NOT in an optional API/shell preflight. OPEN is unsafe while a
+    -- different coordinator can advance independently; CLOSE is local.
+    CREATE TABLE public.b62_writer_gate(
+      resource_key text PRIMARY KEY,
+      state text NOT NULL CHECK(state IN ('OPEN','CLOSED')),
+      lock_guard smallint NOT NULL DEFAULT 0 CHECK(lock_guard=0));
+    INSERT INTO public.b62_writer_gate(resource_key,state)
+      VALUES('runtime','OPEN');
     CREATE ROLE $local_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
     CREATE ROLE $local_writer LOGIN PASSWORD '$password';
-    REVOKE ALL ON public.b62_local_fence,public.b62_local_effects FROM PUBLIC;
+    REVOKE ALL ON public.b62_local_fence,public.b62_local_effects,
+      public.b62_writer_gate FROM PUBLIC;
     GRANT USAGE ON SCHEMA public TO $local_owner,$local_writer;
     GRANT SELECT ON public.b62_local_fence TO $local_owner;
     GRANT UPDATE(lock_guard) ON public.b62_local_fence TO $local_owner;
+    GRANT SELECT ON public.b62_writer_gate TO $local_owner;
+    GRANT UPDATE(lock_guard) ON public.b62_writer_gate TO $local_owner;
     GRANT INSERT ON public.b62_local_effects TO $local_owner;
     CREATE FUNCTION public.b62_local_try_effect(p_term bigint,p_id text)
     RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER
@@ -603,10 +619,16 @@ local_setup() {
          OR p_id IS NULL OR p_id !~ '^[a-z][a-z0-9-]{0,47}$' THEN
         RETURN false;
       END IF;
-      PERFORM 1 FROM public.b62_local_fence
-      WHERE resource_key='runtime' AND endpoint='$pinned'
-        AND term=p_term AND NOT pg_is_in_recovery()
-      FOR SHARE;
+      -- Lock the LOCAL write gate and local term in the same transaction
+      -- as the effect, so an administrator's CLOSE cannot overtake
+      -- an in-flight resource-local operation. This DOES NOT lock any
+      -- remote coordinator row or other writable physical primary.
+      PERFORM 1 FROM public.b62_local_fence f
+      JOIN public.b62_writer_gate g ON g.resource_key=f.resource_key
+      WHERE f.resource_key='runtime' AND f.endpoint='$pinned'
+        AND f.term=p_term AND g.state='OPEN'
+        AND NOT pg_is_in_recovery()
+      FOR SHARE OF f,g;
       IF NOT FOUND THEN RETURN false; END IF;
       INSERT INTO public.b62_local_effects VALUES(p_id,p_term);
       RETURN true;
@@ -946,3 +968,96 @@ test "$(standby_sql "SELECT term FROM public.b62_local_effects
   WHERE request_id='post-cutover-direct-sql-bypass'")" = 5
 test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 6
 echo AETHERIS_B62_CUTOVER_DIRECT_SQL_BYPASS_OUTAGE_NO_GO_PASS
+
+
+# Resource-owned LOCAL closure experiment. The earlier fail-open cases
+# remain explicit above, where the gate was OPEN. No upstream coordinator
+# can force CLOSED across partitions; the operator here acts on the
+# independently writable promoted resource via its private SQL admin.
+if local_call "$standby" "$local_new_pw" \
+  "UPDATE public.b62_writer_gate SET state='CLOSED'
+   WHERE resource_key='runtime'" >/dev/null 2>&1; then
+  echo "FAIL: restricted effect login can close/reopen its own gate" >&2
+  exit 1
+fi
+if standby_sql "BEGIN; SET LOCAL ROLE $local_owner;
+  UPDATE public.b62_writer_gate SET state='CLOSED'
+  WHERE resource_key='runtime';" >/dev/null 2>&1; then
+  echo "FAIL: SECURITY DEFINER owner can change admission state" >&2
+  exit 1
+fi
+test "$(standby_sql "SELECT state FROM public.b62_writer_gate
+  WHERE resource_key='runtime'")" = OPEN
+# Real in-flight write must retain the gate-row FOR SHARE lock until
+# COMMIT. A competing operator CLOSE must *specifically* time out.
+writer_drain_output="$(mktemp)"
+writer_drain_error="$(mktemp)"
+(
+  local_call "$standby" "$local_new_pw" \
+    "BEGIN;
+     SELECT public.b62_local_try_effect(5,'drain-before-close');
+     SELECT pg_sleep(12);
+     COMMIT;"
+) >"$writer_drain_output" 2>&1 &
+drain_pid=$!
+drain_ready=false
+for poll in $(seq 1 80); do
+  if test "$(standby_sql "SELECT count(*) FROM pg_stat_activity
+      WHERE usename='$local_writer' AND datname='$db'
+        AND state='active' AND wait_event='PgSleep'
+        AND query LIKE '%drain-before-close%'")" = 1; then
+    drain_ready=true
+    break
+  fi
+  if ! kill -0 "$drain_pid" 2>/dev/null; then break; fi
+  sleep 0.1
+done
+if test "$drain_ready" != true; then
+  echo "FAIL: local writer did not reach observed drain hold" >&2
+  exit 1
+fi
+if standby_sql "BEGIN; SET LOCAL lock_timeout='400ms';
+  UPDATE public.b62_writer_gate SET state='CLOSED'
+    WHERE resource_key='runtime' AND state='OPEN';
+  COMMIT;" > /dev/null 2>"$writer_drain_error"; then
+  echo "FAIL: local gate CLOSED while active effect held lock" >&2
+  exit 1
+fi
+if ! grep -Fq 'canceling statement due to lock timeout' \
+    "$writer_drain_error"; then
+  echo "FAIL: gate CLOSE failed for unrelated reason" >&2
+  exit 1
+fi
+wait "$drain_pid"
+grep -Fxq t "$writer_drain_output"
+test "$(standby_sql "SELECT term FROM public.b62_local_effects
+  WHERE request_id='drain-before-close'")" = 5
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 7
+echo AETHERIS_B62_RESOURCE_GATE_DRAIN_LOCK_SERIALIZES_PASS
+
+# The admin can CLOSE only after the in-flight effect commits.
+test "$(standby_sql "UPDATE public.b62_writer_gate SET state='CLOSED'
+  WHERE resource_key='runtime' AND state='OPEN'
+  RETURNING state;")" = CLOSED
+test "$(standby_sql "SELECT state FROM public.b62_writer_gate
+  WHERE resource_key='runtime'")" = CLOSED
+# The restricted login retains EXECUTE permission on its SQL function,
+# yet its direct SQL call MUST return false once the resource-local
+# gate closure is committed. No optional shell admission is involved.
+test "$(local_call "$standby" "$local_new_pw" \
+  "SELECT public.b62_local_try_effect(5,'direct-after-closed')")" = f
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 7
+if local_call "$standby" "$local_new_pw" \
+  "UPDATE public.b62_writer_gate SET state='OPEN'
+   WHERE resource_key='runtime'" >/dev/null 2>&1; then
+  echo "FAIL: restricted writer can reopen closed resource gate" >&2
+  exit 1
+fi
+test "$(standby_sql "SELECT state FROM public.b62_writer_gate
+  WHERE resource_key='runtime'")" = CLOSED
+test "$(standby_sql 'SELECT count(*) FROM public.b62_local_effects')" = 7
+echo AETHERIS_B62_RESOURCE_LOCAL_GATE_CLOSED_DENIES_DIRECT_SQL_PASS
+
+# This does NOT prove fail-closed on a coordinator outage while the gate
+# remains OPEN, nor power-fence independently writable stale resources.
+echo AETHERIS_B62_RESOURCE_GATE_DISTRIBUTED_LEADERSHIP_NO_GO
