@@ -950,3 +950,48 @@ node's durable local closure receipt. No production data, schema,
 keys, services, protected branches, releases or API gates change.
 Runtime issue #23 and Platform issue #251 remain open; PR #257
 is review-only. **Stage45 NO_GO.**
+
+## 5 November 2026 — concurrent replay serialization and rollback recovery in real PG16
+
+The prior signed ACK test confirmed a committed consumption journal
+remained visible from a new JDBC connection. This iteration tightens
+the **same disposable PostgreSQL16 lab** around real concurrency and
+failed transactions, using the existing one-time challenge and receipt
+rather than changing or recreating a closure receipt.
+
+After committing an observed local CLOSED gate, transaction A consumes
+a correctly verified synthetic RS256 acknowledgement, then explicitly
+ROLLS BACK. A subsequent use of the **same** immutable signed receipt
+and challenge succeeds: an abandoned transaction cannot permanently
+burn a claim that never committed.
+
+Transaction A then inserts the pending one-time claim and remains open.
+A distinct, authenticated-by-test-fixture JDBC session B invokes
+the exact same conditional consumption SQL on another thread. CI first
+retrieves B's actual pg_backend_pid() and polls **pg_stat_activity**
+until PostgreSQL exposes a **Lock** wait; merely starting two threads
+does not count as concurrency evidence. A commits while B is blocked.
+B then completes and returns **false**, because the unique challenge
+and receipt entry was already committed. A second same-transaction
+claim is also denied. The test joins the competing thread in a
+bounded interval, checks for SQL exceptions, and closes both JDBC
+connections; the surrounding existing test still verifies that
+another independently signed challenge cannot reuse a consumed receipt.
+
+The workflow guards now require the observed lock-wait assertions,
+rollback-retry case, losing replay result and bounded worker join.
+The uniquely named b62_ack_ schema is removed after the test, with
+CI checking that no disposable schema remains.
+
+This is evidence for **single-PostgreSQL-database unique-index
+serialization and rollback semantics**, not evidence that the
+challenge issuer is authenticated, the synthetic public key belongs
+to a physically fenced resource, ACK transport is trusted, or a
+distributed ledger remains monotonic after failback, restored
+snapshots, physical data loss or independent partitions. The
+separate B62 physical-standby lab continues to prove privileged
+old-primary restart and stale local writer acceptance despite a
+different node's durable closure receipt. No real Runtime route,
+service task effect or leadership transfer has been activated.
+Runtime #23, Platform #251 and Stage45 attestations remain open.
+**Stage45 NO_GO.**
