@@ -105,3 +105,9 @@ Licensing does not alter the runtime certification boundary: the platform-certif
 ## Related repository
 
 Platform repository: [`teldigi5-wq/aetheris-platform`](https://github.com/teldigi5-wq/aetheris-platform)
+
+### 6 November S-B62-A operator evidence preflight (review-only, NO_GO)
+
+The existing S-B62-A work now includes a local, dependency-free **read-only structural preflight** at [scripts/security/runtime_b62_operator_fencing_preflight.py](scripts/security/runtime_b62_operator_fencing_preflight.py). Supply an **operator-redacted local JSON** with pseudonymous old/promoted primary, epoch-authority and external-fencer host/admin domains, and results and SHA-256 digests for five actual fault/revocation checks. The parser rejects unexpected fields (including credential material), duplicate keys, raw IP labels, missing evidence hashes, shared trust domains and any request to set GO. It never scans a host, opens sockets, executes shell commands, exports secrets, writes credentials or authorizes a release. Do not commit actual operator manifests or sensitive logs.
+
+Run offline: `python3 scripts/security/runtime_b62_operator_fencing_preflight.py --manifest /path/to/redacted-local-inventory.json`. An incomplete record returns BLOCKED; a complete self-asserted record is **STRUCTURALLY_COMPLETE_UNVERIFIED**, never certified. Only independently reviewed real ownership and physical resource-denial evidence can progress S-B62-A. The proposed ADR in the separate integrated review branch remains unapproved. Stage45 **NO_GO**; XERJ **HOLD**.
