@@ -60,6 +60,10 @@ async function inspect(page){
       width:document.documentElement.scrollWidth,
       innerWidth,
       canvas:document.querySelectorAll('canvas').length,
+      canvasPixels:[...document.querySelectorAll('.visual-panel canvas')]
+        .reduce((sum,c)=>sum+c.width*c.height,0),
+      renderPixelBudget:Number(document.querySelector('[data-render-pixel-budget]')
+        ?.getAttribute('data-render-pixel-budget')||0),
       smooth:document.querySelector('button[aria-pressed]')?.getAttribute('aria-pressed'),
       ready:document.querySelector('.tech-state')?.textContent,
       skip:document.querySelector('a.skip-link')?.getAttribute('href'),
@@ -97,11 +101,15 @@ try{
     if(cfg.name==='reduced'){
       assert.equal(first.engine,'reduced-static');
       assert.equal(first.canvas,0,'Reduced-motion must not allocate WebGL canvas');
+      assert.equal(first.canvasPixels,0,'Reduced-motion allocated render pixels');
       assert.equal(first.shot,'arrival');
       assert.equal(await page.locator('button[aria-pressed]').isDisabled(),true);
     }else{
       assert.equal(first.engine,'r3f-loaded');
       assert(first.canvas>=1,'Expected actual R3F Canvas');
+      assert.equal(first.renderPixelBudget,1200000);
+      assert(first.canvasPixels>0&&first.canvasPixels<=first.renderPixelBudget,
+        'Initial R3F canvas exceeded pixel budget');
       assert.match(first.ready||'',/demand rendering/);
       const start=await page.evaluate(()=>{
         const el=document.querySelector('#studio-story');
@@ -116,7 +124,20 @@ try{
       await page.waitForTimeout(500);
       const back=await inspect(page);
       assert(back.progress<moved.progress,'Reverse scroll was not tracked');
+      let wideCanvasPixels=null;
+      if(cfg.name==='desktop'){
+        await page.setViewportSize({width:2560,height:1440});
+        await page.waitForFunction(()=>{
+          const canvas=document.querySelector('.visual-panel canvas');
+          return canvas&&canvas.getBoundingClientRect().width>=2000&&
+            canvas.width*canvas.height>0&&canvas.width*canvas.height<=1200000;
+        },null,{timeout:12000});
+        wideCanvasPixels=(await inspect(page)).canvasPixels;
+        assert(wideCanvasPixels<=1200000,'Wide viewport violated render budget');
+        await page.setViewportSize({width:cfg.w,height:cfg.h});
+      }
       report.cases.push({name:cfg.name,canvas:first.canvas,
+        initialCanvasPixels:first.canvasPixels,wideCanvasPixels,
         scrollProgress:moved.progress,reverseProgress:back.progress,
         originalAsset:'pinned-owned-GLB',r3fLoaded:true,noExternalRequests:remote.length===0});
     }

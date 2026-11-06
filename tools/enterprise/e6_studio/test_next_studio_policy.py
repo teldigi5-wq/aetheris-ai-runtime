@@ -89,13 +89,18 @@ class E6NextResearchTests(unittest.TestCase):
     def test_webgl_scene_demand_renders_bounded_dpr_gltf(self):
         scene=(NEXT/"components/Scene3D.tsx").read_text()
         for required in ("useLoader(GLTFLoader",'/research-panel.glb',
-                         'frameloop="demand"',"dpr={[1,1.5]}",
+                         'frameloop="demand"',"dpr={dpr}",
                          "useThree(state=>state.invalidate)",
                          'shadows={false}',"camera.lookAt(0,0,0)",
                          "mesh","<primitive object={asset.scene}"):
             if required=="mesh":
                 continue
             self.assertIn(required,scene,required)
+        for required in ("PIXEL_BUDGET=1_200_000", "TARGET_PIXELS=1_150_000",
+                         "boundedDpr(", "ResizeObserver", "getBoundingClientRect()",
+                         "data-render-pixel-budget={PIXEL_BUDGET}"):
+            self.assertIn(required,scene)
+        self.assertNotIn("dpr={[1,1.5]}",scene)
         self.assertNotIn("DracoLoader",scene)
         self.assertNotIn("model.generate",scene)
 
