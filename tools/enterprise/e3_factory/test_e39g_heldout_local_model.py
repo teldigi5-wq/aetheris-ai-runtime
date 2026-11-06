@@ -77,12 +77,23 @@ class BridgeTests(unittest.TestCase):
 
     def test_wrong_pinned_digest_denied_before_inference(self):
         c=MockOllama(digest="b"*64)
+        if os.name != "posix":
+            with self.assertRaisesRegex(ValueError,"NATIVE_WINDOWS_PRIVATE_RECEIPT"):
+                bridge.infer(self.bundle,self.out,MODEL,DIGEST,c)
+            self.assertEqual(len(c.calls),0)
+            self.assertFalse(self.out.exists())
+            return
         with self.assertRaisesRegex(ValueError,"DIGEST_MISMATCH"):
             bridge.infer(self.bundle,self.out,MODEL,DIGEST,c)
         self.assertEqual(len(c.calls),1)
         self.assertFalse(self.out.exists())
 
     def test_incomplete_reply_creates_no_success_receipt(self):
+        if os.name != "posix":
+            with self.assertRaisesRegex(ValueError,"NATIVE_WINDOWS_PRIVATE_RECEIPT"):
+                bridge.infer(self.bundle,self.out,MODEL,DIGEST,MockOllama(failure=True))
+            self.assertFalse(self.out.exists())
+            return
         with self.assertRaisesRegex(ValueError,"INCOMPLETE"):
             bridge.infer(self.bundle,self.out,MODEL,DIGEST,MockOllama(failure=True))
         self.assertFalse(self.out.exists())
