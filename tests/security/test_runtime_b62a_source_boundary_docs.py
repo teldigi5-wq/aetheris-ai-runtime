@@ -11,7 +11,7 @@ DECISION = ROOT / "docs/security/RUNTIME_S_B62_A_FENCING_DEPLOYMENT_DECISION_202
 
 PINNED = {
     "orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeUncertifiedApiHttpFilter.java": "d74d380e051dfb828baedcb6f920a0a760cda7bc",
-    "orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeSyntheticFencedEffectProbe.java": "51d31e6a926b993e16c7428277b80b8958f559a8",
+    "orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeSyntheticFencedEffectProbe.java": "a5f3bf5fadb338f75700db634d04d6098446a8f1",
     "orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimePinnedClosureAckVerifier.java": "ba1a263d2796021e7df50fafcf13d154768b8a43",
     "orchestrator-service/src/main/resources/application.properties": "dd6fbc95cd6f4c59dfa6980aca88fd69f29c116b",
 }

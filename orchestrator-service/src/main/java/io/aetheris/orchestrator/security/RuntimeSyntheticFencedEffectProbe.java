@@ -65,6 +65,11 @@ public final class RuntimeSyntheticFencedEffectProbe {
                   SELECT 1 FROM principal_epochs epoch
                   WHERE epoch.principal_id=?
                     AND ?<=epoch.reject_issued_at_or_before_epoch)
+            -- Serialize in-flight review-only effects with changes to
+            -- their selected task, membership and session rows. This does
+            -- NOT fence other DB primaries or protect absence predicates for
+            -- signer/epoch revocation; production roles need reviewed grants.
+            FOR SHARE OF t,tm,pm,active
         ),
         inserted AS (
             INSERT INTO synthetic_guarded_task_effects

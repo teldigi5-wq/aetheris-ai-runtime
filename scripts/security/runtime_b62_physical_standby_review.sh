@@ -24,6 +24,8 @@ writer_drain_output=""
 writer_drain_error=""
 gate_tamper_error=""
 fencer_writer_output=""
+session_race_output=""
+session_race_error=""
 
 cleanup() {
   local code=$?
@@ -38,6 +40,8 @@ cleanup() {
   [[ -z "$writer_drain_error" ]] || rm -f -- "$writer_drain_error"
   [[ -z "$gate_tamper_error" ]] || rm -f -- "$gate_tamper_error"
   [[ -z "$fencer_writer_output" ]] || rm -f -- "$fencer_writer_output"
+  [[ -z "$session_race_output" ]] || rm -f -- "$session_race_output"
+  [[ -z "$session_race_error" ]] || rm -f -- "$session_race_error"
   if test "$code" -eq 0; then
     echo AETHERIS_B62_PHYSICAL_REPLICA_CONTAINERS_NETWORK_DESTROYED_PASS
   fi
@@ -67,6 +71,88 @@ done
 test "$ready" = true
 test "$(primary_sql 'SELECT pg_is_in_recovery()')" = f
 test "$(primary_sql 'SHOW wal_level')" = replica
+
+# S-B62-A: real PostgreSQL READ COMMITTED revocation/commit-order counterexample.
+# This tests the SAME RESOURCE only. It does not provide global fencing.
+primary_sql "CREATE TABLE public.b62_session_revocation_race(
+  id integer PRIMARY KEY, state text NOT NULL
+  CHECK(state IN ('ACTIVE','REVOKED')));
+  CREATE TABLE public.b62_session_effect_race(
+  id integer PRIMARY KEY);
+  INSERT INTO public.b62_session_revocation_race VALUES(1,'ACTIVE');" >/dev/null
+session_race_output="$(mktemp)"
+session_race_error="$(mktemp)"
+# No authorization-row lock: an independent session can revoke while the
+# pending effect transaction sleeps and it still subsequently commits.
+(
+  primary_sql "BEGIN;
+    WITH eligible AS MATERIALIZED (
+      SELECT id FROM public.b62_session_revocation_race
+      WHERE id=1 AND state='ACTIVE'
+    )
+    INSERT INTO public.b62_session_effect_race SELECT id FROM eligible;
+    SELECT pg_sleep(4);
+    COMMIT;"
+) >"$session_race_output" 2>"$session_race_error" &
+session_race_pid=$!
+sleeping=false
+for attempt in $(seq 1 60); do
+  if test "$(primary_sql "SELECT count(*) FROM pg_stat_activity
+        WHERE pid<>pg_backend_pid() AND datname='$db'
+          AND wait_event='PgSleep' AND state='active'")" = 1; then
+    sleeping=true; break
+  fi
+  sleep 0.1
+done
+test "$sleeping" = true
+primary_sql "UPDATE public.b62_session_revocation_race
+ SET state='REVOKED' WHERE id=1;" >/dev/null
+test "$(primary_sql "SELECT state FROM public.b62_session_revocation_race
+  WHERE id=1")" = REVOKED
+wait "$session_race_pid"
+test "$(primary_sql 'SELECT count(*) FROM public.b62_session_effect_race')" = 1
+echo AETHERIS_B62_UNGUARDED_SESSION_REVOCATION_COMMIT_RACE_NO_GO_PASS
+
+# Matching authorized session selected FOR SHARE: a conflicting UPDATE
+# must wait until the in-flight effect commits, never overtake its commit.
+primary_sql "TRUNCATE public.b62_session_effect_race;
+  UPDATE public.b62_session_revocation_race SET state='ACTIVE'
+  WHERE id=1;" >/dev/null
+(
+  primary_sql "BEGIN;
+    WITH eligible AS MATERIALIZED (
+      SELECT id FROM public.b62_session_revocation_race
+      WHERE id=1 AND state='ACTIVE' FOR SHARE
+    )
+    INSERT INTO public.b62_session_effect_race SELECT id FROM eligible;
+    SELECT pg_sleep(4);
+    COMMIT;"
+) >"$session_race_output" 2>"$session_race_error" &
+session_race_pid=$!
+sleeping=false
+for attempt in $(seq 1 60); do
+  if test "$(primary_sql "SELECT count(*) FROM pg_stat_activity
+        WHERE pid<>pg_backend_pid() AND datname='$db'
+          AND wait_event='PgSleep' AND state='active'")" = 1; then
+    sleeping=true; break
+  fi
+  sleep 0.1
+done
+test "$sleeping" = true
+if primary_sql "BEGIN; SET LOCAL lock_timeout='350ms';
+  UPDATE public.b62_session_revocation_race
+    SET state='REVOKED' WHERE id=1;
+  COMMIT;" >/dev/null 2>&1; then
+  echo 'FAIL: session revocation overtook in-flight locked effect' >&2
+  exit 1
+fi
+test "$(primary_sql 'SELECT state FROM public.b62_session_revocation_race WHERE id=1')" = ACTIVE
+wait "$session_race_pid"
+test "$(primary_sql 'SELECT count(*) FROM public.b62_session_effect_race')" = 1
+primary_sql "UPDATE public.b62_session_revocation_race SET state='REVOKED' WHERE id=1;" >/dev/null
+test "$(primary_sql 'SELECT state FROM public.b62_session_revocation_race WHERE id=1')" = REVOKED
+echo AETHERIS_B62_SESSION_REVOCATION_SERIALIZES_WITH_EFFECT_PASS
+
 
 # Replication-only account and an isolated ephemeral Docker bridge.
 primary_sql "CREATE ROLE $replicauser LOGIN REPLICATION PASSWORD '$replica_password';" >/dev/null

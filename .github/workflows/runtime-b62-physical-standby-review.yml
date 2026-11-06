@@ -288,6 +288,8 @@ jobs:
             AETHERIS_B62_CI_HOST_ADMIN_RESTART_REENABLES_OLD_WRITER_NO_GO_PASS; do
             grep -Fq "$required" scripts/security/runtime_b62_physical_standby_review.sh
           done
+          grep -Fq 'AETHERIS_B62_UNGUARDED_SESSION_REVOCATION_COMMIT_RACE_NO_GO_PASS' scripts/security/runtime_b62_physical_standby_review.sh
+          grep -Fq 'AETHERIS_B62_SESSION_REVOCATION_SERIALIZES_WITH_EFFECT_PASS' scripts/security/runtime_b62_physical_standby_review.sh
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
       - name: Real physical standby, stale WAL, deliberate isolated dual-primary and old-primary fencing
@@ -342,6 +344,7 @@ jobs:
                          'lease.isBoundTo(workload)',
                          'Connection connection',
                          'WITH locked_fence AS MATERIALIZED',
+                         'FOR SHARE OF t,tm,pm,active',
                          'NOT pg_is_in_recovery()'):
               assert marker in src, marker
           for forbidden in ('@Component', '@Bean', 'request.getHeader('):
