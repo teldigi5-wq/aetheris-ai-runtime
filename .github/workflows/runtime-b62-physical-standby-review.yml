@@ -418,19 +418,23 @@ jobs:
           done
           test "$ready" = yes
           ./mvnw -B -ntp -f orchestrator-service/pom.xml \
-            -Dtest=RuntimeB62FullEffectJdbcTest test
+            -Dtest=RuntimeB62FullEffectJdbcTest,RuntimeB62TicketAuthorityJdbcTest test
           python3 - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET
-          reports=list(Path("orchestrator-service/target/surefire-reports").glob(
-              "TEST-io.aetheris.orchestrator.security.RuntimeB62FullEffectJdbcTest.xml"))
-          assert len(reports)==1, "Required REAL Java JDBC test not executed"
-          root=ET.parse(reports[0]).getroot()
-          assert int(root.get("tests", "0")) >= 14
-          assert int(root.get("failures", "1")) == 0
-          assert int(root.get("errors", "1")) == 0
-          assert int(root.get("skipped", "1")) == 0
+          specs={"RuntimeB62FullEffectJdbcTest":14,"RuntimeB62TicketAuthorityJdbcTest":8}
+          directory=Path("orchestrator-service/target/surefire-reports")
+          for name, minimum in specs.items():
+              reports=list(directory.glob(
+                  "TEST-io.aetheris.orchestrator.security."+name+".xml"))
+              assert len(reports)==1, "Required real Java JDBC suite absent: "+name
+              root=ET.parse(reports[0]).getroot()
+              assert int(root.get("tests", "0")) >= minimum, name
+              assert int(root.get("failures", "1")) == 0, name
+              assert int(root.get("errors", "1")) == 0, name
+              assert int(root.get("skipped", "1")) == 0, name
           print("AETHERIS_B62_FULL_JAVA_PG16_RESTRICTED_SCOPE_PASS")
+          print("AETHERIS_B62_TICKET_GATED_EFFECT_CANDIDATE_REVIEW_PASS")
           PY
           test -z "$(docker exec "$name" psql -X -A -t -U "$PGUSER" -d "$PGDATABASE" \
             -c "SELECT nspname FROM pg_namespace WHERE nspname LIKE 'b62_effect_%'")"
