@@ -303,3 +303,47 @@ jobs:
         shell: bash
         run: |
           echo AETHERIS_B62_REAL_STANDBY_NONPRODUCTION_STAGE45_NO_GO
+
+  b62-review-effect-scope-denial:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      AETHERIS_SYNTRA_OWNER_RUNTIME_ENABLED: "false"
+      AETHERIS_DISPATCHER_ENABLED: "false"
+    steps:
+      - name: Checkout pinned exact Runtime head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Java 21 and cached Maven
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Verify read-only principal cannot enter synthetic write probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path("orchestrator-service/src/main/java/io/aetheris/orchestrator")
+          src=(root/"security/RuntimeSyntheticFencedEffectProbe.java").read_text()
+          for marker in ('principal.hasScope("orchestrator:read")',
+                         'principal.hasScope("orchestrator:write")',
+                         'lease.isBoundTo(workload)',
+                         'Connection connection',
+                         'WITH locked_fence AS MATERIALIZED',
+                         'NOT pg_is_in_recovery()'):
+              assert marker in src, marker
+          for forbidden in ('@Component', '@Bean', 'request.getHeader('):
+              assert forbidden not in src, forbidden
+          lock=(root/"api/OwnerlessTaskMissionHttpFilter.java").read_text()
+          assert "@Component" in lock and "SC_NOT_FOUND" in lock
+          print("AETHERIS_B62_SYNTHETIC_EFFECT_SOURCE_WRITE_SCOPE_DENY_ONLY_PASS")
+          PY
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml \
+            -Dtest=RuntimeSyntheticFencedEffectScopeTest test
+          echo AETHERIS_B62_SIGNED_READ_ONLY_CANNOT_REACH_JDBC_EFFECT_PASS
+          echo AETHERIS_B62_REVIEW_EFFECT_SCOPE_NONPRODUCTION_STAGE45_NO_GO

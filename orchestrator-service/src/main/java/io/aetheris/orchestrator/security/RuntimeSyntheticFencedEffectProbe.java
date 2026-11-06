@@ -92,6 +92,9 @@ public final class RuntimeSyntheticFencedEffectProbe {
                 || effectId == null || lease == null || workload == null
                 || !valid(tenant) || !valid(project)
                 || !principal.hasScope("orchestrator:read")
+                // Read ownership is not write authority. Both signed scopes
+                // are required; SQL resource/member guards remain mandatory.
+                || !principal.hasScope("orchestrator:write")
                 || !lease.isBoundTo(workload)) return false;
         if (connection.getAutoCommit() || connection.isReadOnly()) return false;
         final RuntimePinnedPrincipalVerifier.VerifiedRevocationFacts signed;
