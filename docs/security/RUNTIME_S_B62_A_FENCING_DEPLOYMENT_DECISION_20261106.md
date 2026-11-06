@@ -1,6 +1,6 @@
 # S-B62-A — Resource-fencing deployment decision for independent review
 
-**Status: PROPOSED / NOT APPROVED** · **Date: 2026-11-06** · **Parent:** [ADR B62-001](https://github.com/teldigi5-wq/aetheris-ai-runtime/blob/test/b62-integrated-pinned-6caa4df-20261105/docs/security/RUNTIME_B62_INDEPENDENT_FENCING_AUTHORITY_ADR_20261106.md) · **Track:** proposed Runtime S-B62-A ONLY.
+**Status: PROPOSED / NOT APPROVED** · **Date: 2026-11-06** · **Parent:** [ADR B62-001](RUNTIME_B62_INDEPENDENT_FENCING_AUTHORITY_ADR_20261106.md) and [current trust-boundary inventory](RUNTIME_B62_TRUST_BOUNDARY_SOURCE_INVENTORY_20261106.md) · **Track:** proposed Runtime S-B62-A ONLY.
 
 This is a source-backed choice record for the S-B62-A **deployment inventory, independent authority and real old-primary fencing** acceptance. It does not introduce S-B62-B, change a runtime API, approve a new leader, replace historical Platform B62-A–G13 or Enterprise E-series roadmaps, or certify release. **Stage45 NO_GO; XERJ HOLD; Execution Phase A BLOCKED_PENDING_HARDWARE.**
 

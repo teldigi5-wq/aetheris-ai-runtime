@@ -276,6 +276,8 @@ jobs:
           python3 -m unittest discover -s tests/security -p 'test_runtime_b62_operator_fencing_preflight.py' -v
           python3 -m py_compile scripts/security/runtime_b62a_operator_receipt_review.py
           python3 -m unittest discover -s tests/security -p 'test_runtime_b62a_operator_receipt_review.py' -v
+          python3 -m unittest discover -s tests/security -p 'test_runtime_b62a_source_boundary_docs.py' -v
+          echo AETHERIS_B62A_SOURCE_PINNED_INVENTORY_REVIEW_PASS
           echo AETHERIS_B62A_LOCAL_RECEIPT_DIGEST_NO_GO_PASS
           echo AETHERIS_B62A_OPERATOR_PREFLIGHT_STRUCTURAL_TESTS_PASS
           for required in \
