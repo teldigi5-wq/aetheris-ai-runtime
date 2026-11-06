@@ -81,6 +81,14 @@ jobs:
                          "AETHERIS_B62_ACK_LEDGER_PERSISTS_PHYSICAL_RESTART_REPLAY_DENIED_PASS",
                          "AETHERIS_B62_RESTRICTED_WRITER_CANNOT_ERASE_ACK_LEDGER_PASS",
                          "AETHERIS_B62_PRIVILEGED_ACK_LEDGER_ERASURE_REPLAY_NO_GO_PASS",
+                         "AETHERIS_B62_INDEPENDENT_COORDINATOR_ACK_LEDGER_ONCE_PASS",
+                         "AETHERIS_B62_LOCAL_ADMIN_ERASURE_CANNOT_RESET_COORDINATOR_ACK_PASS",
+                         "AETHERIS_B62_INDEPENDENT_ACK_LEDGER_RESTART_AND_OUTAGE_PASS",
+                         "AETHERIS_B62_COORDINATOR_OWNER_ERASES_ACK_LEDGER_NO_GO_PASS",
+                         "CREATE TABLE public.b62_independent_ack_issued",
+                         "CREATE TABLE public.b62_independent_ack_consumed",
+                         "CREATE FUNCTION public.b62_consume_independent_ack",
+                         "GRANT SELECT(challenge_id) ON public.b62_independent_ack_consumed",
                          "CREATE TABLE public.b62_ack_pending",
                          "CREATE TABLE public.b62_ack_consumed",
                          "REVOKE ALL ON public.b62_ack_pending",
@@ -217,6 +225,14 @@ jobs:
                          "AETHERIS_B62_ACK_LEDGER_PERSISTS_PHYSICAL_RESTART_REPLAY_DENIED_PASS",
                          "AETHERIS_B62_RESTRICTED_WRITER_CANNOT_ERASE_ACK_LEDGER_PASS",
                          "AETHERIS_B62_PRIVILEGED_ACK_LEDGER_ERASURE_REPLAY_NO_GO_PASS",
+                         "AETHERIS_B62_INDEPENDENT_COORDINATOR_ACK_LEDGER_ONCE_PASS",
+                         "AETHERIS_B62_LOCAL_ADMIN_ERASURE_CANNOT_RESET_COORDINATOR_ACK_PASS",
+                         "AETHERIS_B62_INDEPENDENT_ACK_LEDGER_RESTART_AND_OUTAGE_PASS",
+                         "AETHERIS_B62_COORDINATOR_OWNER_ERASES_ACK_LEDGER_NO_GO_PASS",
+                         "CREATE TABLE public.b62_independent_ack_issued",
+                         "CREATE TABLE public.b62_independent_ack_consumed",
+                         "CREATE FUNCTION public.b62_consume_independent_ack",
+                         "GRANT SELECT(challenge_id) ON public.b62_independent_ack_consumed",
                          "CREATE TABLE public.b62_ack_pending",
                          "CREATE TABLE public.b62_ack_consumed",
                          "UNIQUE",
@@ -229,6 +245,23 @@ jobs:
           assert "GRANT DELETE ON public.b62_ack_consumed" not in script
           assert "GRANT INSERT ON public.b62_ack_consumed" not in script
           assert script.count('test "$(b62_consume_physical_ack') >= 5
+          # The independent coordinator ledger resists resource-owner
+          # local deletion, but its own privileged owner can still erase.
+          for marker in (
+              "CREATE TABLE public.b62_independent_ack_issued",
+              "CREATE TABLE public.b62_independent_ack_consumed",
+              "CREATE FUNCTION public.b62_consume_independent_ack",
+              "session_user <> '$fence_new'",
+              "GRANT SELECT(challenge_id) ON public.b62_independent_ack_consumed",
+              "REVOKE ALL ON public.b62_independent_ack_issued",
+              "ALTER FUNCTION public.b62_consume_independent_ack",
+              "independent_ack_sql=",
+              "AETHERIS_B62_INDEPENDENT_COORDINATOR_ACK_LEDGER_ONCE_PASS",
+              "AETHERIS_B62_LOCAL_ADMIN_ERASURE_CANNOT_RESET_COORDINATOR_ACK_PASS",
+              "AETHERIS_B62_INDEPENDENT_ACK_LEDGER_RESTART_AND_OUTAGE_PASS",
+              "AETHERIS_B62_COORDINATOR_OWNER_ERASES_ACK_LEDGER_NO_GO_PASS"):
+              assert marker in script, marker
+          assert "GRANT DELETE ON public.b62_independent_ack_consumed" not in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
