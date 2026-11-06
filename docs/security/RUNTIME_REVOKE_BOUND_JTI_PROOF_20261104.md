@@ -1058,3 +1058,76 @@ No protected Runtime API, real database, credential, deployment,
 merge or release gate was activated. Runtime #23, Platform #251,
 PR #257 independent review and the Stage45 attestations remain
 outstanding. **Stage45 NO_GO**.
+
+## 6 November 2026 — independent coordinator replay ledger versus resource-admin rollback
+
+The preceding B62 physical replay test demonstrated that a privileged
+administrator of the promoted resource could erase its spent-ACK
+record and replay the same synthetic challenge and closure receipt.
+This iteration introduces an **independent third PostgreSQL16
+coordinator ledger** in the same disposable physical-standby lab,
+using a separate database process, its own credentials and persisted
+storage. This is a controlled **replay-accounting** prototype, not
+a production cutover authority or trustworthy resource attestation.
+
+On the coordinator, the test operator registers the existing
+promoted resource's synthetic challenge UUID, closure-receipt UUID,
+expected endpoint and term 5. A narrowly granted SECURITY DEFINER
+function, callable only by the synthetic new coordinator actor,
+conditionally writes one unique challenge/receipt into the
+coordinator-owned journal. The function rejects mismatched issuer
+identity represented by PostgreSQL session_user, endpoint, term,
+expired issuance and non-READ COMMITTED or standby sessions.
+The non-login function owner has SELECT on issued challenges,
+INSERT on consumed rows and SELECT only on the RETURNING
+challenge ID. Callers cannot directly erase the ledger.
+
+The physical CI regression verifies a first consumption returns
+true and repeated consumption returns false. The separate resource
+administrator then deletes the **resource-local** spent record;
+that local SQL fixture admits the reused challenge again, reproducing
+the original NO_GO. Crucially, this does **not** delete the
+coordinator's independent spent record: it continues to reject
+the identical challenge/receipt. The coordinator process is then
+stopped and restarted with its original database storage, and
+the old receipt remains consumed and rejected. An unavailable
+coordinator never returns a usable positive result.
+
+The positive CI markers are:
+
+- AETHERIS_B62_INDEPENDENT_COORDINATOR_ACK_LEDGER_ONCE_PASS
+- AETHERIS_B62_LOCAL_ADMIN_ERASURE_CANNOT_RESET_COORDINATOR_ACK_PASS
+- AETHERIS_B62_INDEPENDENT_ACK_LEDGER_RESTART_AND_OUTAGE_PASS
+
+**Critical failure deliberately preserved:** The coordinator's
+own privileged database owner can DELETE the coordinator replay
+record and reconsume the original challenge. The lab explicitly
+performs this reset and requires
+AETHERIS_B62_COORDINATOR_OWNER_ERASES_ACK_LEDGER_NO_GO_PASS.
+A separate database only isolates the ledger from the resource
+administrator under the tested role separation; it is NOT
+append-only, quorum-witnessed, snapshot-rollback-resistant or
+independent of the coordinator operator.
+
+**Trust boundaries and nonclaims:** The physical shell experiment
+does not verify RS256 signatures. The previous Java pinned-signature
+verifier is a separate synthetic proof; no end-to-end authenticated
+issuer/workload/session binds it to this coordinator. Issuance is
+performed by the disposable database operator, not an independently
+authenticated cutover service. Connection errors are local
+failures, not globally durable deny decisions. The coordination
+journal cannot prove old-primary physical shutdown or safe
+transfer of leadership, and a live resource-local writer can
+still bypass optional coordinator checks. The separately writable
+old primary's unsafe privileged restart/rebind remains covered
+by the same real physical CI. Real resource fencing,
+authenticated signing, durable challenge issuance, tamper-resistant
+monotonic epochs, controlled failback and failure-injection evidence
+are still mandatory.
+
+Only the disposable lab script, CI review guard and this
+documentation change. No production database/schema, route,
+service identity, key, deployment or protected branch was
+changed. Runtime issue #23, Platform issue #251, independent
+PR review and the nine Stage45 attestations remain pending.
+**Stage45 NO_GO.**
