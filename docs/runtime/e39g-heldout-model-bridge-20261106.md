@@ -31,3 +31,5 @@ Ubuntu and Windows. No real model calls, no private challenges, no independent
 human certification, no new model repair successes, no owner approval and no
 Stage45 release approval are claimed. E3.9G remains NOT ACCEPTED; Stage45 NO_GO;
 S-B62-A physical fencing remains blocked; XERJ HOLD.
+
+Native Windows receipt protection: POSIX 0600 does not enforce a Windows DACL. The CLI explicitly refuses to generate private model-output receipts under native Windows. Use WSL2 Ubuntu/Linux with a verified private filesystem and separate OS sandbox, or design and independently test a Windows ACL mechanism before native execution. Cross-platform CI asserts Windows refusal, not a successful private write. The CI steps use bash with set -euo pipefail to propagate every test failure; a previous Windows test failed although GitHub marked the multi-command job successful at Actions #42259732689. That initial green result is NOT valid cross-platform acceptance.

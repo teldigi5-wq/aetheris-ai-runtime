@@ -1,6 +1,7 @@
 """B4G/B4H interoperability tests using a MOCK Ollama, never real model scoring."""
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -54,6 +55,12 @@ class BridgeTests(unittest.TestCase):
 
     def test_exact_four_calls_emit_b4h_compatible_receipt(self):
         client=MockOllama()
+        if os.name != "posix":
+            with self.assertRaisesRegex(ValueError,"NATIVE_WINDOWS_PRIVATE_RECEIPT"):
+                bridge.infer(self.bundle,self.out,MODEL,DIGEST,client)
+            self.assertFalse(self.out.exists())
+            self.assertEqual(len(client.calls),0)
+            return
         result=bridge.infer(self.bundle,self.out,MODEL,DIGEST,client)
         self.assertEqual(result["observedCalls"],4)
         self.assertFalse(result["independentCuratorVerified"])

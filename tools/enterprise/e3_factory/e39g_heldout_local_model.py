@@ -124,6 +124,10 @@ def infer(bundle: Path, output: Path, model: str, digest: str, opener=None):
         raise ValueError("BRIDGE_FULL_MODEL_DIGEST_REQUIRED")
     cases, bundle_hash = read_bundle(bundle)
     target = path_check(output, output=True)
+    # os.open(mode=0o600) cannot enforce a private DACL on native Windows.
+    # Refuse to write unprotected raw model replies; WSL/Linux is required.
+    if os.name != "posix":
+        raise ValueError("BRIDGE_NATIVE_WINDOWS_PRIVATE_RECEIPT_UNSUPPORTED_USE_WSL")
     client = opener if opener is not None else opener_local()
     tags = api(client, "GET", "/api/tags")
     models = tags.get("models") if type(tags) is dict else None
