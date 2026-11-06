@@ -359,6 +359,52 @@ class RuntimeB62FullEffectJdbcTest {
         assertEquals(1L, countEffects());
     }
 
+
+    @Test
+    void absentSignerBlacklistAllowsRevocationToOvertakeUncommittedEffect() throws Exception {
+        try (Connection executing = worker(); Connection revoking = owner()) {
+            executing.setAutoCommit(false);
+            assertTrue(effect(executing, alice, "tenant-a", "project-a", ALICE_TASK, UUID.randomUUID()));
+            try (Statement sql = revoking.createStatement()) {
+                assertEquals(1, sql.executeUpdate("INSERT INTO blocked_signer_kids VALUES ('"
+                    + ISSUER + "','effect-identity-key')"));
+            }
+            executing.commit();
+        }
+        assertEquals(1L, countEffects(),
+            "NO_GO: blacklist inserted before commit yet previously allowed effect committed");
+        try (Connection subsequent = worker()) {
+            subsequent.setAutoCommit(false);
+            assertFalse(effect(subsequent, alice, "tenant-a", "project-a", ALICE_TASK,
+                UUID.randomUUID()), "New statement must see committed signer revocation");
+            subsequent.rollback();
+        }
+    }
+
+    @Test
+    void absentPrincipalEpochAllowsRevocationToOvertakeUncommittedEffect() throws Exception {
+        long cutoff = alice.requireRevocationFacts().signedIssuedAt().getEpochSecond();
+        try (Connection executing = worker(); Connection revoking = owner()) {
+            executing.setAutoCommit(false);
+            assertTrue(effect(executing, alice, "tenant-a", "project-a", ALICE_TASK, UUID.randomUUID()));
+            try (PreparedStatement add = revoking.prepareStatement(
+                    "INSERT INTO principal_epochs(principal_id,reject_issued_at_or_before_epoch) VALUES (42,?)")) {
+                add.setLong(1, cutoff);
+                assertEquals(1, add.executeUpdate(),
+                    "Previously missing epoch row can be inserted while effect is pending");
+            }
+            executing.commit();
+        }
+        assertEquals(1L, countEffects(),
+            "NO_GO: principal cutoff committed before the previously authorized effect");
+        try (Connection subsequent = worker()) {
+            subsequent.setAutoCommit(false);
+            assertFalse(effect(subsequent, alice, "tenant-a", "project-a", ALICE_TASK,
+                UUID.randomUUID()), "New statement must observe committed principal cutoff");
+            subsequent.rollback();
+        }
+    }
+
     @AfterAll
     static void dropDisposableFixtureAndAssertCleanup() throws Exception {
         if (schema == null) return;
