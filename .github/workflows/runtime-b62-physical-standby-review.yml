@@ -344,7 +344,9 @@ jobs:
                          'lease.isBoundTo(workload)',
                          'Connection connection',
                          'WITH locked_fence AS MATERIALIZED',
-                         'FOR SHARE OF t,tm,pm,active',
+                         'FOR SHARE OF t,tm,pm,active,signer_guard,epoch_guard',
+                         'JOIN signer_authorizations signer_guard',
+                         'JOIN principal_epochs epoch_guard',
                          'NOT pg_is_in_recovery()'):
               assert marker in src, marker
           for forbidden in ('@Component', '@Bean', 'request.getHeader('):
@@ -424,7 +426,7 @@ jobs:
               "TEST-io.aetheris.orchestrator.security.RuntimeB62FullEffectJdbcTest.xml"))
           assert len(reports)==1, "Required REAL Java JDBC test not executed"
           root=ET.parse(reports[0]).getroot()
-          assert int(root.get("tests", "0")) >= 7
+          assert int(root.get("tests", "0")) >= 9
           assert int(root.get("failures", "1")) == 0
           assert int(root.get("errors", "1")) == 0
           assert int(root.get("skipped", "1")) == 0

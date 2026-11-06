@@ -45,7 +45,7 @@ class RuntimeB62FullEffectJdbcTest {
     private static final String[] TABLES = {
         "b62_local_resource_fence", "aetheris_tasks", "tenant_memberships",
         "project_memberships", "synthetic_session_registration",
-        "blocked_signer_kids", "principal_epochs", "synthetic_guarded_task_effects"
+        "signer_authorizations", "principal_epochs", "synthetic_guarded_task_effects"
     };
     private static final SecureRandom RANDOM = new SecureRandom();
     private static String schema, ownerPassword, workerName, workerPassword;
@@ -172,16 +172,18 @@ class RuntimeB62FullEffectJdbcTest {
             s.execute("CREATE TABLE tenant_memberships(tenant_key text, identity_uid bigint, status text, revoked_at timestamptz, valid_until timestamptz, lock_guard smallint NOT NULL DEFAULT 0 CHECK(lock_guard=0), PRIMARY KEY(tenant_key,identity_uid))");
             s.execute("CREATE TABLE project_memberships(tenant_key text, project_key text, identity_uid bigint, status text, revoked_at timestamptz, valid_until timestamptz, lock_guard smallint NOT NULL DEFAULT 0 CHECK(lock_guard=0), PRIMARY KEY(tenant_key,project_key,identity_uid))");
             s.execute("CREATE TABLE synthetic_session_registration(issuer text, kid text, jti text, uid bigint, iat_seconds bigint, state text, lock_guard smallint NOT NULL DEFAULT 0 CHECK(lock_guard=0), PRIMARY KEY(issuer,kid,jti))");
-            s.execute("CREATE TABLE blocked_signer_kids(issuer text,kid text,PRIMARY KEY(issuer,kid))");
-            s.execute("CREATE TABLE principal_epochs(principal_id bigint PRIMARY KEY,reject_issued_at_or_before_epoch bigint)");
+            s.execute("CREATE TABLE signer_authorizations(issuer text,kid text,state text NOT NULL CHECK(state IN ('ACTIVE','REVOKED')),lock_guard smallint NOT NULL DEFAULT 0 CHECK(lock_guard=0),PRIMARY KEY(issuer,kid))");
+            s.execute("CREATE TABLE principal_epochs(principal_id bigint PRIMARY KEY,reject_issued_at_or_before_epoch bigint NOT NULL CHECK(reject_issued_at_or_before_epoch>=0),lock_guard smallint NOT NULL DEFAULT 0 CHECK(lock_guard=0))");
             s.execute("CREATE TABLE synthetic_guarded_task_effects(effect_id uuid PRIMARY KEY,task_id uuid NOT NULL,fence_term bigint NOT NULL,workload_subject text NOT NULL)");
             s.execute("REVOKE CREATE ON SCHEMA " + schema + " FROM PUBLIC");
             s.execute("GRANT USAGE ON SCHEMA " + schema + " TO " + workerName + "," + revokerName);
             s.execute("GRANT SELECT ON ALL TABLES IN SCHEMA " + schema + " TO " + workerName);
-            s.execute("GRANT UPDATE(lock_guard) ON b62_local_resource_fence,aetheris_tasks,tenant_memberships,project_memberships,synthetic_session_registration TO " + workerName);
+            s.execute("GRANT UPDATE(lock_guard) ON b62_local_resource_fence,aetheris_tasks,tenant_memberships,project_memberships,synthetic_session_registration,signer_authorizations,principal_epochs TO " + workerName);
             s.execute("GRANT INSERT ON synthetic_guarded_task_effects TO " + workerName);
             s.execute("GRANT SELECT ON synthetic_session_registration TO " + revokerName);
-            s.execute("GRANT UPDATE(state) ON synthetic_session_registration TO " + revokerName);
+            s.execute("GRANT UPDATE(state) ON synthetic_session_registration,signer_authorizations TO " + revokerName);
+            s.execute("GRANT UPDATE(reject_issued_at_or_before_epoch) ON principal_epochs TO " + revokerName);
+            s.execute("GRANT SELECT ON signer_authorizations,principal_epochs TO " + revokerName);
         }
     }
 
@@ -207,11 +209,13 @@ class RuntimeB62FullEffectJdbcTest {
         lease = signedLease();
         assertTrue(lease.isBoundTo(workload));
         try (Connection admin = owner(); Statement s = admin.createStatement()) {
-            s.execute("TRUNCATE synthetic_guarded_task_effects,synthetic_session_registration,project_memberships,tenant_memberships,aetheris_tasks,b62_local_resource_fence,blocked_signer_kids,principal_epochs");
+            s.execute("TRUNCATE synthetic_guarded_task_effects,synthetic_session_registration,project_memberships,tenant_memberships,aetheris_tasks,b62_local_resource_fence,signer_authorizations,principal_epochs");
             s.execute("INSERT INTO b62_local_resource_fence VALUES ('runtime','synthetic-primary',2,'ACTIVE',clock_timestamp()+interval '1 day',0)");
             s.execute("INSERT INTO aetheris_tasks(id,owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at) VALUES ('" + ALICE_TASK + "',42,'tenant-a','project-a',clock_timestamp()),('" + BOB_TASK + "',77,'tenant-b','project-b',clock_timestamp()),('" + OWNERLESS_TASK + "',NULL,NULL,NULL,NULL)");
             s.execute("INSERT INTO tenant_memberships VALUES ('tenant-a',42,'ACTIVE',NULL,clock_timestamp()+interval '1 day',0),('tenant-b',77,'ACTIVE',NULL,clock_timestamp()+interval '1 day',0)");
             s.execute("INSERT INTO project_memberships VALUES ('tenant-a','project-a',42,'ACTIVE',NULL,clock_timestamp()+interval '1 day',0),('tenant-b','project-b',77,'ACTIVE',NULL,clock_timestamp()+interval '1 day',0)");
+            s.execute("INSERT INTO signer_authorizations VALUES ('" + ISSUER + "','effect-identity-key','ACTIVE',0)");
+            s.execute("INSERT INTO principal_epochs VALUES (42,0,0),(77,0,0)");
             register(admin, alice);
             register(admin, bob);
         }
@@ -277,7 +281,7 @@ class RuntimeB62FullEffectJdbcTest {
     @Test
     void signedRevocationAndLocalFenceDenialAreEnforcedByActualSql() throws Exception {
         try (Connection admin = owner(); Statement s = admin.createStatement()) {
-            s.execute("INSERT INTO blocked_signer_kids VALUES ('" + ISSUER + "','effect-identity-key')");
+            s.execute("UPDATE signer_authorizations SET state='REVOKED' WHERE kid='effect-identity-key'");
         }
         try (Connection c = worker()) {
             c.setAutoCommit(false);
@@ -285,8 +289,8 @@ class RuntimeB62FullEffectJdbcTest {
             c.rollback();
         }
         try (Connection admin = owner(); Statement s = admin.createStatement()) {
-            s.execute("DELETE FROM blocked_signer_kids");
-            s.execute("INSERT INTO principal_epochs VALUES (42,9999999999)");
+            s.execute("UPDATE signer_authorizations SET state='ACTIVE'");
+            s.execute("UPDATE principal_epochs SET reject_issued_at_or_before_epoch=9999999999 WHERE principal_id=42");
         }
         try (Connection c = worker()) {
             c.setAutoCommit(false);
@@ -294,7 +298,7 @@ class RuntimeB62FullEffectJdbcTest {
             c.rollback();
         }
         try (Connection admin = owner(); Statement s = admin.createStatement()) {
-            s.execute("DELETE FROM principal_epochs");
+            s.execute("UPDATE principal_epochs SET reject_issued_at_or_before_epoch=0 WHERE principal_id=42");
             s.execute("UPDATE b62_local_resource_fence SET state='CLOSED'");
         }
         try (Connection c = worker()) {
@@ -361,47 +365,97 @@ class RuntimeB62FullEffectJdbcTest {
 
 
     @Test
-    void absentSignerBlacklistAllowsRevocationToOvertakeUncommittedEffect() throws Exception {
-        try (Connection executing = worker(); Connection revoking = owner()) {
+    void signerRevocationCannotCommitBeforePreviouslyAuthorizedEffect() throws Exception {
+        try (Connection executing = worker(); Connection revoking = revoker()) {
             executing.setAutoCommit(false);
             assertTrue(effect(executing, alice, "tenant-a", "project-a", ALICE_TASK, UUID.randomUUID()));
+            revoking.setAutoCommit(false);
             try (Statement sql = revoking.createStatement()) {
-                assertEquals(1, sql.executeUpdate("INSERT INTO blocked_signer_kids VALUES ('"
-                    + ISSUER + "','effect-identity-key')"));
+                sql.execute("SET LOCAL lock_timeout='350ms'");
+                SQLException blocked = assertThrows(SQLException.class, () ->
+                    sql.executeUpdate("UPDATE signer_authorizations SET state='REVOKED' WHERE kid='effect-identity-key'"));
+                assertEquals("55P03", blocked.getSQLState());
             }
+            revoking.rollback();
             executing.commit();
+            try (Statement sql = revoking.createStatement()) {
+                assertEquals(1, sql.executeUpdate("UPDATE signer_authorizations SET state='REVOKED' WHERE kid='effect-identity-key'"));
+            }
+            revoking.commit();
         }
-        assertEquals(1L, countEffects(),
-            "NO_GO: blacklist inserted before commit yet previously allowed effect committed");
-        try (Connection subsequent = worker()) {
-            subsequent.setAutoCommit(false);
-            assertFalse(effect(subsequent, alice, "tenant-a", "project-a", ALICE_TASK,
-                UUID.randomUUID()), "New statement must see committed signer revocation");
-            subsequent.rollback();
+        assertEquals(1L, countEffects());
+        try (Connection c = worker()) {
+            c.setAutoCommit(false);
+            assertFalse(effect(c, alice, "tenant-a", "project-a", ALICE_TASK, UUID.randomUUID()));
+            assertFalse(effect(c, bob, "tenant-b", "project-b", BOB_TASK, UUID.randomUUID()));
+            c.rollback();
         }
     }
 
     @Test
-    void absentPrincipalEpochAllowsRevocationToOvertakeUncommittedEffect() throws Exception {
+    void epochRevocationCannotCommitBeforePreviouslyAuthorizedEffect() throws Exception {
         long cutoff = alice.requireRevocationFacts().signedIssuedAt().getEpochSecond();
-        try (Connection executing = worker(); Connection revoking = owner()) {
+        try (Connection executing = worker(); Connection revoking = revoker()) {
             executing.setAutoCommit(false);
             assertTrue(effect(executing, alice, "tenant-a", "project-a", ALICE_TASK, UUID.randomUUID()));
-            try (PreparedStatement add = revoking.prepareStatement(
-                    "INSERT INTO principal_epochs(principal_id,reject_issued_at_or_before_epoch) VALUES (42,?)")) {
-                add.setLong(1, cutoff);
-                assertEquals(1, add.executeUpdate(),
-                    "Previously missing epoch row can be inserted while effect is pending");
+            revoking.setAutoCommit(false);
+            try (Statement sql = revoking.createStatement()) {
+                sql.execute("SET LOCAL lock_timeout='350ms'");
+                SQLException blocked = assertThrows(SQLException.class, () ->
+                    sql.executeUpdate("UPDATE principal_epochs SET reject_issued_at_or_before_epoch=" + cutoff + " WHERE principal_id=42"));
+                assertEquals("55P03", blocked.getSQLState());
             }
+            revoking.rollback();
             executing.commit();
+            try (Statement sql = revoking.createStatement()) {
+                assertEquals(1, sql.executeUpdate(
+                    "UPDATE principal_epochs SET reject_issued_at_or_before_epoch=" + cutoff + " WHERE principal_id=42"));
+            }
+            revoking.commit();
         }
-        assertEquals(1L, countEffects(),
-            "NO_GO: principal cutoff committed before the previously authorized effect");
-        try (Connection subsequent = worker()) {
-            subsequent.setAutoCommit(false);
-            assertFalse(effect(subsequent, alice, "tenant-a", "project-a", ALICE_TASK,
-                UUID.randomUUID()), "New statement must observe committed principal cutoff");
-            subsequent.rollback();
+        assertEquals(1L, countEffects());
+        try (Connection c = worker()) {
+            c.setAutoCommit(false);
+            assertFalse(effect(c, alice, "tenant-a", "project-a", ALICE_TASK, UUID.randomUUID()));
+            assertTrue(effect(c, bob, "tenant-b", "project-b", BOB_TASK, UUID.randomUUID()));
+            c.rollback();
+        }
+    }
+
+    @Test
+    void missingSignerOrPrincipalAuthorityRowFailsClosed() throws Exception {
+        try (Connection owner = owner(); Statement sql = owner.createStatement()) {
+            assertEquals(1, sql.executeUpdate("DELETE FROM signer_authorizations WHERE kid='effect-identity-key'"));
+        }
+        try (Connection c = worker()) {
+            c.setAutoCommit(false);
+            assertFalse(effect(c, alice, "tenant-a", "project-a", ALICE_TASK, UUID.randomUUID()));
+            c.rollback();
+        }
+        try (Connection owner = owner(); Statement sql = owner.createStatement()) {
+            sql.execute("INSERT INTO signer_authorizations VALUES ('" + ISSUER + "','effect-identity-key','ACTIVE',0)");
+            assertEquals(1, sql.executeUpdate("DELETE FROM principal_epochs WHERE principal_id=42"));
+        }
+        try (Connection c = worker()) {
+            c.setAutoCommit(false);
+            assertFalse(effect(c, alice, "tenant-a", "project-a", ALICE_TASK, UUID.randomUUID()));
+            assertTrue(effect(c, bob, "tenant-b", "project-b", BOB_TASK, UUID.randomUUID()));
+            c.rollback();
+        }
+        assertEquals(0, countEffects());
+    }
+
+    @Test
+    void restrictedWriterCannotChangeAuthorityAndRevokerCannotEraseGuardRows() throws Exception {
+        try (Connection c = worker(); Statement sql = c.createStatement()) {
+            SQLException e = assertThrows(SQLException.class, () ->
+                sql.executeUpdate("UPDATE signer_authorizations SET state='REVOKED' WHERE kid='effect-identity-key'"));
+            assertEquals("42501", e.getSQLState());
+        }
+        try (Connection c = revoker(); Statement sql = c.createStatement()) {
+            SQLException e = assertThrows(SQLException.class, () ->
+                sql.executeUpdate("DELETE FROM principal_epochs WHERE principal_id=42"));
+            assertEquals("42501", e.getSQLState());
         }
     }
 

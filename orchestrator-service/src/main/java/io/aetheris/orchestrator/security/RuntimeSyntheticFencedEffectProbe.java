@@ -48,6 +48,10 @@ public final class RuntimeSyntheticFencedEffectProbe {
              AND pm.identity_uid=t.owner_identity_uid
             JOIN synthetic_session_registration active
               ON active.uid=t.owner_identity_uid
+            JOIN signer_authorizations signer_guard
+              ON signer_guard.issuer=active.issuer AND signer_guard.kid=active.kid
+            JOIN principal_epochs epoch_guard
+              ON epoch_guard.principal_id=active.uid
             WHERE t.id=? AND t.owner_identity_uid=?
               AND t.owner_tenant_key=? AND t.owner_project_key=?
               AND t.owner_verified_at IS NOT NULL
@@ -58,18 +62,14 @@ public final class RuntimeSyntheticFencedEffectProbe {
               AND active.issuer=? AND active.kid=? AND active.jti=?
               AND active.uid=? AND active.iat_seconds=?
               AND active.state='ACTIVE'
-              AND NOT EXISTS (
-                  SELECT 1 FROM blocked_signer_kids blocked
-                  WHERE blocked.issuer=? AND blocked.kid=?)
-              AND NOT EXISTS (
-                  SELECT 1 FROM principal_epochs epoch
-                  WHERE epoch.principal_id=?
-                    AND ?<=epoch.reject_issued_at_or_before_epoch)
-            -- Serialize in-flight review-only effects with changes to
-            -- their selected task, membership and session rows. This does
-            -- NOT fence other DB primaries or protect absence predicates for
-            -- signer/epoch revocation; production roles need reviewed grants.
-            FOR SHARE OF t,tm,pm,active
+              AND signer_guard.issuer=? AND signer_guard.kid=?
+              AND signer_guard.state='ACTIVE'
+              AND epoch_guard.principal_id=?
+              AND epoch_guard.reject_issued_at_or_before_epoch<?
+            -- Missing signer/epoch authority rows deny. Lock all selected
+            -- authorization rows until commit or rollback. This protects
+            -- only cooperative writers on this one physical database.
+            FOR SHARE OF t,tm,pm,active,signer_guard,epoch_guard
         ),
         inserted AS (
             INSERT INTO synthetic_guarded_task_effects
