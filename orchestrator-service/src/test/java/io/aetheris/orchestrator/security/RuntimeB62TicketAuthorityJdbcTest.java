@@ -125,6 +125,23 @@ class RuntimeB62TicketAuthorityJdbcTest {
             p.setLong(5, facts.signedIssuedAt().getEpochSecond());
             assertEquals(1, p.executeUpdate());
         }
+        // This preview's trusted fixture registrar inserts a DB scope fact
+        // ONLY after the independently signed JWT has been verified above.
+        // Neither the ticket issuer nor either worker role has DML rights on
+        // these proof rows. This is not a production identity enrollment flow.
+        try (PreparedStatement grant = admin.prepareStatement(
+                "INSERT INTO b62_verified_scope_facts(issuer,kid,jti,uid,scope_name) "
+                  + "VALUES (?,?,?,?,?)")) {
+            for (String scope : List.of("orchestrator:read", "orchestrator:write")) {
+                if (!person.hasScope(scope)) continue;
+                grant.setString(1, facts.verifiedIssuer());
+                grant.setString(2, facts.verifiedKeyId());
+                grant.setString(3, facts.signedTokenId());
+                grant.setLong(4, facts.signedIdentityUid());
+                grant.setString(5, scope);
+                assertEquals(1, grant.executeUpdate());
+            }
+        }
     }
 
     // Issuer has INSERT only and no effect DML. Actual authenticated issuer
@@ -236,6 +253,9 @@ class RuntimeB62TicketAuthorityJdbcTest {
             s.execute("CREATE TABLE synthetic_session_registration(issuer text,kid text,jti text,uid bigint,iat_seconds bigint,state text,lock_guard smallint NOT NULL DEFAULT 0 CHECK(lock_guard=0),PRIMARY KEY(issuer,kid,jti))");
             s.execute("CREATE TABLE signer_authorizations(issuer text,kid text,state text NOT NULL,lock_guard smallint NOT NULL DEFAULT 0 CHECK(lock_guard=0),PRIMARY KEY(issuer,kid))");
             s.execute("CREATE TABLE principal_epochs(principal_id bigint PRIMARY KEY,reject_issued_at_or_before_epoch bigint NOT NULL,lock_guard smallint NOT NULL DEFAULT 0 CHECK(lock_guard=0))");
+            s.execute("CREATE TABLE b62_verified_scope_facts(issuer text NOT NULL,kid text NOT NULL,jti text NOT NULL,uid bigint NOT NULL,scope_name text NOT NULL CHECK(scope_name IN ('orchestrator:read','orchestrator:write')),PRIMARY KEY(issuer,kid,jti,uid,scope_name))");
+            s.execute("CREATE TABLE b62_issuer_role_bindings(issuer_role text PRIMARY KEY,worker_role text NOT NULL,state text NOT NULL CHECK(state IN ('ACTIVE','SUSPENDED')))");
+            s.execute("INSERT INTO b62_issuer_role_bindings VALUES ('" + issuerRole + "','" + workerRole + "','ACTIVE')");
             s.execute("CREATE TABLE b62_guarded_effects(effect_id uuid PRIMARY KEY,task_id uuid NOT NULL,fence_term bigint NOT NULL,workload_subject text NOT NULL)");
             s.execute("CREATE TABLE b62_effect_tickets(ticket_id uuid PRIMARY KEY,requestor_role text NOT NULL,task_id uuid NOT NULL,uid bigint NOT NULL,tenant_key text NOT NULL,project_key text NOT NULL,issuer text NOT NULL,kid text NOT NULL,jti text NOT NULL,iat_seconds bigint NOT NULL,endpoint text NOT NULL,term bigint NOT NULL,workload_subject text NOT NULL,state text NOT NULL CHECK(state IN ('ISSUED','CONSUMED')),expires_at timestamptz NOT NULL)");
             s.execute("REVOKE CREATE ON SCHEMA " + schema + " FROM PUBLIC");
@@ -325,9 +345,61 @@ class RuntimeB62TicketAuthorityJdbcTest {
             SELECT EXISTS(SELECT 1 FROM consumed)
             %s;
             """.formatted(schema, schema, tag, tag);
+        // Independent SQL enforcement of the minimum issuance policy.
+        // The untrusted INSERT-only issuer cannot write authenticated scope
+        // facts or grant itself additional worker identities. This remains
+        // a synthetic registrar, not an authenticated production issuer.
+        String issuerPolicy = """
+            CREATE FUNCTION %s.b62_check_ticket_issuance()
+            RETURNS trigger LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+            SET search_path = %s, pg_temp AS %s
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1
+                FROM b62_issuer_role_bindings binding
+                JOIN synthetic_session_registration active
+                  ON active.issuer=NEW.issuer AND active.kid=NEW.kid
+                 AND active.jti=NEW.jti AND active.uid=NEW.uid
+                 AND active.iat_seconds=NEW.iat_seconds AND active.state='ACTIVE'
+                JOIN signer_authorizations signer
+                  ON signer.issuer=active.issuer AND signer.kid=active.kid
+                 AND signer.state='ACTIVE'
+                JOIN principal_epochs epoch
+                  ON epoch.principal_id=NEW.uid
+                 AND epoch.reject_issued_at_or_before_epoch<NEW.iat_seconds
+                WHERE binding.issuer_role=session_user::text
+                  AND binding.worker_role=NEW.requestor_role
+                  AND binding.state='ACTIVE'
+                  AND EXISTS (
+                    SELECT 1 FROM b62_verified_scope_facts proof
+                    WHERE proof.issuer=NEW.issuer AND proof.kid=NEW.kid
+                      AND proof.jti=NEW.jti AND proof.uid=NEW.uid
+                      AND proof.scope_name='orchestrator:read'
+                  )
+                  AND EXISTS (
+                    SELECT 1 FROM b62_verified_scope_facts proof
+                    WHERE proof.issuer=NEW.issuer AND proof.kid=NEW.kid
+                      AND proof.jti=NEW.jti AND proof.uid=NEW.uid
+                      AND proof.scope_name='orchestrator:write'
+                  )
+              ) THEN
+                RAISE EXCEPTION 'B62_TICKET_ISSUER_POLICY_DENY'
+                  USING ERRCODE='42501';
+              END IF;
+              RETURN NEW;
+            END;
+            %s;
+            """.formatted(schema, schema, tag, tag);
         try (Connection c = owner(); Statement s = c.createStatement()) {
             c.setAutoCommit(false);
             s.execute(ddl);
+            s.execute(issuerPolicy);
+            String triggerSignature = schema + ".b62_check_ticket_issuance()";
+            s.execute("REVOKE ALL ON FUNCTION " + triggerSignature + " FROM PUBLIC");
+            s.execute("ALTER FUNCTION " + triggerSignature + " OWNER TO " + guardRole);
+            s.execute("CREATE TRIGGER b62_reject_unverified_ticket BEFORE INSERT "
+                + "ON " + schema + ".b62_effect_tickets FOR EACH ROW "
+                + "EXECUTE FUNCTION " + triggerSignature);
             String signature = schema + ".b62_record_ticket_effect(text,bigint,uuid,bigint,text,text,text,text,text,bigint,uuid,text)";
             s.execute("REVOKE ALL ON FUNCTION " + signature + " FROM PUBLIC");
             s.execute("ALTER FUNCTION " + signature + " OWNER TO " + guardRole);
@@ -344,7 +416,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
         lease = verifiedLease();
         assertTrue(lease.isBoundTo(workload));
         try (Connection c = owner(); Statement s = c.createStatement()) {
-            s.execute("TRUNCATE b62_guarded_effects,b62_effect_tickets,synthetic_session_registration,project_memberships,tenant_memberships,aetheris_tasks,b62_local_resource_fence,signer_authorizations,principal_epochs");
+            s.execute("TRUNCATE b62_guarded_effects,b62_effect_tickets,b62_verified_scope_facts,synthetic_session_registration,project_memberships,tenant_memberships,aetheris_tasks,b62_local_resource_fence,signer_authorizations,principal_epochs");
             s.execute("INSERT INTO b62_local_resource_fence VALUES ('runtime','synthetic-primary',2,'ACTIVE',clock_timestamp()+interval '1 day',0)");
             s.execute("INSERT INTO aetheris_tasks(id,owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at) VALUES ('" + ALICE_TASK + "',42,'tenant-a','project-a',clock_timestamp()),('" + BOB_TASK + "',77,'tenant-b','project-b',clock_timestamp()),('" + OWNERLESS_TASK + "',NULL,NULL,NULL,NULL)");
             s.execute("INSERT INTO tenant_memberships VALUES ('tenant-a',42,'ACTIVE',NULL,clock_timestamp()+interval '1 day',0),('tenant-b',77,'ACTIVE',NULL,clock_timestamp()+interval '1 day',0)");
@@ -587,45 +659,68 @@ class RuntimeB62TicketAuthorityJdbcTest {
     }
 
     @Test
-    void misissuedTicketPermitsDirectSqlToBypassJavaWriteScopeNoGo() throws Exception {
-        // Trusted issuer incorrectly creates a ticket for a genuinely signed
-        // read-only principal. The Java API rejects it, but the SQL function
-        // cannot infer scopes from unverified caller parameters or a DB row.
+    void issuerCannotMintTicketForVerifiedReadOnlyPrincipal() throws Exception {
         var reader = principal(42L, List.of("orchestrator:read"));
         try (Connection admin = owner()) {
             register(admin, reader);
         }
         UUID id = UUID.randomUUID();
-        issue(workerRole, reader, "tenant-a", "project-a", ALICE_TASK, id, 40);
-        var signed = reader.requireRevocationFacts();
+        SQLException rejected = assertThrows(SQLException.class, () ->
+            issue(workerRole, reader, "tenant-a", "project-a", ALICE_TASK, id, 40));
+        assertEquals("42501", rejected.getSQLState(),
+            "Even an INSERT-only ticket issuer must not grant Java-only write scope");
         try (Connection c = worker()) {
             c.setAutoCommit(false);
-            assertFalse(effect(c, reader, "tenant-a", "project-a", ALICE_TASK, id),
-                "Java entry point correctly denies the signed read-only principal");
-            try (PreparedStatement bypass = c.prepareStatement(
-                    "SELECT b62_record_ticket_effect(?,?,?,?,?,?,?,?,?,?,?,?)")) {
-                bypass.setString(1, lease.endpoint());
-                bypass.setLong(2, lease.term());
-                bypass.setObject(3, ALICE_TASK);
-                bypass.setLong(4, signed.signedIdentityUid());
-                bypass.setString(5, "tenant-a");
-                bypass.setString(6, "project-a");
-                bypass.setString(7, signed.verifiedIssuer());
-                bypass.setString(8, signed.verifiedKeyId());
-                bypass.setString(9, signed.signedTokenId());
-                bypass.setLong(10, signed.signedIssuedAt().getEpochSecond());
-                bypass.setObject(11, id);
-                bypass.setString(12, workload.subject());
-                try (var row = bypass.executeQuery()) {
-                    assertTrue(row.next());
-                    assertTrue(row.getBoolean(1),
-                        "NO_GO: improperly issued ticket bypasses Java-only write scope");
-                }
-            }
-            c.commit();
+            assertFalse(effect(c, reader, "tenant-a", "project-a", ALICE_TASK, id));
+            c.rollback();
         }
-        assertEquals("CONSUMED", state(id));
-        assertEquals(1L, countEffects());
+        assertEquals(0L, countEffects());
+    }
+
+    @Test
+    void issuerCannotRedirectTicketToOtherWorkerRole() throws Exception {
+        SQLException rejected = assertThrows(SQLException.class, () ->
+            issue(otherWorkerRole, alice, "tenant-a", "project-a", ALICE_TASK,
+                UUID.randomUUID(), 40));
+        assertEquals("42501", rejected.getSQLState());
+        assertEquals(0L, countEffects());
+    }
+
+    @Test
+    void issuerCannotForgeOrAlterVerifiedPrincipalScopeFacts() throws Exception {
+        try (Connection c = ticketIssuer(); Statement sql = c.createStatement()) {
+            SQLException insert = assertThrows(SQLException.class, () ->
+                sql.executeUpdate("INSERT INTO b62_verified_scope_facts VALUES "
+                    + "('forged','kid','jti',999,'orchestrator:write')"));
+            assertEquals("42501", insert.getSQLState());
+            SQLException modify = assertThrows(SQLException.class, () ->
+                sql.executeUpdate("DELETE FROM b62_verified_scope_facts"));
+            assertEquals("42501", modify.getSQLState());
+        }
+        assertEquals(0L, countEffects());
+    }
+
+    @Test
+    void issuerCannotMintAfterSessionOrPrincipalRevocation() throws Exception {
+        var facts = alice.requireRevocationFacts();
+        try (Connection admin = owner(); Statement sql = admin.createStatement()) {
+            sql.execute("UPDATE principal_epochs SET reject_issued_at_or_before_epoch="
+                + facts.signedIssuedAt().getEpochSecond() + " WHERE principal_id=42");
+        }
+        SQLException epochDenied = assertThrows(SQLException.class, () ->
+            issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK,
+                UUID.randomUUID(), 40));
+        assertEquals("42501", epochDenied.getSQLState());
+        try (Connection admin = owner(); Statement sql = admin.createStatement()) {
+            sql.execute("UPDATE principal_epochs SET reject_issued_at_or_before_epoch=0 WHERE principal_id=42");
+            sql.execute("UPDATE synthetic_session_registration SET state='REVOKED' "
+                + "WHERE jti='" + facts.signedTokenId() + "'");
+        }
+        SQLException sessionDenied = assertThrows(SQLException.class, () ->
+            issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK,
+                UUID.randomUUID(), 40));
+        assertEquals("42501", sessionDenied.getSQLState());
+        assertEquals(0L, countEffects());
     }
 
     @AfterAll
