@@ -274,6 +274,9 @@ jobs:
           done
           python3 -m py_compile scripts/security/runtime_b62_operator_fencing_preflight.py
           python3 -m unittest discover -s tests/security -p 'test_runtime_b62_operator_fencing_preflight.py' -v
+          python3 -m py_compile scripts/security/runtime_b62a_operator_receipt_review.py
+          python3 -m unittest discover -s tests/security -p 'test_runtime_b62a_operator_receipt_review.py' -v
+          echo AETHERIS_B62A_LOCAL_RECEIPT_DIGEST_NO_GO_PASS
           echo AETHERIS_B62A_OPERATOR_PREFLIGHT_STRUCTURAL_TESTS_PASS
           for required in \
             AETHERIS_B62_CI_PROCESS_KILL_DENIES_OLD_PRIMARY_WRITES_PASS \
