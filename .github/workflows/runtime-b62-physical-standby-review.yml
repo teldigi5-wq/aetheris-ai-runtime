@@ -263,7 +263,9 @@ jobs:
               assert marker in script, marker
           assert "GRANT DELETE ON public.b62_independent_ack_consumed" not in script
           PY
+          grep -Fq "(( proposal == recorded ))" scripts/security/runtime_b62_physical_standby_review.sh
           for marker in \
+            AETHERIS_B62_WITNESS_FUTURE_EPOCH_DENIED_PASS \
             AETHERIS_B62_COORDINATOR_OWNER_LOGICAL_ROLLBACK_WITNESS_DENIES_STALE_PASS \
             AETHERIS_B62_WITNESS_RESTART_PERSISTENCE_AND_OUTAGE_PASS \
             AETHERIS_B62_WITNESS_CANNOT_FENCE_OLD_PRIMARY_NO_GO_PASS \

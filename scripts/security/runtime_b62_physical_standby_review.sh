@@ -1572,12 +1572,19 @@ witness_candidate_epoch_check() {
     "SELECT min_epoch FROM public.b62_witness_epoch
       WHERE resource_key='runtime' AND NOT pg_is_in_recovery()" 2>/dev/null)" || return 1
   [[ "$recorded" =~ ^[1-9][0-9]*$ ]] || return 1
-  (( proposal >= recorded ))
+  (( proposal == recorded ))
 }
 if witness_candidate_epoch_check "$standby" 5; then
   echo "FAIL: witness accepted stale epoch 5" >&2
   exit 1
 fi
+# A client-supplied future epoch is not proof of authority; exact match
+# is necessary (but is not by itself sufficient for signed admission).
+if witness_candidate_epoch_check "$standby" 7; then
+  echo "FAIL: witness accepted a forged future epoch 7" >&2
+  exit 1
+fi
+echo AETHERIS_B62_WITNESS_FUTURE_EPOCH_DENIED_PASS
 # Coordinator DB owner has no account or role on witness database.
 if docker exec -e "PGPASSWORD=$coord_owner_pw" -e PGCONNECT_TIMEOUT=2 \
    "$authority" psql -X -A -t -w -v ON_ERROR_STOP=1 \
@@ -1667,7 +1674,13 @@ witness_write "ALTER TABLE public.b62_witness_epoch
     WHERE resource_key='runtime';" >/dev/null
 test "$(witness_read "$standby" \
   "SELECT min_epoch FROM public.b62_witness_epoch WHERE resource_key='runtime'")" = 2
-witness_candidate_epoch_check "$standby" 5
+if witness_candidate_epoch_check "$standby" 5; then
+  echo "FAIL: witness accepted mismatched epoch after privileged reset" >&2
+  exit 1
+fi
+# The admin reset has made the old epoch 2 appear current again.
+# A local exact equality check cannot protect against privileged rewind.
+witness_candidate_epoch_check "$standby" 2
 echo AETHERIS_B62_WITNESS_PRIVILEGED_EPOCH_RESET_NO_GO_PASS
 
 # This never tests or proves global linearizability, quorum or failback.
