@@ -132,7 +132,7 @@ def main():
                           "xerj_publication": "HOLD"}), sort_keys=True)
         return 2
     print(json.dumps(report, sort_keys=True, indent=2))
-    return 0 if report["preflight"] == "STRUCTURALLY_COMPLETE_UNVERIFIED" else 1
+    return 1  # Never signal successful admission from self-reported evidence.
 
 
 if __name__ == "__main__":

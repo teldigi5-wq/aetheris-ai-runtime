@@ -1,6 +1,9 @@
 """Offline fail-closed adversarial tests for S-B62-A inventory structure."""
 import importlib.util
 import json
+import contextlib
+import io
+from unittest.mock import patch
 from pathlib import Path
 import tempfile
 import unittest
@@ -38,6 +41,22 @@ class S_B62_A_Preflight(unittest.TestCase):
         self.assertFalse(result["independent_review_verified"])
         self.assertFalse(result["physical_fencing_certified"])
         self.assertEqual(result["xerj_publication"], "HOLD")
+
+    def test_cli_perfect_self_report_never_exits_zero(self):
+        source = template()
+        for item in source["checks"].values():
+            item.update(result="DENIED", evidence_sha256="c" * 64)
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "inventory.json"
+            src.write_text(json.dumps(source), encoding="utf-8")
+            out = io.StringIO()
+            with patch("sys.argv", ["inventory", "--manifest", str(src)]), \
+                 contextlib.redirect_stdout(out):
+                exit_status = m.main()
+            self.assertEqual(exit_status, 1)
+            value = json.loads(out.getvalue())
+            self.assertEqual(value["release_decision"], "STAGE45_NO_GO")
+            self.assertFalse(value["physical_fencing_certified"])
 
     def test_replaying_old_primary_write_blocks(self):
         source = template()
