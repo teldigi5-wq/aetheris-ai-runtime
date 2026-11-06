@@ -144,6 +144,49 @@ class RuntimeB62TicketAuthorityJdbcTest {
         }
     }
 
+    // An authorized test owner models an independently trusted request
+    // registrar. This fixture cannot certify an actual remote approval flow.
+    private static void approveRequest(String role,
+            RuntimePinnedPrincipalVerifier.VerifiedPrincipal person,
+            String tenant, String project, UUID taskId, UUID effectId, int ttlSeconds)
+            throws SQLException {
+        var facts = person.requireRevocationFacts();
+        try (Connection c = owner(); PreparedStatement stmt = c.prepareStatement(
+              "INSERT INTO b62_approved_effect_requests(effect_id,issuer_role,"
+              + "worker_role,task_id,uid,tenant_key,project_key,issuer,kid,jti,"
+              + "iat_seconds,endpoint,term,workload_subject,state,expires_at)"
+              + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'APPROVED',"
+              + "clock_timestamp()+(? * interval '1 second'))")) {
+            stmt.setObject(1, effectId);
+            stmt.setString(2, issuerRole);
+            stmt.setString(3, role);
+            stmt.setObject(4, taskId);
+            stmt.setLong(5, facts.signedIdentityUid());
+            stmt.setString(6, tenant);
+            stmt.setString(7, project);
+            stmt.setString(8, facts.verifiedIssuer());
+            stmt.setString(9, facts.verifiedKeyId());
+            stmt.setString(10, facts.signedTokenId());
+            stmt.setLong(11, facts.signedIssuedAt().getEpochSecond());
+            stmt.setString(12, lease.endpoint());
+            stmt.setLong(13, lease.term());
+            stmt.setString(14, workload.subject());
+            stmt.setInt(15, ttlSeconds);
+            assertEquals(1, stmt.executeUpdate());
+        }
+    }
+
+    private static void approvedIssue(String role,
+            RuntimePinnedPrincipalVerifier.VerifiedPrincipal person,
+            String tenant, String project, UUID taskId, UUID effectId, int ttlSeconds)
+            throws SQLException {
+        // Existing positive/negative tests explicitly use the trusted
+        // fixture registrar before invoking the separate issuer login.
+        approveRequest(role, person, tenant, project, taskId, effectId,
+            Math.max(ttlSeconds, 0) + 15);
+        issue(role, person, tenant, project, taskId, effectId, ttlSeconds);
+    }
+
     // Issuer has INSERT only and no effect DML. Actual authenticated issuer
     // implementation/cert custody is deliberately OUTSIDE this local fixture.
     private static void issue(String boundRole, RuntimePinnedPrincipalVerifier.VerifiedPrincipal person,
@@ -257,12 +300,13 @@ class RuntimeB62TicketAuthorityJdbcTest {
             s.execute("CREATE TABLE b62_issuer_role_bindings(issuer_role text PRIMARY KEY,worker_role text NOT NULL,state text NOT NULL CHECK(state IN ('ACTIVE','SUSPENDED')))");
             s.execute("INSERT INTO b62_issuer_role_bindings VALUES ('" + issuerRole + "','" + workerRole + "','ACTIVE')");
             s.execute("CREATE TABLE b62_guarded_effects(effect_id uuid PRIMARY KEY,task_id uuid NOT NULL,fence_term bigint NOT NULL,workload_subject text NOT NULL)");
+            s.execute("CREATE TABLE b62_approved_effect_requests(effect_id uuid PRIMARY KEY,issuer_role text NOT NULL,worker_role text NOT NULL,task_id uuid NOT NULL,uid bigint NOT NULL,tenant_key text NOT NULL,project_key text NOT NULL,issuer text NOT NULL,kid text NOT NULL,jti text NOT NULL,iat_seconds bigint NOT NULL,endpoint text NOT NULL,term bigint NOT NULL,workload_subject text NOT NULL,state text NOT NULL CHECK(state IN ('APPROVED','ISSUED')),expires_at timestamptz NOT NULL)");
             s.execute("CREATE TABLE b62_effect_tickets(ticket_id uuid PRIMARY KEY,requestor_role text NOT NULL,task_id uuid NOT NULL,uid bigint NOT NULL,tenant_key text NOT NULL,project_key text NOT NULL,issuer text NOT NULL,kid text NOT NULL,jti text NOT NULL,iat_seconds bigint NOT NULL,endpoint text NOT NULL,term bigint NOT NULL,workload_subject text NOT NULL,state text NOT NULL CHECK(state IN ('ISSUED','CONSUMED')),expires_at timestamptz NOT NULL)");
             s.execute("REVOKE CREATE ON SCHEMA " + schema + " FROM PUBLIC");
             s.execute("GRANT USAGE ON SCHEMA " + schema + " TO " + workerRole + "," + otherWorkerRole + "," + issuerRole + "," + guardRole);
             s.execute("GRANT SELECT ON ALL TABLES IN SCHEMA " + schema + " TO " + guardRole);
             s.execute("GRANT UPDATE(lock_guard) ON b62_local_resource_fence,aetheris_tasks,tenant_memberships,project_memberships,synthetic_session_registration,signer_authorizations,principal_epochs TO " + guardRole);
-            s.execute("GRANT UPDATE(state) ON b62_effect_tickets TO " + guardRole);
+            s.execute("GRANT UPDATE(state) ON b62_effect_tickets,b62_approved_effect_requests TO " + guardRole);
             s.execute("GRANT INSERT ON b62_guarded_effects TO " + guardRole);
             s.execute("GRANT INSERT ON b62_effect_tickets TO " + issuerRole);
         }
@@ -386,6 +430,33 @@ class RuntimeB62TicketAuthorityJdbcTest {
                 RAISE EXCEPTION 'B62_TICKET_ISSUER_POLICY_DENY'
                   USING ERRCODE='42501';
               END IF;
+              -- A distinct registrar must pre-approve this *exact*
+              -- effect. The untrusted issuer has no rights on approval rows.
+              -- Lock/spend the approval with an atomic UPDATE; on failure
+              -- the whole ticket INSERT statement rolls back.
+              UPDATE b62_approved_effect_requests approval
+                 SET state='ISSUED'
+               WHERE approval.effect_id=NEW.ticket_id
+                 AND approval.issuer_role=session_user::text
+                 AND approval.worker_role=NEW.requestor_role
+                 AND approval.task_id=NEW.task_id
+                 AND approval.uid=NEW.uid
+                 AND approval.tenant_key=NEW.tenant_key
+                 AND approval.project_key=NEW.project_key
+                 AND approval.issuer=NEW.issuer
+                 AND approval.kid=NEW.kid
+                 AND approval.jti=NEW.jti
+                 AND approval.iat_seconds=NEW.iat_seconds
+                 AND approval.endpoint=NEW.endpoint
+                 AND approval.term=NEW.term
+                 AND approval.workload_subject=NEW.workload_subject
+                 AND approval.state='APPROVED'
+                 AND approval.expires_at>clock_timestamp()
+                 AND NEW.expires_at<=approval.expires_at;
+              IF NOT FOUND THEN
+                RAISE EXCEPTION 'B62_EFFECT_REQUEST_NOT_APPROVED'
+                    USING ERRCODE='42501';
+              END IF;
               RETURN NEW;
             END;
             %s;
@@ -416,7 +487,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
         lease = verifiedLease();
         assertTrue(lease.isBoundTo(workload));
         try (Connection c = owner(); Statement s = c.createStatement()) {
-            s.execute("TRUNCATE b62_guarded_effects,b62_effect_tickets,b62_verified_scope_facts,synthetic_session_registration,project_memberships,tenant_memberships,aetheris_tasks,b62_local_resource_fence,signer_authorizations,principal_epochs");
+            s.execute("TRUNCATE b62_guarded_effects,b62_effect_tickets,b62_approved_effect_requests,b62_verified_scope_facts,synthetic_session_registration,project_memberships,tenant_memberships,aetheris_tasks,b62_local_resource_fence,signer_authorizations,principal_epochs");
             s.execute("INSERT INTO b62_local_resource_fence VALUES ('runtime','synthetic-primary',2,'ACTIVE',clock_timestamp()+interval '1 day',0)");
             s.execute("INSERT INTO aetheris_tasks(id,owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at) VALUES ('" + ALICE_TASK + "',42,'tenant-a','project-a',clock_timestamp()),('" + BOB_TASK + "',77,'tenant-b','project-b',clock_timestamp()),('" + OWNERLESS_TASK + "',NULL,NULL,NULL,NULL)");
             s.execute("INSERT INTO tenant_memberships VALUES ('tenant-a',42,'ACTIVE',NULL,clock_timestamp()+interval '1 day',0),('tenant-b',77,'ACTIVE',NULL,clock_timestamp()+interval '1 day',0)");
@@ -458,7 +529,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
     @Test
     void authorizedTicketSingleUseAndCommittedDuplicateDenied() throws Exception {
         UUID id = UUID.randomUUID();
-        issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
+        approvedIssue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
         try (Connection c = worker()) {
             c.setAutoCommit(false);
             assertTrue(effect(c, alice, "tenant-a", "project-a", ALICE_TASK, id));
@@ -479,7 +550,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
             c.rollback();
         }
         UUID id = UUID.randomUUID();
-        issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
+        approvedIssue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
         try (Connection c = worker()) {
             c.setAutoCommit(false);
             assertFalse(effect(c, alice, "tenant-b", "project-a", ALICE_TASK, id));
@@ -496,7 +567,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
     @Test
     void ticketIsSessionRoleBoundNotCallableByAnotherWorkerOrIssuer() throws Exception {
         UUID id = UUID.randomUUID();
-        issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
+        approvedIssue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
         try (Connection c = workerB()) {
             c.setAutoCommit(false);
             assertFalse(effect(c, alice, "tenant-a", "project-a", ALICE_TASK, id));
@@ -516,9 +587,9 @@ class RuntimeB62TicketAuthorityJdbcTest {
     @Test
     void expiredTicketAndOwnerlessTaskDeny() throws Exception {
         UUID expired = UUID.randomUUID();
-        issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, expired, -2);
+        approvedIssue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, expired, -2);
         UUID ownerless = UUID.randomUUID();
-        issue(workerRole, alice, "tenant-a", "project-a", OWNERLESS_TASK, ownerless, 40);
+        approvedIssue(workerRole, alice, "tenant-a", "project-a", OWNERLESS_TASK, ownerless, 40);
         try (Connection c = worker()) {
             c.setAutoCommit(false);
             assertFalse(effect(c, alice, "tenant-a", "project-a", ALICE_TASK, expired));
@@ -531,7 +602,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
     @Test
     void signerRevocationAndClosedFenceDenyEvenIssuedTickets() throws Exception {
         UUID id = UUID.randomUUID();
-        issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
+        approvedIssue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
         try (Connection c = owner(); Statement s = c.createStatement()) {
             s.execute("UPDATE signer_authorizations SET state='REVOKED'");
         }
@@ -555,7 +626,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
     @Test
     void effectAndTicketRollbackAreAtomic() throws Exception {
         UUID id = UUID.randomUUID();
-        issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
+        approvedIssue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
         try (Connection c = worker()) {
             c.setAutoCommit(false);
             assertTrue(effect(c, alice, "tenant-a", "project-a", ALICE_TASK, id));
@@ -588,7 +659,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
     @Test
     void concurrentTicketConsumptionSerializesUnderRowLock() throws Exception {
         UUID id = UUID.randomUUID();
-        issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
+        approvedIssue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
         try (Connection first = worker(); Connection contender = worker()) {
             first.setAutoCommit(false);
             assertTrue(effect(first, alice, "tenant-a", "project-a", ALICE_TASK, id));
@@ -612,7 +683,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
     @Test
     void principalEpochRevocationRejectsPreviouslyIssuedTicket() throws Exception {
         UUID id = UUID.randomUUID();
-        issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
+        approvedIssue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
         long cutoff = alice.requireRevocationFacts().signedIssuedAt().getEpochSecond();
         try (Connection c = owner(); PreparedStatement stmt = c.prepareStatement(
                 "UPDATE principal_epochs SET reject_issued_at_or_before_epoch=? WHERE principal_id=42")) {
@@ -634,7 +705,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
         // Negative evidence: checking clock_timestamp() on INSERT is not a
         // transaction-COMMIT deadline. Keep this counterexample as NO_GO.
         UUID id = UUID.randomUUID();
-        issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 5);
+        approvedIssue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 5);
         try (Connection pending = worker()) {
             pending.setAutoCommit(false);
             assertTrue(effect(pending, alice, "tenant-a", "project-a", ALICE_TASK, id));
@@ -666,7 +737,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
         }
         UUID id = UUID.randomUUID();
         SQLException rejected = assertThrows(SQLException.class, () ->
-            issue(workerRole, reader, "tenant-a", "project-a", ALICE_TASK, id, 40));
+            approvedIssue(workerRole, reader, "tenant-a", "project-a", ALICE_TASK, id, 40));
         assertEquals("42501", rejected.getSQLState(),
             "Even an INSERT-only ticket issuer must not grant Java-only write scope");
         try (Connection c = worker()) {
@@ -680,7 +751,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
     @Test
     void issuerCannotRedirectTicketToOtherWorkerRole() throws Exception {
         SQLException rejected = assertThrows(SQLException.class, () ->
-            issue(otherWorkerRole, alice, "tenant-a", "project-a", ALICE_TASK,
+            approvedIssue(otherWorkerRole, alice, "tenant-a", "project-a", ALICE_TASK,
                 UUID.randomUUID(), 40));
         assertEquals("42501", rejected.getSQLState());
         assertEquals(0L, countEffects());
@@ -708,7 +779,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
                 + facts.signedIssuedAt().getEpochSecond() + " WHERE principal_id=42");
         }
         SQLException epochDenied = assertThrows(SQLException.class, () ->
-            issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK,
+            approvedIssue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK,
                 UUID.randomUUID(), 40));
         assertEquals("42501", epochDenied.getSQLState());
         try (Connection admin = owner(); Statement sql = admin.createStatement()) {
@@ -717,9 +788,71 @@ class RuntimeB62TicketAuthorityJdbcTest {
                 + "WHERE jti='" + facts.signedTokenId() + "'");
         }
         SQLException sessionDenied = assertThrows(SQLException.class, () ->
-            issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK,
+            approvedIssue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK,
                 UUID.randomUUID(), 40));
         assertEquals("42501", sessionDenied.getSQLState());
+        assertEquals(0L, countEffects());
+    }
+
+
+    @Test
+    void issuerCannotMintWithoutAnIndependentlyApprovedExactRequest() throws Exception {
+        UUID id = UUID.randomUUID();
+        SQLException denied = assertThrows(SQLException.class, () ->
+            issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40));
+        assertEquals("42501", denied.getSQLState());
+        assertEquals(0L, countEffects());
+    }
+
+    @Test
+    void issuerCannotReadWriteOrDeleteIndependentRequestApprovals() throws Exception {
+        try (Connection c = ticketIssuer(); Statement sql = c.createStatement()) {
+            SQLException read = assertThrows(SQLException.class, () ->
+                sql.executeQuery("SELECT effect_id FROM b62_approved_effect_requests"));
+            assertEquals("42501", read.getSQLState());
+            SQLException insert = assertThrows(SQLException.class, () ->
+                sql.executeUpdate("INSERT INTO b62_approved_effect_requests VALUES "
+                    + "('00000000-0000-4000-8000-000000000000','forged','forged',"
+                    + "'" + ALICE_TASK + "',42,'tenant-a','project-a','i','k','j',"
+                    + "1,'synthetic-primary',2,'synthetic-worker','APPROVED',clock_timestamp())"));
+            assertEquals("42501", insert.getSQLState());
+            SQLException erase = assertThrows(SQLException.class, () ->
+                sql.executeUpdate("DELETE FROM b62_approved_effect_requests"));
+            assertEquals("42501", erase.getSQLState());
+        }
+    }
+
+    @Test
+    void issuerCannotRetargetApprovedEffectToDifferentProjectOrTask() throws Exception {
+        UUID id = UUID.randomUUID();
+        approveRequest(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 55);
+        SQLException wrongProject = assertThrows(SQLException.class, () ->
+            issue(workerRole, alice, "tenant-a", "project-b", ALICE_TASK, id, 40));
+        assertEquals("42501", wrongProject.getSQLState());
+        SQLException wrongTask = assertThrows(SQLException.class, () ->
+            issue(workerRole, alice, "tenant-a", "project-a", BOB_TASK, id, 40));
+        assertEquals("42501", wrongTask.getSQLState());
+        issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
+        assertEquals("ISSUED", state(id));
+        assertEquals(0L, countEffects());
+    }
+
+    @Test
+    void ticketIssuerCannotReuseApprovalOrExtendItsExpiration() throws Exception {
+        UUID id = UUID.randomUUID();
+        approveRequest(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 12);
+        SQLException tooLong = assertThrows(SQLException.class, () ->
+            issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40));
+        assertEquals("42501", tooLong.getSQLState());
+        issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 5);
+        // Simulate a privileged test-only ticket loss. Approval must still
+        // prevent a second issuance with the same effect identifier.
+        try (Connection admin = owner(); Statement sql = admin.createStatement()) {
+            sql.executeUpdate("DELETE FROM b62_effect_tickets WHERE ticket_id='" + id + "'");
+        }
+        SQLException reuse = assertThrows(SQLException.class, () ->
+            issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 5));
+        assertEquals("42501", reuse.getSQLState());
         assertEquals(0L, countEffects());
     }
 
