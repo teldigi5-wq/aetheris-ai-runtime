@@ -275,6 +275,12 @@ jobs:
           python3 -m py_compile scripts/security/runtime_b62_operator_fencing_preflight.py
           python3 -m unittest discover -s tests/security -p 'test_runtime_b62_operator_fencing_preflight.py' -v
           echo AETHERIS_B62A_OPERATOR_PREFLIGHT_STRUCTURAL_TESTS_PASS
+          for required in \
+            AETHERIS_B62_CI_PROCESS_KILL_DENIES_OLD_PRIMARY_WRITES_PASS \
+            AETHERIS_B62_CI_FENCER_KILLED_INFLIGHT_TRANSACTION_ROLLED_BACK_PASS \
+            AETHERIS_B62_CI_HOST_ADMIN_RESTART_REENABLES_OLD_WRITER_NO_GO_PASS; do
+            grep -Fq "$required" scripts/security/runtime_b62_physical_standby_review.sh
+          done
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
       - name: Real physical standby, stale WAL, deliberate isolated dual-primary and old-primary fencing

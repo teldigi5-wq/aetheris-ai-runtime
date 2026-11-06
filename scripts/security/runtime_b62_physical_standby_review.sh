@@ -23,6 +23,7 @@ cutover_race_dir=""
 writer_drain_output=""
 writer_drain_error=""
 gate_tamper_error=""
+fencer_writer_output=""
 
 cleanup() {
   local code=$?
@@ -36,6 +37,7 @@ cleanup() {
   [[ -z "$writer_drain_output" ]] || rm -f -- "$writer_drain_output"
   [[ -z "$writer_drain_error" ]] || rm -f -- "$writer_drain_error"
   [[ -z "$gate_tamper_error" ]] || rm -f -- "$gate_tamper_error"
+  [[ -z "$fencer_writer_output" ]] || rm -f -- "$fencer_writer_output"
   if test "$code" -eq 0; then
     echo AETHERIS_B62_PHYSICAL_REPLICA_CONTAINERS_NETWORK_DESTROYED_PASS
   fi
@@ -1682,6 +1684,80 @@ fi
 # A local exact equality check cannot protect against privileged rewind.
 witness_candidate_epoch_check "$standby" 2
 echo AETHERIS_B62_WITNESS_PRIVILEGED_EPOCH_RESET_NO_GO_PASS
+
+
+# S-B62-A bounded PROCESS-fencing rehearsal, NOT independent STONITH:
+# the CI-host Docker daemon is an operator-controlled single failure
+# domain. A real client transaction must reach an observed in-flight
+# state before the PostgreSQL container is forcibly killed.
+# This is at the END of the existing NO_GO abuse tests only.
+fencer_writer_output="$(mktemp)"
+(
+  local_call "$primary" "$local_old_pw" \
+    "BEGIN;
+     SELECT public.b62_local_try_effect(
+       2,'old-primary-inflight-crash-uncommitted');
+     SELECT pg_sleep(25);
+     COMMIT;"
+) >"$fencer_writer_output" 2>&1 &
+fencer_writer_pid=$!
+fencer_writer_observed=false
+for poll in $(seq 1 100); do
+  if test "$(primary_sql "SELECT count(*) FROM pg_stat_activity
+       WHERE usename='$local_writer' AND datname='$db'
+         AND state='active' AND wait_event='PgSleep'
+         AND query LIKE '%old-primary-inflight-crash-uncommitted%'" \
+        2>/dev/null || true)" = 1; then
+    fencer_writer_observed=true
+    break
+  fi
+  if ! kill -0 "$fencer_writer_pid" 2>/dev/null; then break; fi
+  sleep 0.1
+done
+if test "$fencer_writer_observed" != true; then
+  echo "FAIL: old writer did not reach an observable in-flight transaction" >&2
+  exit 1
+fi
+# CI host process kill, NOT a fenced power/storage/network control plane.
+docker kill --signal=KILL "$primary" >/dev/null
+test "$(docker inspect -f '{{.State.Running}}' "$primary")" = false
+if wait "$fencer_writer_pid"; then
+  echo "FAIL: stale old writer transaction committed through process kill" >&2
+  exit 1
+fi
+if local_call "$primary" "$local_old_pw" \
+    "SELECT public.b62_local_try_effect(2,'old-primary-during-stop')" \
+    >/dev/null 2>&1; then
+  echo "FAIL: old primary accepted a write while process was stopped" >&2
+  exit 1
+fi
+echo AETHERIS_B62_CI_PROCESS_KILL_DENIES_OLD_PRIMARY_WRITES_PASS
+
+# Roll back nothing. Restart the same disposable PostgreSQL volume to
+# verify the observed in-flight effect was NOT committed. Normal WAL crash
+# recovery may persist the earlier unsafe commits, which is expected.
+docker start "$primary" >/dev/null
+fencer_restarted=false
+for poll in $(seq 1 50); do
+  if test "$(primary_sql 'SELECT 1' 2>/dev/null || true)" = 1; then
+    fencer_restarted=true; break
+  fi
+  sleep 0.2
+done
+test "$fencer_restarted" = true
+test "$(primary_sql "SELECT count(*) FROM public.b62_local_effects
+  WHERE request_id='old-primary-inflight-crash-uncommitted'")" = 0
+echo AETHERIS_B62_CI_FENCER_KILLED_INFLIGHT_TRANSACTION_ROLLED_BACK_PASS
+
+# CRITICAL counterexample: the same host administrator can restart
+# the disconnected old writer, which then reaccepts the old local epoch.
+# A process kill is NOT persistent fencing against admin compromise.
+test "$(local_call "$primary" "$local_old_pw" \
+  "SELECT public.b62_local_try_effect(
+    2,'old-primary-after-host-admin-restart')")" = t
+test "$(primary_sql "SELECT term FROM public.b62_local_effects
+  WHERE request_id='old-primary-after-host-admin-restart'")" = 2
+echo AETHERIS_B62_CI_HOST_ADMIN_RESTART_REENABLES_OLD_WRITER_NO_GO_PASS
 
 # This never tests or proves global linearizability, quorum or failback.
 echo AETHERIS_B62_CLOSED_GATE_GLOBAL_LEADERSHIP_NO_GO
