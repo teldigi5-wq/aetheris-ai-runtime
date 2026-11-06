@@ -10,6 +10,7 @@ network="aetheris-b62-replica-$suffix"
 primary="aetheris-b62-primary-$suffix"
 standby="aetheris-b62-standby-$suffix"
 authority="aetheris-b62-coordinator-$suffix"
+witness="aetheris-b62-witness-$suffix"
 dbuser=aetheris_replica_ci
 db=aetheris_replica_disposable
 replicauser=b62_ci_replication
@@ -26,7 +27,7 @@ gate_tamper_error=""
 cleanup() {
   local code=$?
   trap - EXIT
-  docker rm -fv "$authority" "$standby" "$primary" >/dev/null 2>&1 || true
+  docker rm -fv "$witness" "$authority" "$standby" "$primary" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   [[ -z "$held_action_output" ]] || rm -f -- "$held_action_output"
   [[ -z "$transition_output" ]] || rm -f -- "$transition_output"
@@ -1499,6 +1500,128 @@ test "$(fence_as "$standby" "$fence_new" "$fence_new_pw" \
   "$independent_ack_sql")" = t
 echo AETHERIS_B62_COORDINATOR_OWNER_ERASES_ACK_LEDGER_NO_GO_PASS
 
+
+# S-B62-A: separate PostgreSQL witness epoch versus coordinator ADMIN reset.
+# All four databases share ONE disposable CI host: NOT independent production
+# trust domains; no signed resource identity, quorum, or commit-time fence.
+witness_owner=b62_witness_owner
+witness_reader=b62_witness_reader
+witness_db=b62_witness_disposable
+witness_owner_pw="$(openssl rand -hex 24)"
+witness_reader_pw="$(openssl rand -hex 24)"
+docker run -d --name "$witness" --network "$network" \
+  -e "POSTGRES_USER=$witness_owner" -e "POSTGRES_PASSWORD=$witness_owner_pw" \
+  -e "POSTGRES_DB=$witness_db" \
+  -e "POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256" postgres:16 >/dev/null
+witness_write() {
+  docker exec "$witness" psql -X -A -t -v ON_ERROR_STOP=1 \
+    -U "$witness_owner" -d "$witness_db" -c "$1"
+}
+witness_read() {
+  local from="$1" sql="$2"
+  [[ "$from" == "$standby" || "$from" == "$primary" ]] || return 1
+  docker exec -e "PGPASSWORD=$witness_reader_pw" -e PGCONNECT_TIMEOUT=2 \
+    "$from" psql -X -A -t -w -v ON_ERROR_STOP=1 \
+    -h "$witness" -U "$witness_reader" -d "$witness_db" -c "$sql"
+}
+witness_ready=false
+for attempt in $(seq 1 50); do
+  if test "$(witness_write 'SELECT 1' 2>/dev/null || true)" = 1; then
+    witness_ready=true; break
+  fi
+  sleep 1
+done
+test "$witness_ready" = true
+witness_write "BEGIN;
+  CREATE TABLE public.b62_witness_epoch(
+    resource_key text PRIMARY KEY,
+    min_epoch bigint NOT NULL CHECK(min_epoch>0));
+  REVOKE ALL ON public.b62_witness_epoch FROM PUBLIC;
+  CREATE ROLE $witness_reader LOGIN PASSWORD '$witness_reader_pw';
+  GRANT USAGE ON SCHEMA public TO $witness_reader;
+  GRANT SELECT(resource_key,min_epoch) ON public.b62_witness_epoch TO $witness_reader;
+  INSERT INTO public.b62_witness_epoch VALUES('runtime',5);
+  CREATE FUNCTION public.b62_witness_prevent_decrease()
+  RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp
+  AS \$b62_witness_guard\$
+  BEGIN
+    IF NEW.min_epoch < OLD.min_epoch THEN
+      RAISE EXCEPTION 'witness epoch decrease forbidden';
+    END IF;
+    RETURN NEW;
+  END
+  \$b62_witness_guard\$;
+  CREATE TRIGGER b62_witness_epoch_increase
+    BEFORE UPDATE ON public.b62_witness_epoch
+    FOR EACH ROW EXECUTE FUNCTION public.b62_witness_prevent_decrease();
+  UPDATE public.b62_witness_epoch SET min_epoch=6 WHERE resource_key='runtime';
+  COMMIT;" >/dev/null
+test "$(witness_read "$standby" \
+  "SELECT min_epoch FROM public.b62_witness_epoch WHERE resource_key='runtime'")" = 6
+if witness_write "UPDATE public.b62_witness_epoch SET min_epoch=4
+  WHERE resource_key='runtime';" >/dev/null 2>&1; then
+  echo "FAIL: ordinary epoch downgrade accepted" >&2
+  exit 1
+fi
+# Only a non-authoritative candidate epoch check, NEVER an effect permit.
+witness_candidate_epoch_check() {
+  local node="$1" proposal="$2" recorded
+  [[ "$node" == "$standby" || "$node" == "$primary" ]] || return 1
+  [[ "$proposal" =~ ^[1-9][0-9]*$ ]] || return 1
+  recorded="$(witness_read "$node" \
+    "SELECT min_epoch FROM public.b62_witness_epoch
+      WHERE resource_key='runtime' AND NOT pg_is_in_recovery()" 2>/dev/null)" || return 1
+  [[ "$recorded" =~ ^[1-9][0-9]*$ ]] || return 1
+  (( proposal >= recorded ))
+}
+if witness_candidate_epoch_check "$standby" 5; then
+  echo "FAIL: witness accepted stale epoch 5" >&2
+  exit 1
+fi
+# Coordinator DB owner has no account or role on witness database.
+if docker exec -e "PGPASSWORD=$coord_owner_pw" -e PGCONNECT_TIMEOUT=2 \
+   "$authority" psql -X -A -t -w -v ON_ERROR_STOP=1 \
+   -h "$witness" -U "$coord_owner" -d "$witness_db" \
+   -c "UPDATE public.b62_witness_epoch SET min_epoch=2" >/dev/null 2>&1; then
+  echo "FAIL: coordinator owner changed witness epoch" >&2
+  exit 1
+fi
+# Malicious coordinator operator rewinds their OWN leadership term and
+# journal. This is a logical rollback; no snapshot-restore claim.
+coord_write "UPDATE public.leader_fence
+  SET endpoint='$primary',term=2,
+      expires_at=clock_timestamp()+interval '10 minutes'
+  WHERE authority_key='runtime';
+  DELETE FROM public.b62_independent_ack_consumed
+  WHERE challenge_id='$b62_replay_challenge'::uuid;" >/dev/null
+test "$(coord_write "SELECT term FROM public.leader_fence
+  WHERE authority_key='runtime'")" = 2
+test "$(fence_as "$standby" "$fence_new" "$fence_new_pw" \
+  "$independent_ack_sql")" = t
+if witness_candidate_epoch_check "$standby" 5; then
+  echo "FAIL: coordinator rollback reauthorized stale witness epoch" >&2
+  exit 1
+fi
+echo AETHERIS_B62_COORDINATOR_OWNER_LOGICAL_ROLLBACK_WITNESS_DENIES_STALE_PASS
+# Test outage with otherwise admissible proposed epoch 6: still deny.
+docker stop "$witness" >/dev/null
+if witness_candidate_epoch_check "$standby" 6; then
+  echo "FAIL: witness outage returned a positive decision" >&2
+  exit 1
+fi
+docker start "$witness" >/dev/null
+witness_ready=false
+for attempt in $(seq 1 50); do
+  if test "$(witness_write 'SELECT 1' 2>/dev/null || true)" = 1; then
+    witness_ready=true; break
+  fi
+  sleep 1
+done
+test "$witness_ready" = true
+test "$(witness_read "$standby" \
+  "SELECT min_epoch FROM public.b62_witness_epoch WHERE resource_key='runtime'")" = 6
+echo AETHERIS_B62_WITNESS_RESTART_PERSISTENCE_AND_OUTAGE_PASS
+
 # NEGATIVE COUNTEREXAMPLE: a closure receipt from the promoted node
 # cannot prove that ANOTHER physical primary is irreversibly fenced.
 # The old primary was previously stopped and had its local endpoint
@@ -1528,6 +1651,24 @@ test "$(primary_sql "SELECT term FROM public.b62_local_effects
   WHERE request_id='unsafe-old-operator-rebind'")" = 2
 test "$(primary_sql 'SELECT count(*) FROM public.b62_closure_receipts')" = 0
 echo AETHERIS_B62_PROMOTED_RECEIPT_CANNOT_FENCE_PRIVILEGED_FAILBACK_NO_GO_PASS
+
+# Even though the witness rejects old term 2, the disconnected privileged
+# old-primary admin still forced a real local SQL effect: NOT physically fenced.
+if witness_candidate_epoch_check "$primary" 2; then
+  echo "FAIL: witness re-admitted old-primary epoch" >&2
+  exit 1
+fi
+echo AETHERIS_B62_WITNESS_CANNOT_FENCE_OLD_PRIMARY_NO_GO_PASS
+# The witness DB's OWN privileged operator can disable the local trigger,
+# then roll back epoch 6 to 2; this is NOT rollback-resistant authority.
+witness_write "ALTER TABLE public.b62_witness_epoch
+    DISABLE TRIGGER b62_witness_epoch_increase;
+  UPDATE public.b62_witness_epoch SET min_epoch=2
+    WHERE resource_key='runtime';" >/dev/null
+test "$(witness_read "$standby" \
+  "SELECT min_epoch FROM public.b62_witness_epoch WHERE resource_key='runtime'")" = 2
+witness_candidate_epoch_check "$standby" 5
+echo AETHERIS_B62_WITNESS_PRIVILEGED_EPOCH_RESET_NO_GO_PASS
 
 # This never tests or proves global linearizability, quorum or failback.
 echo AETHERIS_B62_CLOSED_GATE_GLOBAL_LEADERSHIP_NO_GO

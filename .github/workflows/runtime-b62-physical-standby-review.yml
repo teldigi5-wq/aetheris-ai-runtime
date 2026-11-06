@@ -2,7 +2,7 @@ name: Runtime B62 real physical-standby stale-read denial (review only)
 # Tests only; no production service, endpoint or real customer database.
 on:
   push:
-    branches: [security/runtime-quarantine-pathinfo-boundary-20261101]
+    branches: [security/runtime-quarantine-pathinfo-boundary-20261101, test/b62-independent-epoch-witness-20261106]
 permissions:
   contents: read
 jobs:
@@ -263,6 +263,13 @@ jobs:
               assert marker in script, marker
           assert "GRANT DELETE ON public.b62_independent_ack_consumed" not in script
           PY
+          for marker in \
+            AETHERIS_B62_COORDINATOR_OWNER_LOGICAL_ROLLBACK_WITNESS_DENIES_STALE_PASS \
+            AETHERIS_B62_WITNESS_RESTART_PERSISTENCE_AND_OUTAGE_PASS \
+            AETHERIS_B62_WITNESS_CANNOT_FENCE_OLD_PRIMARY_NO_GO_PASS \
+            AETHERIS_B62_WITNESS_PRIVILEGED_EPOCH_RESET_NO_GO_PASS; do
+            grep -Fq "$marker" scripts/security/runtime_b62_physical_standby_review.sh
+          done
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
       - name: Real physical standby, stale WAL, deliberate isolated dual-primary and old-primary fencing
@@ -275,7 +282,7 @@ jobs:
         run: |
           set -euo pipefail
           suffix="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          for role in primary standby coordinator; do
+          for role in primary standby coordinator witness; do
             name="aetheris-b62-$role-$suffix"
             test -z "$(docker ps -a --filter "name=^/$name$" --format '{{.Names}}')"
           done
