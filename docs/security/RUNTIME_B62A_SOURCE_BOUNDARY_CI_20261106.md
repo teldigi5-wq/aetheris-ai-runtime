@@ -9,3 +9,18 @@ It also runs eight intentionally broken in-memory variations. Public or implicit
 The emitted JSON is explicitly SOURCE_ONLY_PASS and unconditionally states deployment_verified=false, fencing_verified=false and api_authorization_certified=false. No deployed service, Pod, credential, database, TLS key, coordinator or host was contacted. The results cannot replace independent CNI validation, real physical fencing, privileged rollback tests, owner/project authorization, owner-PC evidence or independent signoff.
 
 Only the two new source-review files and this explanatory document are changed. Protected main and upstream Runtime / Platform security PRs remain untouched. S-B62-A is still IN PROGRESS.
+
+## 6 November follow-up: canonical Compose rendering
+
+The original source-text check cannot by itself detect YAML aliases, long-form port
+mappings, or override effects. The exact-head workflow now additionally runs
+`docker compose config --no-interpolate --no-env-resolution --format json` on
+all three Platform Compose deployment variants and on the full+override merge.
+It checks each parsed published port's host IP must be `127.0.0.1`, rejects
+host networking and privileged containers in the rendered services, denies
+datastore host publication, and requires reviewed internal service bindings.
+Eight in-memory mutations of the rendered models must fail; this includes a
+missing host IP, a wildcard, an unauthorized datastore publication and a
+widened implicit new port. Nothing is started, deployed, modified, or given
+credentials. This is still SOURCE_ONLY, not a run-time reachability test or
+production attestation. No YAML text check is substituted for actual CNI tests.

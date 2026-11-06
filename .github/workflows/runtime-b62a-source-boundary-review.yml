@@ -42,3 +42,36 @@ jobs:
           assert d["checks"]["source_negative_trials"] == 8
           print("AETHERIS_B62A_PINNED_SOURCE_ONLY_NO_GO_PASS")
           PY
+      - name: Render Compose sources without interpolation or starting containers
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose version
+          docker compose -f platform-pinned/docker-compose.yml config \
+            --no-interpolate --no-env-resolution --format json > /tmp/b62a-full.json
+          docker compose -f platform-pinned/docker-compose.core.yml config \
+            --no-interpolate --no-env-resolution --format json > /tmp/b62a-core.json
+          docker compose -f platform-pinned/docker-compose.integration-external.yml config \
+            --no-interpolate --no-env-resolution --format json > /tmp/b62a-external.json
+          docker compose \
+            -f platform-pinned/docker-compose.yml \
+            -f platform-pinned/docker-compose.override.yml \
+            config --no-interpolate --no-env-resolution --format json > /tmp/b62a-merged.json
+          python3 -m py_compile tools/security/b62a_rendered_compose_review.py
+          python3 tools/security/b62a_rendered_compose_review.py \
+            --full /tmp/b62a-full.json \
+            --core /tmp/b62a-core.json \
+            --external /tmp/b62a-external.json \
+            --merged /tmp/b62a-merged.json > /tmp/b62a-rendered-report.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d = json.loads(Path("/tmp/b62a-rendered-report.json").read_text())
+          assert d["status"] == "RENDERED_SOURCE_ONLY_PASS"
+          assert d["rendered_compose_models"] == 4
+          assert d["negative_tests"] == 8
+          assert d["deployment_verified"] is False
+          assert d["resource_fencing_verified"] is False
+          assert d["release"] == "STAGE45_NO_GO"
+          print("AETHERIS_B62A_CANONICAL_COMPOSE_RENDER_NO_GO_PASS")
+          PY
