@@ -94,3 +94,6 @@ Licensing does not alter the runtime certification boundary: the platform-certif
 ## Related repository
 
 Platform repository: [`teldigi5-wq/aetheris-platform`](https://github.com/teldigi5-wq/aetheris-platform)
+
+### Enterprise E6 source review — 6 November 2026 (draft only)
+The existing Next/R3F/GSAP research branch now caps **actual render-surface pixel allocation** using a pre-allocation ResizeObserver and dynamically bounded DPR, with desktop/mobile/wide-viewport and reduced-motion browser assertions. This is an E6 work item, not a new E stage or an S0/B62 release fix. E6 lockfile pin, dependency audit, owner GPU/thermal, model authorship and independent accessibility/art review remain **UNVERIFIED**. Stage45 **NO_GO**; XERJ **HOLD**. See [E6 architecture notes](docs/runtime/E6_NEXT_R3F_GSAP_ARCHITECTURE_20261030.md).

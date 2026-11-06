@@ -1,0 +1,7 @@
+.next/
+out/
+node_modules/
+*.tsbuildinfo
+public/research-panel.glb
+public/research-panel-manifest.json
+*.log
