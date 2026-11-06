@@ -1,0 +1,294 @@
+name: Runtime consolidated deny-only HTTP and owner JDBC regression (review only)
+# This is a review-only, single-branch proof. A path allowlist can leave
+# stale green evidence when a security-related inherited class is changed.
+# Reverify every commit on this exact draft branch, including workflow edits.
+on:
+  push:
+    branches: [security/runtime-quarantine-pathinfo-boundary-20261101]
+permissions:
+  contents: read
+jobs:
+  decoded-servlet-pathinfo-fail-closed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ownerlab_ci
+          POSTGRES_PASSWORD: disposable_ci_only_not_a_real_secret
+          POSTGRES_DB: ownerlab_disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ownerlab_ci -d ownerlab_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      AETHERIS_OWNER_SCHEMA_DISPOSABLE_CI_ONLY: "yes"
+      AETHERIS_MEMBERSHIP_JDBC_MUST_RUN: "yes"
+      PGHOST: "127.0.0.1"
+      PGPORT: "5432"
+      PGUSER: "ownerlab_ci"
+      PGDATABASE: "ownerlab_disposable"
+      PGPASSWORD: "disposable_ci_only_not_a_real_secret"
+      AETHERIS_DISPATCHER_ENABLED: 'false'
+      AETHERIS_SYNTRA_OWNER_RUNTIME_ENABLED: 'false'
+      AETHERIS_CLOUD_PROVIDER_ENABLED: 'false'
+      AETHERIS_EXECUTION_WORKSPACE_WRITE_ENABLED: 'false'
+    steps:
+      - name: Checkout isolated candidate, no credentials persisted
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Install Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Confirm exact head and production filters stay quarantine-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path("orchestrator-service/src/main/java/io/aetheris/orchestrator")
+          for p,order in [
+              (root/"api/OwnerlessTaskMissionHttpFilter.java", "@Order(Ordered.HIGHEST_PRECEDENCE)"),
+              (root/"security/RuntimeUncertifiedApiHttpFilter.java", "@Order(Ordered.HIGHEST_PRECEDENCE + 1)")
+          ]:
+              s=p.read_text()
+              assert order in s and "SC_NOT_FOUND" in s and "@Component" in s
+          assert "enum Verdict { QUARANTINED }" in (root/"security/RuntimeRouteAdmissionPolicy.java").read_text()
+          pinned=(root/"security/RuntimePinnedPrincipalVerifier.java").read_text()
+          assert "expiresAt.isAfter(clock.instant())" in pinned
+          # The JTI draft extended this PRIVATE constructor with signed
+          # issuance/provenance fields. Do not reassert the superseded shape:
+          # still require expiry/clock and signature-derived identity facts.
+          assert "scopes, issued, expires, signedJti, expectedIssuer," in pinned
+          assert "expectedKid, clock" in pinned
+          assert "claims.getId()" in pinned
+          assert "isFresh() && scopes.contains(scope)" in pinned
+          assert "return isFresh() ? scopes : Set.of()" in pinned
+          assert "VerifiedPrincipal verifyBearerForRevocation(" in pinned
+          assert "verified.requireRevocationFacts();" in pinned
+          assert "String signedJti = claims.getId()" in pinned
+          assert "private VerifiedRevocationFacts(" in pinned
+          assert "revocationBoundVerifierRejectsMissingIdAndExpiredRetainedPrincipal" in (Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimePinnedPrincipalVerifierTest.java")).read_text()
+          assert "cachedPrincipalExpiresBeforeAnotherRealJdbcTaskRead" in (Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbeTest.java")).read_text()
+          compat=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeB62EpochSignerCompatibilityTest.java")).read_text()
+          for marker in ("Platform B62-G1 PR #302", "NOT a per-JTI session allowlist", "GREATEST(", "AND ? <= reject_issued_at_or_before_epoch", "DROP SCHEMA IF EXISTS", "commitBoundarySnapshotAndConnectionFailureDeny", "emergencyNonrevocationNeverSubstitutesForActiveSignedSession", "independentlyAuthenticatedReaderCannotWriteOrAlterSchema", "timedOutPrimaryReadFailsClosedUntilTransactionRollback", "committedSelectRevocationDeniesExistingReaderConnection", "primaryOnlyDecisionRequiresCurrentCommittedPrimaryStatement", "NOT pg_is_in_recovery()", "TRANSACTION_REPEATABLE_READ", "REVOKE SELECT ON TABLE ", "GRANT SELECT ON TABLE ", "42501", "ALTER ROLE ", "statement_timeout = '1500ms'", "connectTimeout=3&socketTimeout=3", "setQueryTimeout(2)", "ownerlab_b62r_", "GRANT SELECT ON TABLE", "DROP ROLE ", "synthetic_session_registration", "AND active.state='ACTIVE'", "AND ? <= reject_issued_at_or_before_epoch"):
+              assert marker in compat, marker
+          synthetic_jti=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeSyntheticSignedSessionJdbcTest.java")).read_text()
+          for marker in ("Assumptions.assumeTrue", "ownerlab_jti_", "requireRevocationFacts()", "current_setting('transaction_isolation') = 'read committed'", "DROP SCHEMA IF EXISTS", "committedRevocationIsNextStatementVisibleAndStoreFailureDenies"):
+              assert marker in synthetic_jti, marker
+          assert "AND s.iat_seconds > epoch.min_iat_seconds" in synthetic_jti
+          assert "AND s.iat_seconds >= epoch.min_iat_seconds" not in synthetic_jti
+          assert "principalEpochRejectsTokenIssuedAtCutoffButPermitsNextSecond" in synthetic_jti
+          assert "GREATEST(min_iat_seconds,?)" in synthetic_jti
+          assert "@Component" not in synthetic_jti and "@RestController" not in synthetic_jti
+          bridge = (Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeHttpSignedOwnerJdbcBoundaryTest.java")).read_text()
+          for marker in ("Assumptions.assumeTrue", "DROP SCHEMA IF EXISTS", "new OwnerlessTaskMissionHttpFilter()", "new RuntimeUncertifiedApiHttpFilter()", "committedTenantRevocationDeniesNextRealSignedHttpRequest"):
+              assert marker in bridge, marker
+          assert "retainedVerifiedPrincipalLosesScopesWhenSignedTokenExpires" in (Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimePinnedPrincipalVerifierTest.java")).read_text()
+          # Verify actual full Spring Boot HTTP/SSE lifecycle on every push:
+          # synthetic authority only, no actual B62 connector or route grant.
+          lifecycle=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeFullAppHttpSseRevocationLifecycleTest.java")).read_text()
+          for marker in ("@SpringBootTest", "AetherisOrchestratorApplication.class",
+                         "RuntimePinnedPrincipalVerifier", "requireRevocationFacts()",
+                         "TestOnly", "/__s0/revoke-sse",
+                         "RUNTIME_FULL_SPRINGBOOT_HTTP_RECHECK_BEFORE_SUCCESS_PASS",
+                         "RUNTIME_FULL_SPRINGBOOT_SSE_CLOSE_BEFORE_NEXT_EVENT_PASS",
+                         "RUNTIME_REAL_TASK_HISTORY_SSE_QUARANTINE_NO_GO"):
+              assert marker in lifecycle, marker
+          assert 'Actual task/history/live event routes MUST remain 404 throughout.' in lifecycle
+          assert 'B62' in lifecycle and 'SYNTHETIC' in lifecycle
+          # Keep the inherited full-context route policy and signed principal
+          # tests runnable on this exact draft head, not only its leaf regressions.
+          test_root=Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security")
+          for name in ("RuntimeRouteAdmissionPolicyTest", "RuntimeFullAppPinnedIdentityAuthorityTest", "RuntimeControllerPolicyInventoryTest", "RuntimeFullAppHttpContainmentTest", "RuntimePinnedSpringBootHttpIntegrationTest", "RuntimePinnedHttpBearerGateLoopbackTest"):
+              src=(test_root/(name+".java")).read_text()
+              assert "@Test" in src and name in src, name
+          probe=(root/"security/RuntimeVerifiedTaskReadProbe.java").read_text()
+          regression=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskReadProbeTest.java")).read_text()
+          assert "current_setting('transaction_isolation') = 'read committed'" in probe
+          assert "AND NOT pg_is_in_recovery()" in probe
+          assert "connection.getAutoCommit()" in probe
+          assert "Explicit JDBC transaction required" in probe
+          registry=(root/"security/RuntimeVerifiedRegistryTaskReadProbe.java").read_text()
+          assert "AND NOT pg_is_in_recovery()" in registry
+          assert "connection.isReadOnly()" in registry
+          assert "connection.getAutoCommit()" in registry
+          assert "tm.valid_until > statement_timestamp()" in probe
+          assert "pm.valid_until > statement_timestamp()" in probe
+          assert "committedExternalMembershipRevocationIsSeenByOpenReaderTransaction" in regression
+          assert "explicitJdbcTransactionAndActualPrimaryRequiredForOwnerReads" in regression
+          assert "signedJtiTaskOwnerSessionAndEmergencyRevocationMustAgreeAtomically" in regression
+          composite=(root/"security/RuntimeVerifiedTaskSessionReadProbe.java").read_text()
+          for token in ("principal.requireRevocationFacts()", "synthetic_session_registration",
+                        "active.state='ACTIVE'", "blocked_signer_kids",
+                        "principal_epochs", "AND NOT pg_is_in_recovery()",
+                        "current_setting('transaction_isolation')='read committed'",
+                        "connection.getAutoCommit()", 'read.setQueryTimeout(2)',
+                        'signed.signedTokenId()', 'AND ?<=epoch.reject_issued_at_or_before_epoch'):
+              assert token in composite, token
+          for forbidden in ("@Component", "@Bean", "@RestController",
+                            "request.getHeader(", "System.getenv("):
+              assert forbidden not in composite, forbidden
+          for marker in ("JOIN b62_local_resource_fence fence",
+                         "AND fence.endpoint=? AND fence.term=?",
+                         "fence.state='ACTIVE'",
+                         "fence.expires_at>clock_timestamp()",
+                         "RuntimePinnedLocalFenceLeaseVerifier.VerifiedLease lease",
+                         "RuntimePinnedWorkloadIdentityVerifier.VerifiedWorkload workload",
+                         "lease == null || !lease.isBoundTo(workload)",
+                         "read.setLong(2, lease.term())",
+                         "lease.isBoundTo(workload) && principal.isFresh()",
+                         "read.setLong(15, iat)"):
+              assert marker in composite, marker
+          assert "String localEndpoint, long localTerm" not in composite
+          lease_source=(root/"security/RuntimePinnedLocalFenceLeaseVerifier.java").read_text()
+          for marker in ("private VerifiedLease(", "verifyWith(trustedKey)",
+                         '!"RS256".equals(signed.getHeader().getAlgorithm())',
+                         "expires.isAfter(issued.plusSeconds(90))",
+                         'claims.get("purpose")', 'claims.get("resource")',
+                         "getModulus().bitLength() < 2048",
+                         "public boolean isFresh()",
+                         'claims.get("workload")',
+                         "private final String boundWorkload",
+                         "boundWorkload.equals(workload.subject())",
+                         "public boolean isBoundTo("):
+              assert marker in lease_source, marker
+          for forbidden in ("@Component", "@Bean", "@RestController",
+                            "System.getenv(", "jku=", "jwks="):
+              assert forbidden not in lease_source, forbidden
+          workload_source=(root/"security/RuntimePinnedWorkloadIdentityVerifier.java").read_text()
+          for marker in ("private VerifiedWorkload(", "verifyWith(trustedKey)",
+                         '!"RS256".equals(signed.getHeader().getAlgorithm())',
+                         "expires.isAfter(issued.plusSeconds(90))",
+                         'claims.get("purpose")', 'claims.get("resource")',
+                         "getModulus().bitLength() < 2048",
+                         "public boolean isFresh()", "claims.getSubject()"):
+              assert marker in workload_source, marker
+          for forbidden in ("@Component", "@Bean", "@RestController",
+                            "System.getenv(", "jku=", "jwks="):
+              assert forbidden not in workload_source, forbidden
+          for marker in ("CREATE TEMP TABLE b62_local_resource_fence",
+                         "NEGATIVE COUNTEREXAMPLE: an authentic signed stale lease",
+                         "pinnedFenceAuthorityRejectsForgeryClaimsAndRetainedExpiry",
+                         "independentSignedWorkloadRejectsForgeryScopeAndMismatchedLease",
+                         "Two valid signatures with different workload subjects must DENY",
+                         "new RuntimePinnedLocalFenceLeaseVerifier",
+                         "new RuntimePinnedWorkloadIdentityVerifier",
+                         "Explicitly fenced resource must deny every positive JTI",
+                         "Expired local lease must deny even without JTI revocation"):
+              assert marker in regression, marker
+          effect=(root/"security/RuntimeSyntheticFencedEffectProbe.java").read_text()
+          for marker in ("WITH locked_fence AS MATERIALIZED",
+                         "FOR SHARE OF fence", "scoped AS MATERIALIZED",
+                         "INSERT INTO synthetic_guarded_task_effects",
+                         "ON CONFLICT (effect_id) DO NOTHING",
+                         "signed.signedTokenId()", "read.setQueryTimeout(2)",
+                         "stmt.setObject(16, effectId)",
+                         "stmt.setString(17, workload.subject())",
+                         'lease.isBoundTo(workload)'):
+              # Statement uses stmt rather than read for its 2s deadline.
+              if marker == "read.setQueryTimeout(2)":
+                  marker = "stmt.setQueryTimeout(2)"
+              assert marker in effect, marker
+          for forbidden in ("@Component", "@Bean", "@RestController",
+                            "System.getenv(", "http", "HttpServletRequest"):
+              assert forbidden not in effect, forbidden
+          for marker in ("CREATE TEMP TABLE synthetic_guarded_task_effects",
+                         "Exactly one disposable effect is pending",
+                         "Duplicate effect_id must not repeat a pending mutation",
+                         "Revoked session cannot insert a protected effect",
+                         "UNSAFE COUNTEREXAMPLE: an authentic stale leader"):
+              assert marker in regression, marker
+          closure_ack=(root/"security/RuntimePinnedClosureAckVerifier.java").read_text()
+          for marker in ("private VerifiedAck(", "verifyWith(trustedKey)",
+                         '!"RS256".equals(signed.getHeader().getAlgorithm())',
+                         "parseCanonicalUuid", "public boolean isFresh()",
+                         "expires.isAfter(issued.plusSeconds(90))",
+                         'claims.get("challenge")', 'claims.get("receipt")',
+                         'claims.get("node")', 'claims.get("term")',
+                         'claims.get("purpose")', 'claims.get("resource")',
+                         "getModulus().bitLength() < 2048", "matches("):
+              assert marker in closure_ack, marker
+          closure_consume=(root/"security/RuntimeSyntheticClosureAckConsumptionProbe.java").read_text()
+          for marker in ("WITH eligible AS MATERIALIZED",
+                         "b62_pending_closure_challenges",
+                         "b62_closure_receipts", "b62_writer_gate",
+                         "g.state='CLOSED'", "FOR SHARE OF c,r,g",
+                         "INSERT INTO b62_consumed_closure_acks",
+                         "ON CONFLICT DO NOTHING",
+                         "current_setting('transaction_isolation')='read committed'",
+                         "connection.getAutoCommit()", "connection.isReadOnly()",
+                         "ack.matches(", "ack.isFresh()",
+                         "rollback required",
+                         "uncommitted writer",
+                         "snapshot restoration"):
+              assert marker in closure_consume, marker
+          for source in (closure_ack, closure_consume):
+              for forbidden in ("@Component", "@Bean", "@RestController",
+                                "System.getenv(", "HttpServletRequest",
+                                "jku=", "jwks="):
+                  assert forbidden not in source, forbidden
+          for marker in ("signedClosureAckChallengeAndDurableOneShotConsumptionReview",
+                         "CREATE TABLE b62_consumed_closure_acks",
+                         "Same transaction replay must deny",
+                         "A committed ACK replay denies on another real DB session",
+                         "Reusing one receipt with a NEW signed challenge must deny",
+                         "Rolled-back claim may be retried",
+                         "The losing PG16 session must visibly wait on a real SQL lock",
+                         "Committed winner must cause the concurrent replay to DENY",
+                         "pg_stat_activity", "wait_event_type='Lock'",
+                         "rivalThread.join(5000)",
+                         "DROP SCHEMA IF EXISTS "):
+              assert marker in regression, marker
+          restricted=(Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeVerifiedRegistryTaskReadProbeTest.java")).read_text()
+          assert "actualPrimaryReadCommittedRegistryProbeStillAllowsExactSignedOwner" in restricted
+          assert "DROP SCHEMA IF EXISTS " in regression
+          old_workflow=Path(".github/workflows/runtime-verified-jdbc-membership.yml").read_text()
+          assert "current_setting('transaction_isolation') = 'read committed'" in old_workflow
+          assert "'CURRENT_TIMESTAMP'" not in old_workflow
+          print("RUNTIME_QUARANTINE_PRODUCTION_FILTERS_UNCHANGED_IN_ORDER")
+          PY
+      - name: Full stacked JWT, 403-entry route policy, direct-port HTTP and PostgreSQL regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml \
+            -Dtest=RuntimeQuarantinePathInfoBoundaryTest,RuntimeRealDirectPortDenialRegressionTest,RuntimeRouteAdmissionPolicyTest,RuntimeFullAppPinnedIdentityAuthorityTest,RuntimeControllerPolicyInventoryTest,RuntimeProductionApiQuarantineTest,RuntimeFullAppHttpContainmentTest,RuntimeFullAppHttpSseRevocationLifecycleTest,RuntimePinnedSpringBootHttpIntegrationTest,RuntimePinnedHttpBearerGateLoopbackTest,OwnerlessTaskMissionHttpFilterTest,RuntimeVerifiedTaskReadProbeTest,RuntimeHttpSignedOwnerJdbcBoundaryTest,RuntimeSyntheticSignedSessionJdbcTest,RuntimeB62EpochSignerCompatibilityTest,RuntimePinnedPrincipalVerifierTest,OwnerlessTaskEventLockdownTest,InternalTaskEventJournalLockdownTest test
+          echo 'RUNTIME_CONSOLIDATED_HTTP_IDENTITY_POLICY_AND_OWNER_JDBC_REGRESSION_PASS'
+      - name: Verify private route inventory is still deny-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=orchestrator-service/target/s0-e5-route-audit/runtime-handler-policy-matrix.tsv
+          test -s "$file"
+          test "$(grep -c 'DENY_404' "$file")" -ge 70
+          if grep -E '(^|[[:space:]])(ALLOW|PERMIT|UNLOCKED)([[:space:]]|$)|UNCLASSIFIED_STOP' "$file"; then
+            echo 'Unexpected route admission or unknown controller classification' >&2
+            exit 1
+          fi
+          echo 'RUNTIME_FULL_MVC_ROUTE_INVENTORY_ALL_DENY_REVIEW_PASS'
+      - name: Verify no transient shared-schema or permanent tenant/task objects
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+          test "$(psql -X -A -t -c "SELECT count(*) FROM information_schema.tables WHERE table_name IN ('aetheris_tasks','tenant_memberships','project_memberships') AND table_schema NOT LIKE 'pg_temp_%'")" = "0"
+          test "$(psql -X -A -t -c "SELECT count(*) FROM pg_namespace WHERE nspname LIKE 'ownerlab_xconn_%' OR nspname LIKE 'ownerlab_http_%' OR nspname LIKE 'ownerlab_jti_%' OR nspname LIKE 'ownerlab_b62_%' OR nspname LIKE 'b62_ack_%'")" = "0"
+          test "$(psql -X -A -t -c "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'ownerlab_b62r_%'")" = "0"
+          echo 'RUNTIME_DISPOSABLE_PG16_CROSS_SESSION_SCHEMA_CLEANUP_PASS'
+      - name: No API admission, deployment or publication
+        shell: bash
+        run: |
+          echo 'RUNTIME_TASK_SSE_UNCERTIFIED_NO_GO_NO_XERJ'

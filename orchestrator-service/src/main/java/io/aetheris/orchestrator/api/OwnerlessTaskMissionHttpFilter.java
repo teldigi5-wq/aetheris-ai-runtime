@@ -52,7 +52,12 @@ public final class OwnerlessTaskMissionHttpFilter extends OncePerRequestFilter {
         String raw = request.getRequestURI();
         String contextRelative = raw != null && context != null
             && raw.startsWith(context) ? raw.substring(context.length()) : raw;
-        if (isProtected(request.getServletPath()) || isProtected(contextRelative)) {
+        // Some servlet mappings expose a decoded route in pathInfo even
+        // when both the servletPath and raw encoded URI hide its prefix.
+        // Containment is unconditional until durable ownership is certified.
+        if (isProtected(request.getServletPath())
+                || isProtected(request.getPathInfo())
+                || isProtected(contextRelative)) {
             response.setHeader("Cache-Control", "no-store");
             response.setHeader("X-Content-Type-Options", "nosniff");
             response.sendError(HttpServletResponse.SC_NOT_FOUND);

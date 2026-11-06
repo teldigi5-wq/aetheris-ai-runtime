@@ -48,30 +48,98 @@ public final class RuntimePinnedPrincipalVerifier {
         private final String subject;
         private final String role;
         private final Set<String> scopes;
+        private final Instant issuedAt;
+        private final Instant expiresAt;
+        private final String signedJti;
+        private final String signedIssuer;
+        private final String verifiedKeyId;
+        private final Clock clock;
 
         private VerifiedPrincipal(long identityUid, String subject,
-                                  String role, Set<String> scopes) {
+                                  String role, Set<String> scopes,
+                                  Instant issuedAt, Instant expiresAt,
+                                  String signedJti, String signedIssuer,
+                                  String verifiedKeyId, Clock clock) {
             if (identityUid <= 0 || subject == null || subject.isBlank()
                     || !ROLE_SCOPE_CEILINGS.containsKey(role)
                     || scopes == null || scopes.isEmpty()
-                    || !ROLE_SCOPE_CEILINGS.get(role).containsAll(scopes)) {
+                    || !ROLE_SCOPE_CEILINGS.get(role).containsAll(scopes)
+                    || issuedAt == null || expiresAt == null || clock == null
+                    || !expiresAt.isAfter(issuedAt)
+                    || !expiresAt.isAfter(clock.instant())
+                    || !validName(signedIssuer, 255)
+                    || verifiedKeyId == null || verifiedKeyId.isBlank()) {
                 throw new IllegalArgumentException("Invalid independently signed principal");
             }
             this.identityUid = identityUid;
             this.subject = subject;
             this.role = role;
             this.scopes = Set.copyOf(scopes);
+            this.issuedAt = issuedAt;
+            this.expiresAt = expiresAt;
+            this.signedJti = signedJti;
+            this.signedIssuer = signedIssuer;
+            this.verifiedKeyId = verifiedKeyId;
+            this.clock = clock;
         }
 
         public long identityUid() { return identityUid; }
         public String subject() { return subject; }
         public String role() { return role; }
-        public Set<String> scopes() { return scopes; }
-
-        /** Scope is only a capability ceiling: it never grants object ownership. */
-        public boolean hasScope(String scope) {
-            return scope != null && scopes.contains(scope);
+        /**
+         * Opt-in strictly verified token provenance. This is never a
+         * revocation verdict or resource-ownership permission.
+         */
+        public VerifiedRevocationFacts requireRevocationFacts() {
+            if (!isFresh() || !validSignedTokenId(signedJti)) {
+                throw new IllegalArgumentException(
+                    "Signed runtime session provenance unavailable");
+            }
+            return new VerifiedRevocationFacts(identityUid, signedIssuer,
+                verifiedKeyId, signedJti, issuedAt);
         }
+
+        /** Expired signed claims are never exposed as a live scope set. */
+        public Set<String> scopes() { return isFresh() ? scopes : Set.of(); }
+
+        /**
+         * A previously verified principal is not a permanent capability.
+         * This is token-expiry freshness only, NOT session revocation,
+         * object ownership or proof of live tenant membership.
+         */
+        public boolean isFresh() { return expiresAt.isAfter(clock.instant()); }
+
+        /** Scope is a time-limited ceiling; never a resource grant. */
+        public boolean hasScope(String scope) {
+            return scope != null && isFresh() && scopes.contains(scope);
+        }
+    }
+
+    /**
+     * Cryptographically signed facts for a future authoritative READ-ONLY
+     * revocation check. Only the signature-verifying class can construct
+     * this type. Never log JWTs or identify this object as an ALLOW verdict.
+     */
+    public static final class VerifiedRevocationFacts {
+        private final long uid;
+        private final String issuer;
+        private final String kid;
+        private final String jti;
+        private final Instant iat;
+
+        private VerifiedRevocationFacts(long uid, String issuer, String kid,
+                                        String jti, Instant iat) {
+            this.uid = uid;
+            this.issuer = issuer;
+            this.kid = kid;
+            this.jti = jti;
+            this.iat = iat;
+        }
+        public long signedIdentityUid() { return uid; }
+        public String verifiedIssuer() { return issuer; }
+        public String verifiedKeyId() { return kid; }
+        public String signedTokenId() { return jti; }
+        public Instant signedIssuedAt() { return iat; }
     }
 
     public RuntimePinnedPrincipalVerifier(String publicKeyPem, String expectedKid,
@@ -86,6 +154,16 @@ public final class RuntimePinnedPrincipalVerifier {
         this.expectedIssuer = expectedIssuer;
         this.expectedAudience = expectedAudience;
         this.clock = Objects.requireNonNull(clock, "clock");
+    }
+
+    /**
+     * Fail-closed prospective revocation-bound entry. This still DOES NOT
+     * consult B62 or authorize any HTTP route.
+     */
+    public VerifiedPrincipal verifyBearerForRevocation(String authorizationHeader) {
+        VerifiedPrincipal verified = verifyBearer(authorizationHeader);
+        verified.requireRevocationFacts();
+        return verified;
     }
 
     public VerifiedPrincipal verifyBearer(String authorizationHeader) {
@@ -115,6 +193,7 @@ public final class RuntimePinnedPrincipalVerifier {
                 throw new IllegalArgumentException("Invalid signed issuer or target audience");
             }
             String subject = claims.getSubject();
+            String signedJti = claims.getId();
             Object uid = claims.get("uid");
             Object rawRole = claims.get("role");
             Object rawScopes = claims.get("scopes");
@@ -148,12 +227,20 @@ public final class RuntimePinnedPrincipalVerifier {
             if (!ROLE_SCOPE_CEILINGS.get(rawRole).containsAll(scopes)) {
                 throw new IllegalArgumentException("Signed role-scope ceiling exceeded");
             }
-            return new VerifiedPrincipal(number, subject, (String) rawRole, scopes);
+            return new VerifiedPrincipal(number, subject, (String) rawRole,
+                scopes, issued, expires, signedJti, expectedIssuer,
+                expectedKid, clock);
         } catch (RuntimeException untrusted) {
             // Never expose signature, private JWT fields or configuration in
             // an error sent to client or caller logs.
             throw new IllegalArgumentException("Rejected signed Identity principal");
         }
+    }
+
+    /** Bounds the signed jti; this does not establish uniqueness/revocation. */
+    private static boolean validSignedTokenId(String value) {
+        return value != null &&
+            value.matches("[A-Za-z0-9][A-Za-z0-9._:-]{15,127}");
     }
 
     private static boolean validName(String value, int maxLength) {

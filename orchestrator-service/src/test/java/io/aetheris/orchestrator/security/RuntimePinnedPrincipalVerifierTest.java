@@ -10,6 +10,9 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
@@ -134,6 +137,77 @@ class RuntimePinnedPrincipalVerifierTest {
             "DEVELOPER", List.of("orchestrator:read"), -10, 90000));
         denied(issue(identityKey, KID, ISSUER, List.of(AUDIENCE), 42,
             "DEVELOPER", List.of("orchestrator:read"), -10, 0));
+    }
+
+    @Test
+    void retainedVerifiedPrincipalLosesScopesWhenSignedTokenExpires() {
+        // Verify ONCE with a genuine ephemeral RSA-signed token, then advance
+        // the verifier's trusted clock without revalidating the JWT string.
+        Instant starting = Instant.now();
+        AtomicReference<Instant> trustedNow = new AtomicReference<>(starting);
+        Clock advancing = new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) {
+                return Clock.fixed(trustedNow.get(), zone);
+            }
+            @Override public Instant instant() { return trustedNow.get(); }
+        };
+        var localVerifier = new RuntimePinnedPrincipalVerifier(
+            pem(identityKey), KID, ISSUER, AUDIENCE, advancing);
+        var retained = localVerifier.verifyBearer("Bearer " + valid());
+        assertTrue(retained.isFresh());
+        assertTrue(retained.hasScope("orchestrator:read"));
+        assertTrue(retained.scopes().contains("orchestrator:write"));
+        trustedNow.set(starting.plusSeconds(360));
+        assertFalse(retained.isFresh());
+        assertFalse(retained.hasScope("orchestrator:read"));
+        assertFalse(retained.hasScope("orchestrator:write"));
+        assertTrue(retained.scopes().isEmpty(),
+            "A cached signed principal must not expose expired scopes");
+    }
+
+    @Test
+    void revocationBoundVerifierRejectsMissingIdAndExpiredRetainedPrincipal() {
+        Instant start = Instant.now();
+        AtomicReference<Instant> now = new AtomicReference<>(start);
+        Clock moving = new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) {
+                return Clock.fixed(now.get(), zone);
+            }
+            @Override public Instant instant() { return now.get(); }
+        };
+        var strict = new RuntimePinnedPrincipalVerifier(
+            pem(identityKey), KID, ISSUER, AUDIENCE, moving);
+        // Legacy positive JWTs deliberately lack a jti. Only the NEW
+        // opt-in revocation seam requires it, without unquarantining APIs.
+        var ordinary = strict.verifyBearer("Bearer " + valid());
+        assertThrows(IllegalArgumentException.class,
+            ordinary::requireRevocationFacts);
+        assertThrows(IllegalArgumentException.class,
+            () -> strict.verifyBearerForRevocation("Bearer " + valid()));
+        String jti = java.util.UUID.randomUUID().toString();
+        String signed = Jwts.builder().header().keyId(KID).and()
+            .subject("ci-session@example.invalid").issuer(ISSUER)
+            .claim("aud", List.of(AUDIENCE)).claim("uid", 42L)
+            .claim("role", "DEVELOPER")
+            .claim("scopes", List.of("orchestrator:read"))
+            .id(jti)
+            .issuedAt(Date.from(start.minusSeconds(10)))
+            .expiration(Date.from(start.plusSeconds(60)))
+            .signWith(identityKey.getPrivate(), Jwts.SIG.RS256).compact();
+        var checked = strict.verifyBearerForRevocation("Bearer " + signed);
+        var fact = checked.requireRevocationFacts();
+        assertEquals(42L, fact.signedIdentityUid());
+        assertEquals(ISSUER, fact.verifiedIssuer());
+        assertEquals(KID, fact.verifiedKeyId());
+        assertEquals(jti, fact.signedTokenId());
+        assertEquals(start.minusSeconds(10).getEpochSecond(),
+            fact.signedIssuedAt().getEpochSecond());
+        now.set(start.plusSeconds(61));
+        assertFalse(checked.isFresh());
+        assertThrows(IllegalArgumentException.class,
+            checked::requireRevocationFacts);
     }
 
     @Test

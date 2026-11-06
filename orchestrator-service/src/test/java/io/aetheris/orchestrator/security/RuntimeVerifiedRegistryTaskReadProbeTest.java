@@ -16,6 +16,9 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -102,6 +105,26 @@ class RuntimeVerifiedRegistryTaskReadProbeTest {
     }
 
     @Test
+    void actualPrimaryReadCommittedRegistryProbeStillAllowsExactSignedOwner()
+            throws Exception {
+        try (Connection c = connect()) {
+            c.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+            readTransaction(c);
+            try (var statement = c.createStatement();
+                 var recovery = statement.executeQuery(
+                     "SELECT pg_is_in_recovery(), current_setting('transaction_isolation')")) {
+                assertTrue(recovery.next());
+                assertFalse(recovery.getBoolean(1),
+                    "This positive authorization test must use an actual primary");
+                assertEquals("read committed", recovery.getString(2));
+            }
+            assertTrue(probe.canRead(c, readAs(42), "alpha", "red", ALICE));
+            assertFalse(probe.canRead(c, readAs(77), "alpha", "red", ALICE));
+            c.rollback();
+        }
+    }
+
+    @Test
     void signedIdentityAllowsExactRegistryBoundReadsButNeverCrossTenantOrLegacy() throws Exception {
         try (Connection c = connect()) {
             readTransaction(c);
@@ -142,6 +165,175 @@ class RuntimeVerifiedRegistryTaskReadProbeTest {
             assertThrows(IllegalStateException.class, () ->
                 probe.canRead(c,readAs(42),"alpha","red",ALICE));
         }
+    }
+
+    @Test
+    void signedRegistryReadMustRejectSnapshotIsolationEvenWithMatchingMembership()
+            throws Exception {
+        // The restricted connection is backed by real disposable PG16.
+        // Snapshot isolation can retain revoked rows after an external COMMIT.
+        // Fail closed even while this synthetic membership is currently valid.
+        for (int isolation : new int[]{
+                Connection.TRANSACTION_READ_UNCOMMITTED,
+                Connection.TRANSACTION_REPEATABLE_READ,
+                Connection.TRANSACTION_SERIALIZABLE}) {
+            try (Connection c = connect()) {
+                c.setTransactionIsolation(isolation);
+                readTransaction(c);
+                try (var sql = c.createStatement();
+                     var setting = sql.executeQuery("SHOW transaction_isolation")) {
+                    assertTrue(setting.next());
+                    String expected = switch (isolation) {
+                        case Connection.TRANSACTION_READ_UNCOMMITTED -> "read uncommitted";
+                        case Connection.TRANSACTION_REPEATABLE_READ -> "repeatable read";
+                        case Connection.TRANSACTION_SERIALIZABLE -> "serializable";
+                        default -> throw new IllegalArgumentException("Unexpected test isolation");
+                    };
+                    assertEquals(expected, setting.getString(1));
+                }
+                assertFalse(probe.canRead(c, readAs(42), "alpha", "red", ALICE),
+                    "Server-side authorization must deny snapshot isolation " + isolation);
+                c.rollback();
+            }
+        }
+
+        try (Connection c = connect()) {
+            c.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+            readTransaction(c);
+            try (var sql = c.createStatement();
+                 var setting = sql.executeQuery("SHOW transaction_isolation")) {
+                assertTrue(setting.next());
+                assertEquals("read committed", setting.getString(1));
+            }
+            assertTrue(probe.canRead(c, readAs(42), "alpha", "red", ALICE),
+                "A real signed owner and current registry grant still permit a safe read");
+            assertFalse(probe.canRead(c, readAs(77), "alpha", "red", ALICE),
+                "READ COMMITTED never disables cross-identity owner checks");
+            c.rollback();
+        }
+    }
+
+    @Test
+    void committedConcurrentRevocationIsVisibleToLongLivedRestrictedReader()
+            throws Exception {
+        // Reviewer-only race rehearsal. An actual restricted JDBC login reads
+        // in one ongoing READ COMMITTED transaction while a distinct privileged
+        // CI owner connection updates membership before and after COMMIT.
+        // This proves statement-boundary visibility, NOT cancellation of an
+        // already executing SQL statement or streamed HTTP/SSE response.
+        for (boolean project : new boolean[]{true, false}) {
+            try (Connection reader = connect()) {
+                reader.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+                readTransaction(reader);
+                var alice = readAs(42);
+                assertTrue(probe.canRead(reader, alice, "alpha", "red", ALICE));
+                assertTrue(probe.canRead(reader, alice, "beta", "red", ALICE_BETA));
+
+                CountDownLatch updateMadeButUncommitted = new CountDownLatch(1);
+                CountDownLatch allowCommit = new CountDownLatch(1);
+                var workers = Executors.newSingleThreadExecutor();
+                // The two SQL variants are fixed literals, not caller input.
+                String update = project
+                    ? """
+                        UPDATE registry_project_memberships
+                        SET status='REVOKED', revoked_at=clock_timestamp(), version=version+1
+                        WHERE tenant_key='alpha' AND project_key='red'
+                          AND identity_uid=42 AND status='ACTIVE'
+                        """
+                    : """
+                        UPDATE registry_tenant_memberships
+                        SET status='REVOKED', revoked_at=clock_timestamp(), version=version+1
+                        WHERE tenant_key='alpha' AND identity_uid=42 AND status='ACTIVE'
+                        """;
+                var revoker = workers.submit(() -> {
+                    try (Connection owner = disposableOwnerConnection()) {
+                        owner.setAutoCommit(false);
+                        try (var sql = owner.createStatement()) {
+                            sql.execute("SET LOCAL lock_timeout = '6s'");
+                            int affected = sql.executeUpdate(update);
+                            if (affected != 1) {
+                                throw new IllegalStateException(
+                                    "Disposable owner revocation changed " + affected + " rows");
+                            }
+                        }
+                        updateMadeButUncommitted.countDown();
+                        if (!allowCommit.await(8, TimeUnit.SECONDS)) {
+                            throw new IllegalStateException("Concurrent owner commit gate timed out");
+                        }
+                        owner.commit();
+                        return 1;
+                    } catch (Exception failure) {
+                        throw new IllegalStateException("Disposable concurrent revocation failed", failure);
+                    }
+                });
+                try {
+                    assertTrue(updateMadeButUncommitted.await(8, TimeUnit.SECONDS),
+                        "Owner writer must reach the uncommitted row-update barrier");
+                    // READ COMMITTED must not see another transaction's
+                    // uncommitted revocation; this is an expected exposure
+                    // boundary and MUST NOT be described as in-flight safety.
+                    assertTrue(probe.canRead(reader, alice, "alpha", "red", ALICE),
+                        "Uncommitted external revocation is not yet visible");
+                    allowCommit.countDown();
+                    assertEquals(1, revoker.get(10, TimeUnit.SECONDS));
+                    assertFalse(probe.canRead(reader, alice, "alpha", "red", ALICE),
+                        "Next statement after COMMIT must deny revoked membership");
+                    assertTrue(probe.canRead(reader, alice, "beta", "red", ALICE_BETA),
+                        "Other tenant remains independently accessible");
+                    assertFalse(probe.canRead(reader, readAs(77), "alpha", "red", ALICE));
+                    reader.rollback();
+                } finally {
+                    allowCommit.countDown();
+                    // Stop the writer before restoring the synthetic seed.
+                    // If it failed, the owner connection auto-rolls back.
+                    try {
+                        revoker.get(10, TimeUnit.SECONDS);
+                    } finally {
+                        workers.shutdownNow();
+                        // Complete static SQL for each registry table. Never
+                        // concatenate a table identifier or partial text block
+                        // into a JDBC statement; the previous fixture had
+                        // missing whitespace before SET and failed restoration.
+                        String restoreSql = project
+                            ? """
+                                UPDATE registry_project_memberships
+                                SET status='ACTIVE', revoked_at=NULL, version=version+1
+                                WHERE tenant_key='alpha' AND project_key='red' AND identity_uid=42
+                                """
+                            : """
+                                UPDATE registry_tenant_memberships
+                                SET status='ACTIVE', revoked_at=NULL, version=version+1
+                                WHERE tenant_key='alpha' AND identity_uid=42
+                                """;
+                        try (Connection owner = disposableOwnerConnection();
+                             var restore = owner.prepareStatement(restoreSql)) {
+                            assertEquals(1, restore.executeUpdate(),
+                                "Disposable grant must be reset after the overlap test");
+                        }
+                    }
+                }
+            }
+            try (Connection recheck = connect()) {
+                readTransaction(recheck);
+                assertTrue(probe.canRead(recheck, readAs(42), "alpha", "red", ALICE),
+                    "Synthetic membership must be restored after the rehearsal");
+                recheck.rollback();
+            }
+        }
+    }
+
+    private static Connection disposableOwnerConnection() throws SQLException {
+        // Do not allow the admin-role writer to target any user database.
+        if (!"true".equals(System.getenv("GITHUB_ACTIONS"))
+                || !"yes".equals(System.getenv("AETHERIS_S0_DISPOSABLE_DB_ONLY"))
+                || !"127.0.0.1".equals(System.getenv("PGHOST"))
+                || !"s0read_disposable".equals(System.getenv("PGDATABASE"))
+                || !"s0_owner_ci".equals(System.getenv("PGUSER"))) {
+            throw new IllegalStateException("Not the disposable CI PostgreSQL owner");
+        }
+        return DriverManager.getConnection(
+            "jdbc:postgresql://127.0.0.1:5432/s0read_disposable",
+            "s0_owner_ci", System.getenv("PGPASSWORD"));
     }
 
     private static void expectNoPrivilege(String sql) throws Exception {

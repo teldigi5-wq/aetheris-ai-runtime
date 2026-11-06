@@ -1,0 +1,287 @@
+name: Runtime B62 real physical-standby stale-read denial (review only)
+# Tests only; no production service, endpoint or real customer database.
+on:
+  push:
+    branches: [security/runtime-quarantine-pathinfo-boundary-20261101]
+permissions:
+  contents: read
+jobs:
+  b62-real-standby-fail-closed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      AETHERIS_B62_REPLICA_CI_ONLY: "yes"
+      AETHERIS_DISPATCHER_ENABLED: "false"
+      AETHERIS_SYNTRA_OWNER_RUNTIME_ENABLED: "false"
+    steps:
+      - name: Checkout exact branch, no persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Prove source SQL and HTTP quarantine unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path("orchestrator-service/src/test/java/io/aetheris/orchestrator/security/RuntimeB62EpochSignerCompatibilityTest.java").read_text()
+          assert src.count("AND NOT pg_is_in_recovery()") == 2
+          assert "primaryOnlyDecisionRequiresCurrentCommittedPrimaryStatement" in src
+          assert "AND active.state='ACTIVE'" in src
+          assert "AND ? <= reject_issued_at_or_before_epoch" in src
+          root=Path("orchestrator-service/src/main/java/io/aetheris/orchestrator")
+          for file,order in [
+              (root/"api/OwnerlessTaskMissionHttpFilter.java","@Order(Ordered.HIGHEST_PRECEDENCE)"),
+              (root/"security/RuntimeUncertifiedApiHttpFilter.java","@Order(Ordered.HIGHEST_PRECEDENCE + 1)")]:
+              content=file.read_text()
+              assert "@Component" in content and "SC_NOT_FOUND" in content and order in content
+          assert "enum Verdict { QUARANTINED }" in (root/"security/RuntimeRouteAdmissionPolicy.java").read_text()
+          script=Path("scripts/security/runtime_b62_physical_standby_review.sh").read_text()
+          for marker in ("pg_basebackup", "--write-recovery-conf", "pg_is_in_recovery()",
+                         "pg_wal_replay_pause()", "pg_get_wal_replay_pause_state()",
+                         "pg_wal_replay_resume()", "AETHERIS_B62_PAUSED_STALE_STANDBY_FALSE_ALLOW_BLOCKED_PASS",
+                         "pg_ctl -D /tmp/b62-standby -w -t 30 promote",
+                         "AETHERIS_B62_SPLIT_BRAIN_OLD_PRIMARY_STALE_ALLOW_DEMONSTRATED_NO_GO_PASS",
+                         "AETHERIS_B62_DISPOSABLE_OLD_PRIMARY_FENCED_AFTER_PROMOTION_PASS",
+                         "AETHERIS_B62_SEPARATE_LEADER_TERM_DENIES_OLD_PRIMARY_PASS",
+                         "AETHERIS_B62_SEPARATE_LEADER_EXPIRY_AND_OUTAGE_FAIL_CLOSED_PASS",
+                         "AETHERIS_B62_RESOURCE_OWNED_MONOTONIC_FENCE_ATOMIC_ACTION_PASS",
+                         "AETHERIS_B62_INFLIGHT_ROW_LOCK_BLOCKS_LEADERSHIP_ADVANCE_PASS",
+                         "AETHERIS_B62_POST_INFLIGHT_LEADERSHIP_TRANSITION_PASS",
+                         "pg_stat_activity", "wait_event='PgSleep'",
+                         "SET LOCAL lock_timeout='400ms'",
+                         "canceling statement due to lock timeout",
+                         "WHERE request_id='inflight-term-two'",
+                         "FOR SHARE OF l,r;",
+                         "REVOKE ALL ON FUNCTION public.b62_try_protected_action",
+                         "AETHERIS_B62_SEPARATE_DATABASE_STALE_OLD_RESOURCE_ALLOW_NO_GO_PASS",
+                         "AETHERIS_B62_SEPARATE_DATABASE_OLD_RESOURCE_FENCED_DURING_PARTITION_PASS",
+                         "AETHERIS_B62_LOCAL_ONLY_FENCE_COORDINATOR_OUTAGE_ALLOW_NO_GO_PASS",
+                         "AETHERIS_B62_DETACHED_INFLIGHT_STALE_EFFECT_COMMITS_NO_GO_PASS",
+                         "AETHERIS_B62_CUTOVER_OLD_ALIVE_FAIL_CLOSED_PASS",
+                         "AETHERIS_B62_CUTOVER_COORDINATOR_OUTAGE_FAIL_CLOSED_PASS",
+                         "AETHERIS_B62_CUTOVER_STALE_NEW_TERM_FAIL_CLOSED_PASS",
+                         "AETHERIS_B62_CUTOVER_ORDERED_OPERATOR_REHEARSAL_PASS",
+                         "AETHERIS_B62_CUTOVER_REPEATED_OUTAGE_FAIL_CLOSED_PASS",
+                         "AETHERIS_B62_CUTOVER_GATE_CHECK_THEN_WRITE_RACE_NO_GO_PASS",
+                         "AETHERIS_B62_CUTOVER_DIRECT_SQL_BYPASS_OUTAGE_NO_GO_PASS",
+                         "AETHERIS_B62_RESOURCE_GATE_DRAIN_LOCK_SERIALIZES_PASS",
+                         "AETHERIS_B62_RESOURCE_LOCAL_GATE_CLOSED_DENIES_DIRECT_SQL_PASS",
+                         "AETHERIS_B62_RESOURCE_GATE_DISTRIBUTED_LEADERSHIP_NO_GO",
+                         "AETHERIS_B62_RESOURCE_CLOSED_PERSISTS_RESTART_AND_OUTAGE_PASS",
+                         "AETHERIS_B62_CLOSED_GATE_GLOBAL_LEADERSHIP_NO_GO",
+                         "AETHERIS_B62_CLOSED_GATE_RESISTS_ADMIN_DML_REOPEN_PASS",
+                         "AETHERIS_B62_CLOSED_GATE_REOPEN_AFTER_RESTART_DENIED_PASS",
+                         "AETHERIS_B62_CLOSURE_RECEIPT_ROLLBACK_ATOMIC_PASS",
+                         "AETHERIS_B62_COMMITTED_CLOSURE_RECEIPT_BOUNDS_NODE_TERM_PASS",
+                         "AETHERIS_B62_CLOSURE_RECEIPT_DUPLICATE_EVENT_IDEMPOTENT_PASS",
+                         "AETHERIS_B62_CLOSURE_RECEIPT_DURABLE_RESTART_PASS",
+                         "AETHERIS_B62_PHYSICAL_ACK_LEDGER_ONCE_COMMITTED_PASS",
+                         "AETHERIS_B62_ACK_LEDGER_PERSISTS_PHYSICAL_RESTART_REPLAY_DENIED_PASS",
+                         "AETHERIS_B62_RESTRICTED_WRITER_CANNOT_ERASE_ACK_LEDGER_PASS",
+                         "AETHERIS_B62_PRIVILEGED_ACK_LEDGER_ERASURE_REPLAY_NO_GO_PASS",
+                         "AETHERIS_B62_INDEPENDENT_COORDINATOR_ACK_LEDGER_ONCE_PASS",
+                         "AETHERIS_B62_LOCAL_ADMIN_ERASURE_CANNOT_RESET_COORDINATOR_ACK_PASS",
+                         "AETHERIS_B62_INDEPENDENT_ACK_LEDGER_RESTART_AND_OUTAGE_PASS",
+                         "AETHERIS_B62_COORDINATOR_OWNER_ERASES_ACK_LEDGER_NO_GO_PASS",
+                         "CREATE TABLE public.b62_independent_ack_issued",
+                         "CREATE TABLE public.b62_independent_ack_consumed",
+                         "CREATE FUNCTION public.b62_consume_independent_ack",
+                         "GRANT SELECT(challenge_id) ON public.b62_independent_ack_consumed",
+                         "CREATE TABLE public.b62_ack_pending",
+                         "CREATE TABLE public.b62_ack_consumed",
+                         "REVOKE ALL ON public.b62_ack_pending",
+                         "ON CONFLICT DO NOTHING",
+                         "b62_consume_physical_ack()",
+                         "AETHERIS_B62_PROMOTED_RECEIPT_CANNOT_FENCE_PRIVILEGED_FAILBACK_NO_GO_PASS",
+                         "CREATE TABLE public.b62_closure_receipts",
+                         "CREATE TRIGGER b62_receipt_on_closed",
+                         "CREATE FUNCTION public.b62_record_closure_receipt()",
+                         "REVOKE ALL ON public.b62_closure_receipts FROM PUBLIC",
+                         "CREATE TRIGGER b62_gate_no_reopen_delete",
+                         "CREATE TRIGGER b62_gate_no_truncate",
+                         "B62_GATE_REOPEN_FORBIDDEN",
+                         "B62_GATE_DELETE_FORBIDDEN",
+                         "B62_GATE_TRUNCATE_FORBIDDEN",
+                         "restarted-closed-direct-deny",
+                         "CREATE TABLE public.b62_writer_gate",
+                         "GRANT UPDATE(lock_guard) ON public.b62_writer_gate TO $local_owner",
+                         "JOIN public.b62_writer_gate g",
+                         "g.state='OPEN'",
+                         "FOR SHARE OF f,g",
+                         "wait \"$drain_pid\"",
+                         "wait \"$race_pid\"",
+                         "touch \"$cutover_race_dir/release\"",
+                         "review_cutover_effect()",
+                         "docker inspect -f '{{.State.Running}}'",
+                         "grep -Fxq t \"$detached_action_output\"",
+                         "wait \"$detached_pid\"",
+                         "detached-inflight-term-four",
+                         "if review_route \"$standby\" 4 \"$new_sql\"; then",
+                         "GRANT UPDATE(lock_guard) ON public.leader_fence TO $fence_owner",
+                         "GRANT UPDATE(lock_guard) ON public.b62_resource_fence TO $fence_owner",
+                         "GRANT UPDATE(lock_guard) ON public.b62_local_fence TO $local_owner",
+                         "AETHERIS_B62_DEFINER_AUTHORITY_COLUMNS_DENIED_PASS",
+                         "AETHERIS_B62_PHYSICAL_LOCAL_DEFINER_TERM_ENDPOINT_DENIED_PASS",
+                         "SELECT current_user='$fence_owner';",
+                         "SELECT current_user='$local_owner';",
+                         "CHECK(lock_guard=0)",
+                         "CREATE FUNCTION public.b62_local_try_effect",
+                         'docker network disconnect "$network" "$primary"'):
+              assert marker in script
+          assert "pg_isready" not in script
+          assert "GRANT UPDATE(term)" not in script
+          assert "GRANT UPDATE(endpoint)" not in script
+          assert "GRANT UPDATE(expires_at)" not in script
+          # Ensure both concurrent writer paths are covered and cannot
+          # pass merely from any unrelated SQL/permission failure.
+          assert script.count("grep -Fq 'canceling statement due to lock timeout'") == 3
+          assert "wait \"$held_pid\"" in script
+          assert script.count("UPDATE public.leader_fence SET term=3") >= 1
+          assert script.count("UPDATE public.b62_resource_fence SET term=3") >= 1
+          # A separate physical-resource action is explicitly observed
+          # running when the independent coordinator advances to term five.
+          assert script.count("wait_event='PgSleep'") >= 2
+          assert "detached_ready=true" in script
+          assert "UPDATE public.leader_fence SET term=5," in script
+          assert "WHERE authority_key='runtime' AND term=4" in script
+          assert "request_id='detached-inflight-term-four'" in script
+          assert script.count("SELECT count(*) FROM public.b62_local_effects") >= 4
+          assert "AETHERIS_B62_DETACHED_INFLIGHT_STALE_EFFECT_COMMITS_NO_GO_PASS" in script
+          # Cutover rehearsal is explicitly fail-closed under network
+          # isolation, coordinator outages, and mismatched local terms.
+          assert script.count("if review_cutover_effect '") == 6
+          assert '[[ "$old_running" == false ]] || return 1' in script
+          assert '[[ "$leader" == "$standby:5" ]] || return 1' in script
+          assert '[[ "$local_term" == "$standby:5" ]] || return 1' in script
+          assert "review_cutover_effect 'rehearsal-post-fence-action'" in script
+          assert 'docker stop "$authority"' in script
+          # Test-only pause makes the check/write TOCTOU deterministic.
+          assert "if [[ \"$request\" == 'race-after-gate-checks' ]]; then" in script
+          assert 'printf \'checked\\n\'' in script
+          assert "cutover_race_dir=\"$(mktemp -d)\"" in script
+          assert '[[ -z "$cutover_race_dir" ]] || rm -rf -- "$cutover_race_dir"' in script
+          assert "UPDATE public.leader_fence SET term=6," in script
+          assert "WHERE request_id='race-after-gate-checks'" in script
+          assert "if review_cutover_effect 'race-fresh-recheck-must-deny'; then" in script
+          assert "SELECT public.b62_local_try_effect(5,'post-cutover-direct-sql-bypass')" in script
+          assert "WHERE request_id='post-cutover-direct-sql-bypass'" in script
+          assert 'AETHERIS_B62_CUTOVER_DIRECT_SQL_BYPASS_OUTAGE_NO_GO_PASS' in script
+          # The protected SQL function, not an optional client gate, must
+          # check a resource-owned write state under the same transaction.
+          assert "g.state='OPEN'" in script
+          assert "FOR SHARE OF f,g;" in script
+          assert "UPDATE public.b62_writer_gate SET state='CLOSED'" in script
+          assert "UPDATE public.b62_writer_gate SET state='OPEN'" in script
+          assert "SELECT public.b62_local_try_effect(5,'direct-after-closed')" in script
+          assert "writer_drain_error" in script
+          assert script.count("grep -Fq 'canceling statement due to lock timeout'") == 3
+          assert "GRANT UPDATE(state)" not in script
+          assert "GRANT ALL ON public.b62_writer_gate" not in script
+          assert script.count('docker exec -u postgres "$standby" pg_ctl') == 2
+          assert '-m fast -w -t 30 stop' in script
+          assert '-w -t 30 start' in script
+          assert "SELECT public.b62_local_try_effect(5,'restarted-closed-direct-deny')" in script
+          assert "AETHERIS_B62_RESOURCE_CLOSED_PERSISTS_RESTART_AND_OUTAGE_PASS" in script
+          # The close must stay terminal for ordinary UPDATE/DELETE/TRUNCATE
+          # and the post-restart denial must inspect the exact trigger marker.
+          assert "BEFORE UPDATE OR DELETE ON public.b62_writer_gate" in script
+          assert "BEFORE TRUNCATE ON public.b62_writer_gate" in script
+          assert "OLD.state='CLOSED' AND NEW.state<>'CLOSED'" in script
+          for marker in ("B62_GATE_REOPEN_FORBIDDEN",
+                         "B62_GATE_DELETE_FORBIDDEN",
+                         "B62_GATE_TRUNCATE_FORBIDDEN",
+                         "AETHERIS_B62_CLOSED_GATE_RESISTS_ADMIN_DML_REOPEN_PASS",
+                         "AETHERIS_B62_CLOSED_GATE_REOPEN_AFTER_RESTART_DENIED_PASS"):
+              assert marker in script, marker
+          assert script.count("grep -Fq 'B62_GATE_REOPEN_FORBIDDEN'") == 2
+          assert script.count("grep -Fq 'B62_GATE_DELETE_FORBIDDEN'") == 1
+          assert script.count("grep -Fq 'B62_GATE_TRUNCATE_FORBIDDEN'") == 1
+          assert "REVOKE ALL ON FUNCTION public.b62_gate_transition_guard()" in script
+          assert "REVOKE ALL ON FUNCTION public.b62_gate_truncate_guard()" in script
+          # A local receipt is created inside the same committed
+          # CLOSED transaction, is bound to the observed node/term,
+          # and is not executable as an off-node release certificate.
+          for marker in (
+              "CREATE TABLE public.b62_closure_receipts",
+              "AFTER UPDATE OF state ON public.b62_writer_gate",
+              "FOR SHARE OF f;",
+              "pg_catalog.gen_random_uuid()",
+              "REVOKE ALL ON public.b62_closure_receipts FROM PUBLIC",
+              "AETHERIS_B62_CLOSURE_RECEIPT_ROLLBACK_ATOMIC_PASS",
+              "AETHERIS_B62_COMMITTED_CLOSURE_RECEIPT_BOUNDS_NODE_TERM_PASS",
+              "AETHERIS_B62_CLOSURE_RECEIPT_DUPLICATE_EVENT_IDEMPOTENT_PASS",
+              "AETHERIS_B62_CLOSURE_RECEIPT_DURABLE_RESTART_PASS",
+              "AETHERIS_B62_PROMOTED_RECEIPT_CANNOT_FENCE_PRIVILEGED_FAILBACK_NO_GO_PASS"):
+              assert marker in script, marker
+          assert "GRANT INSERT ON public.b62_closure_receipts" not in script
+          assert "GRANT UPDATE ON public.b62_closure_receipts" not in script
+          assert "unsafe-old-operator-rebind" in script
+          assert script.count("SELECT count(*) FROM public.b62_closure_receipts") >= 5
+          # A committed resource-local replay ledger survives real PG restart;
+          # database-admin erasure deliberately proves no global anti-replay.
+          for marker in ("AETHERIS_B62_PHYSICAL_ACK_LEDGER_ONCE_COMMITTED_PASS",
+                         "AETHERIS_B62_ACK_LEDGER_PERSISTS_PHYSICAL_RESTART_REPLAY_DENIED_PASS",
+                         "AETHERIS_B62_RESTRICTED_WRITER_CANNOT_ERASE_ACK_LEDGER_PASS",
+                         "AETHERIS_B62_PRIVILEGED_ACK_LEDGER_ERASURE_REPLAY_NO_GO_PASS",
+                         "AETHERIS_B62_INDEPENDENT_COORDINATOR_ACK_LEDGER_ONCE_PASS",
+                         "AETHERIS_B62_LOCAL_ADMIN_ERASURE_CANNOT_RESET_COORDINATOR_ACK_PASS",
+                         "AETHERIS_B62_INDEPENDENT_ACK_LEDGER_RESTART_AND_OUTAGE_PASS",
+                         "AETHERIS_B62_COORDINATOR_OWNER_ERASES_ACK_LEDGER_NO_GO_PASS",
+                         "CREATE TABLE public.b62_independent_ack_issued",
+                         "CREATE TABLE public.b62_independent_ack_consumed",
+                         "CREATE FUNCTION public.b62_consume_independent_ack",
+                         "GRANT SELECT(challenge_id) ON public.b62_independent_ack_consumed",
+                         "CREATE TABLE public.b62_ack_pending",
+                         "CREATE TABLE public.b62_ack_consumed",
+                         "UNIQUE",
+                         "g.state='CLOSED'",
+                         "FOR SHARE OF c,r,g",
+                         "ON CONFLICT DO NOTHING",
+                         "b62_replay_new_challenge",
+                         "b62_consume_physical_ack"):
+              assert marker in script, marker
+          assert "GRANT DELETE ON public.b62_ack_consumed" not in script
+          assert "GRANT INSERT ON public.b62_ack_consumed" not in script
+          assert script.count('test "$(b62_consume_physical_ack') >= 5
+          # The independent coordinator ledger resists resource-owner
+          # local deletion, but its own privileged owner can still erase.
+          for marker in (
+              "CREATE TABLE public.b62_independent_ack_issued",
+              "CREATE TABLE public.b62_independent_ack_consumed",
+              "CREATE FUNCTION public.b62_consume_independent_ack",
+              "session_user <> '$fence_new'",
+              "GRANT SELECT(challenge_id) ON public.b62_independent_ack_consumed",
+              "REVOKE ALL ON public.b62_independent_ack_issued",
+              "ALTER FUNCTION public.b62_consume_independent_ack",
+              "independent_ack_sql=",
+              "AETHERIS_B62_INDEPENDENT_COORDINATOR_ACK_LEDGER_ONCE_PASS",
+              "AETHERIS_B62_LOCAL_ADMIN_ERASURE_CANNOT_RESET_COORDINATOR_ACK_PASS",
+              "AETHERIS_B62_INDEPENDENT_ACK_LEDGER_RESTART_AND_OUTAGE_PASS",
+              "AETHERIS_B62_COORDINATOR_OWNER_ERASES_ACK_LEDGER_NO_GO_PASS"):
+              assert marker in script, marker
+          assert "GRANT DELETE ON public.b62_independent_ack_consumed" not in script
+          PY
+          bash -n scripts/security/runtime_b62_physical_standby_review.sh
+          echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
+      - name: Real physical standby, stale WAL, deliberate isolated dual-primary and old-primary fencing
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/security/runtime_b62_physical_standby_review.sh
+      - name: Verify synthetic servers, volumes and network destroyed
+        shell: bash
+        run: |
+          set -euo pipefail
+          suffix="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          for role in primary standby coordinator; do
+            name="aetheris-b62-$role-$suffix"
+            test -z "$(docker ps -a --filter "name=^/$name$" --format '{{.Names}}')"
+          done
+          ! docker network inspect "aetheris-b62-replica-$suffix" >/dev/null 2>&1
+          echo AETHERIS_B62_REAL_STANDBY_CONTAINERS_NETWORK_CLEANUP_PASS
+      - name: Preserve Stage45 NO_GO; no API admission
+        shell: bash
+        run: |
+          echo AETHERIS_B62_REAL_STANDBY_NONPRODUCTION_STAGE45_NO_GO

@@ -16,6 +16,12 @@ import java.util.UUID;
  * Membership lookup is executed on the SAME database transaction as the
  * task ownership predicate. Revocation must be checked on each read; no
  * membership or authorization decision is cached here.
+ * SQL rejects PostgreSQL recovery/standby reads and enforces READ COMMITTED.
+ * It still cannot distinguish two divergent writable primaries after failover:
+ * independent B62 fencing is required before any live admission is possible.
+ * A higher-isolation snapshot can
+ * otherwise retain membership rows that a concurrent transaction revoked.
+ * Do not assume a statement-time expiry check refreshes those old rows.
  *
  * A future runtime service must separately prove which tenant registry is
  * authoritative, enforce real principal session/revocation and implement
@@ -33,15 +39,17 @@ public final class RuntimeVerifiedTaskReadProbe {
             pm.tenant_key = t.owner_tenant_key
             AND pm.project_key = t.owner_project_key
             AND pm.identity_uid = t.owner_identity_uid
-          WHERE t.id = ?
+          WHERE current_setting('transaction_isolation') = 'read committed'
+            AND NOT pg_is_in_recovery()
+            AND t.id = ?
             AND t.owner_identity_uid = ?
             AND t.owner_tenant_key = ?
             AND t.owner_project_key = ?
             AND t.owner_verified_at IS NOT NULL
             AND tm.status = 'ACTIVE' AND tm.revoked_at IS NULL
-            AND (tm.valid_until IS NULL OR tm.valid_until > CURRENT_TIMESTAMP)
+            AND (tm.valid_until IS NULL OR tm.valid_until > statement_timestamp())
             AND pm.status = 'ACTIVE' AND pm.revoked_at IS NULL
-            AND (pm.valid_until IS NULL OR pm.valid_until > CURRENT_TIMESTAMP)
+            AND (pm.valid_until IS NULL OR pm.valid_until > statement_timestamp())
         )
         """;
 
@@ -52,6 +60,11 @@ public final class RuntimeVerifiedTaskReadProbe {
                            UUID taskId) throws SQLException {
         Objects.requireNonNull(connection, "connection");
         Objects.requireNonNull(principal, "cryptographically verified principal");
+        // An implicit autocommit read is not an explicit scoped transaction.
+        // This non-bean SQL prototype is not an HTTP admission gate.
+        if (connection.getAutoCommit()) {
+            throw new IllegalStateException("Explicit JDBC transaction required");
+        }
         // A valid signed token does not necessarily have read authority.
         if (taskId == null || !principal.hasScope("orchestrator:read")
                 || !validSelector(requestedTenant)

@@ -14,6 +14,9 @@ import java.sql.DriverManager;
 import java.sql.Savepoint;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
@@ -41,6 +44,10 @@ class RuntimeVerifiedTaskReadProbeTest {
     private static Connection connection;
     private static KeyPair signingKey;
     private static RuntimePinnedPrincipalVerifier verifier;
+    private static KeyPair fenceSigningKey;
+    private static RuntimePinnedLocalFenceLeaseVerifier fenceVerifier;
+    private static KeyPair workloadSigningKey;
+    private static RuntimePinnedWorkloadIdentityVerifier workloadVerifier;
     private final RuntimeVerifiedTaskReadProbe probe = new RuntimeVerifiedTaskReadProbe();
 
     @BeforeAll
@@ -126,6 +133,14 @@ class RuntimeVerifiedTaskReadProbeTest {
             + "\n-----END PUBLIC KEY-----";
         verifier = new RuntimePinnedPrincipalVerifier(pem, KEY_ID, ISSUER,
             AUDIENCE, Clock.systemUTC());
+        fenceSigningKey = generator.generateKeyPair();
+        fenceVerifier = new RuntimePinnedLocalFenceLeaseVerifier(
+            publicKeyPem(fenceSigningKey), FENCE_KID, FENCE_ISSUER,
+            FENCE_AUDIENCE, Clock.systemUTC());
+        workloadSigningKey = generator.generateKeyPair();
+        workloadVerifier = new RuntimePinnedWorkloadIdentityVerifier(
+            publicKeyPem(workloadSigningKey), WORKLOAD_KID, WORKLOAD_ISSUER,
+            WORKLOAD_AUDIENCE, Clock.systemUTC());
     }
 
     @AfterAll
@@ -152,6 +167,634 @@ class RuntimeVerifiedTaskReadProbeTest {
     private boolean allowed(long uid, String tenant, String project, UUID id) throws Exception {
         return probe.canRead(connection, signed(uid, List.of("orchestrator:read")),
             tenant, project, id);
+    }
+
+    @Test
+    void explicitJdbcTransactionAndActualPrimaryRequiredForOwnerReads()
+            throws Exception {
+        // A signed owner does not make JDBC autocommit a reviewable
+        // authorization transaction; reject it before SQL is prepared.
+        try (Connection autocommit = DriverManager.getConnection(
+                "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                "ownerlab_ci", System.getenv("PGPASSWORD"))) {
+            assertTrue(autocommit.getAutoCommit());
+            var owner = signed(42, List.of("orchestrator:read"));
+            var denial = assertThrows(IllegalStateException.class,
+                () -> probe.canRead(autocommit, owner,
+                    "tenant-alpha", "project-red", ALICE_ALPHA));
+            assertEquals("Explicit JDBC transaction required",
+                denial.getMessage());
+        }
+        // This confirms the positive test uses a real PostgreSQL primary;
+        // only the query's recovery guard is responsible for standby denial.
+        try (var sql = connection.createStatement();
+             var primary = sql.executeQuery("SELECT NOT pg_is_in_recovery()")) {
+            assertTrue(primary.next());
+            assertTrue(primary.getBoolean(1));
+        }
+        assertTrue(allowed(42, "tenant-alpha", "project-red", ALICE_ALPHA));
+    }
+
+    private static RuntimePinnedPrincipalVerifier.VerifiedPrincipal signedJti(
+            long uid, String jti) {
+        Instant issued = Instant.now().minusSeconds(10);
+        String token = Jwts.builder().header().keyId(KEY_ID).and()
+            .subject("synthetic-owner-" + uid + "@example.invalid")
+            .issuer(ISSUER).claim("aud", List.of(AUDIENCE))
+            .claim("uid", uid).claim("role", "DEVELOPER")
+            .claim("scopes", List.of("orchestrator:read"))
+            .id(jti).issuedAt(Date.from(issued))
+            .expiration(Date.from(issued.plusSeconds(180)))
+            .signWith(signingKey.getPrivate(), Jwts.SIG.RS256).compact();
+        return verifier.verifyBearerForRevocation("Bearer " + token);
+    }
+
+    private static final String REVIEW_LOCAL_ENDPOINT = "b62-review-promoted";
+    private static final long REVIEW_LOCAL_TERM = 7L;
+    private static final String FENCE_ISSUER = "https://fence.aetheris.example.invalid";
+    private static final String FENCE_AUDIENCE = "aetheris-runtime-fence-review";
+    private static final String FENCE_KID = "b62-review-fence-key";
+    private static final String REVIEW_WORKLOAD_A = "runtime-review-worker-a";
+    private static final String REVIEW_WORKLOAD_B = "runtime-review-worker-b";
+    private static final String WORKLOAD_ISSUER = "https://workload.aetheris.example.invalid";
+    private static final String WORKLOAD_AUDIENCE = "aetheris-runtime-workload-review";
+    private static final String WORKLOAD_KID = "b62-review-workload-key";
+
+    private static String publicKeyPem(KeyPair key) {
+        return "-----BEGIN PUBLIC KEY-----\n"
+            + Base64.getMimeEncoder(64, new byte[]{'\n'})
+                .encodeToString(key.getPublic().getEncoded())
+            + "\n-----END PUBLIC KEY-----";
+    }
+
+    private static String signedClosureAckJwt(KeyPair signer,
+            String node, long term, UUID receipt, UUID challenge,
+            String issuer, String audience, String kid, String purpose,
+            Instant issued, Instant expires) {
+        return Jwts.builder().header().keyId(kid).and()
+            .subject(node).issuer(issuer).claim("aud", List.of(audience))
+            .claim("resource", "runtime").claim("purpose", purpose)
+            .claim("node", node).claim("term", term)
+            .claim("receipt", receipt.toString())
+            .claim("challenge", challenge.toString())
+            .issuedAt(Date.from(issued)).expiration(Date.from(expires))
+            .signWith(signer.getPrivate(), Jwts.SIG.RS256).compact();
+    }
+
+    private static String signedFenceJwt(KeyPair signer, String endpoint,
+            long term, String issuer, String audience, String kid,
+            String purpose, String resource, Instant issued, Instant expires) {
+        return signedFenceJwtBoundTo(signer, endpoint, term, issuer,
+            audience, kid, purpose, resource, issued, expires, REVIEW_WORKLOAD_A);
+    }
+
+    private static String signedFenceJwtBoundTo(KeyPair signer, String endpoint,
+            long term, String issuer, String audience, String kid,
+            String purpose, String resource, Instant issued, Instant expires,
+            String workloadSubject) {
+        return Jwts.builder().header().keyId(kid).and()
+            .subject("synthetic-resource-leader").issuer(issuer)
+            .claim("aud", List.of(audience))
+            .claim("purpose", purpose).claim("resource", resource)
+            .claim("endpoint", endpoint).claim("term", term)
+            .claim("workload", workloadSubject)
+            .issuedAt(Date.from(issued)).expiration(Date.from(expires))
+            .signWith(signer.getPrivate(), Jwts.SIG.RS256).compact();
+    }
+
+    private static String signedWorkloadJwt(KeyPair signer, String subject,
+            String issuer, String audience, String kid, String purpose,
+            String resource, Instant issued, Instant expires) {
+        return Jwts.builder().header().keyId(kid).and()
+            .subject(subject).issuer(issuer).claim("aud", List.of(audience))
+            .claim("purpose", purpose).claim("resource", resource)
+            .issuedAt(Date.from(issued)).expiration(Date.from(expires))
+            .signWith(signer.getPrivate(), Jwts.SIG.RS256).compact();
+    }
+
+    private static RuntimePinnedWorkloadIdentityVerifier.VerifiedWorkload
+            signedWorkload(String subject) {
+        Instant now = Instant.now();
+        return workloadVerifier.verifySignedWorkload(signedWorkloadJwt(
+            workloadSigningKey, subject, WORKLOAD_ISSUER, WORKLOAD_AUDIENCE,
+            WORKLOAD_KID, "runtime-workload-review", "runtime",
+            now.minusSeconds(5), now.plusSeconds(55)));
+    }
+
+    private static RuntimePinnedLocalFenceLeaseVerifier.VerifiedLease signedFence(
+            String endpoint, long term) {
+        Instant now = Instant.now();
+        return fenceVerifier.verifySignedLease(signedFenceJwt(
+            fenceSigningKey, endpoint, term, FENCE_ISSUER, FENCE_AUDIENCE,
+            FENCE_KID, "runtime-local-fence-review", "runtime",
+            now.minusSeconds(5), now.plusSeconds(55)));
+    }
+
+    private static boolean fenced(
+            RuntimeVerifiedTaskSessionReadProbe combined, Connection c,
+            RuntimePinnedPrincipalVerifier.VerifiedPrincipal signed,
+            String tenant, String project, UUID id) {
+        return combined.canReadSynthetic(c, signed, tenant, project, id,
+            signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+            signedWorkload(REVIEW_WORKLOAD_A));
+    }
+
+    @Test
+    void independentSignedWorkloadRejectsForgeryScopeAndMismatchedLease()
+            throws Exception {
+        Instant now = Instant.now();
+        Instant issued = now.minusSeconds(5);
+        Instant expires = now.plusSeconds(55);
+        String workloadA = signedWorkloadJwt(workloadSigningKey,
+            REVIEW_WORKLOAD_A, WORKLOAD_ISSUER, WORKLOAD_AUDIENCE,
+            WORKLOAD_KID, "runtime-workload-review", "runtime", issued, expires);
+        var verifiedA = workloadVerifier.verifySignedWorkload(workloadA);
+        var verifiedB = signedWorkload(REVIEW_WORKLOAD_B);
+        assertEquals(REVIEW_WORKLOAD_A, verifiedA.subject());
+        assertTrue(verifiedA.isFresh());
+        assertTrue(verifiedB.isFresh());
+        assertEquals(0,
+            RuntimePinnedWorkloadIdentityVerifier.VerifiedWorkload.class
+                .getConstructors().length);
+        String validLeaseJwt = signedFenceJwt(fenceSigningKey,
+            REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM, FENCE_ISSUER,
+            FENCE_AUDIENCE, FENCE_KID, "runtime-local-fence-review",
+            "runtime", issued, expires);
+        var leaseA = fenceVerifier.verifySignedLease(validLeaseJwt);
+        assertTrue(leaseA.isBoundTo(verifiedA));
+        assertFalse(leaseA.isBoundTo(verifiedB),
+            "Two valid signed objects MUST match the identical workload");
+        assertFalse(leaseA.isBoundTo(null));
+
+        String otherLeaseJwt = signedFenceJwtBoundTo(fenceSigningKey,
+            REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM, FENCE_ISSUER,
+            FENCE_AUDIENCE, FENCE_KID, "runtime-local-fence-review",
+            "runtime", issued, expires, REVIEW_WORKLOAD_B);
+        var leaseB = fenceVerifier.verifySignedLease(otherLeaseJwt);
+        assertFalse(leaseB.isBoundTo(verifiedA));
+        assertTrue(leaseB.isBoundTo(verifiedB));
+
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        var attacker = generator.generateKeyPair();
+        for (KeyPair wrongKey : List.of(attacker, fenceSigningKey)) {
+            assertThrows(IllegalArgumentException.class,
+                () -> workloadVerifier.verifySignedWorkload(signedWorkloadJwt(
+                    wrongKey, REVIEW_WORKLOAD_A,
+                    WORKLOAD_ISSUER, WORKLOAD_AUDIENCE, WORKLOAD_KID,
+                    "runtime-workload-review", "runtime", issued, expires)),
+                "Signing a workload token with an attacker or fence key DENIES");
+        }
+
+        for (String[] wrong : new String[][]{
+                {"https://attacker.example.invalid", WORKLOAD_AUDIENCE,
+                    WORKLOAD_KID, "runtime-workload-review", "runtime"},
+                {WORKLOAD_ISSUER, "wrong-audience",
+                    WORKLOAD_KID, "runtime-workload-review", "runtime"},
+                {WORKLOAD_ISSUER, WORKLOAD_AUDIENCE,
+                    "wrong-key-id", "runtime-workload-review", "runtime"},
+                {WORKLOAD_ISSUER, WORKLOAD_AUDIENCE,
+                    WORKLOAD_KID, "wrong-purpose", "runtime"},
+                {WORKLOAD_ISSUER, WORKLOAD_AUDIENCE,
+                    WORKLOAD_KID, "runtime-workload-review", "other-resource"}}) {
+            assertThrows(IllegalArgumentException.class,
+                () -> workloadVerifier.verifySignedWorkload(signedWorkloadJwt(
+                    workloadSigningKey, REVIEW_WORKLOAD_A,
+                    wrong[0], wrong[1], wrong[2], wrong[3], wrong[4],
+                    issued, expires)));
+        }
+        for (String badSubject : List.of("../escape", "UPPER-SUBJECT")) {
+            assertThrows(IllegalArgumentException.class,
+                () -> workloadVerifier.verifySignedWorkload(signedWorkloadJwt(
+                    workloadSigningKey, badSubject,
+                    WORKLOAD_ISSUER, WORKLOAD_AUDIENCE, WORKLOAD_KID,
+                    "runtime-workload-review", "runtime", issued, expires)));
+        }
+        assertThrows(IllegalArgumentException.class,
+            () -> workloadVerifier.verifySignedWorkload("Bearer " + workloadA));
+        assertThrows(IllegalArgumentException.class,
+            () -> workloadVerifier.verifySignedWorkload(signedWorkloadJwt(
+                workloadSigningKey, REVIEW_WORKLOAD_A,
+                WORKLOAD_ISSUER, WORKLOAD_AUDIENCE, WORKLOAD_KID,
+                "runtime-workload-review", "runtime",
+                now.minusSeconds(5), now.plusSeconds(120))));
+        assertThrows(IllegalArgumentException.class,
+            () -> workloadVerifier.verifySignedWorkload(signedWorkloadJwt(
+                workloadSigningKey, REVIEW_WORKLOAD_A,
+                WORKLOAD_ISSUER, WORKLOAD_AUDIENCE, WORKLOAD_KID,
+                "runtime-workload-review", "runtime",
+                now.minusSeconds(30), now.minusSeconds(5))));
+        assertThrows(IllegalArgumentException.class,
+            () -> workloadVerifier.verifySignedWorkload(signedWorkloadJwt(
+                workloadSigningKey, REVIEW_WORKLOAD_A,
+                WORKLOAD_ISSUER, WORKLOAD_AUDIENCE, WORKLOAD_KID,
+                "runtime-workload-review", "runtime",
+                now.plusSeconds(5), now.plusSeconds(50))));
+
+        AtomicReference<Instant> trustedNow = new AtomicReference<>(now);
+        Clock advancing = new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) {
+                return Clock.fixed(trustedNow.get(), zone);
+            }
+            @Override public Instant instant() { return trustedNow.get(); }
+        };
+        var verifierWithClock = new RuntimePinnedWorkloadIdentityVerifier(
+            publicKeyPem(workloadSigningKey), WORKLOAD_KID, WORKLOAD_ISSUER,
+            WORKLOAD_AUDIENCE, advancing);
+        var retained = verifierWithClock.verifySignedWorkload(workloadA);
+        assertTrue(leaseA.isBoundTo(retained));
+        trustedNow.set(now.plusSeconds(60));
+        assertFalse(retained.isFresh());
+        assertFalse(leaseA.isBoundTo(retained),
+            "A retained workload assertion must DENY after signed expiry");
+    }
+
+    @Test
+    void pinnedFenceAuthorityRejectsForgeryClaimsAndRetainedExpiry()
+            throws Exception {
+        Instant now = Instant.now();
+        Instant issued = now.minusSeconds(5);
+        Instant expires = now.plusSeconds(55);
+        String valid = signedFenceJwt(fenceSigningKey, REVIEW_LOCAL_ENDPOINT,
+            REVIEW_LOCAL_TERM, FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+            "runtime-local-fence-review", "runtime", issued, expires);
+        var verified = fenceVerifier.verifySignedLease(valid);
+        assertTrue(verified.isFresh());
+        assertEquals(REVIEW_LOCAL_ENDPOINT, verified.endpoint());
+        assertEquals(REVIEW_LOCAL_TERM, verified.term());
+        assertEquals(0,
+            RuntimePinnedLocalFenceLeaseVerifier.VerifiedLease.class
+                .getConstructors().length,
+            "No public constructor can forge a verified lease type");
+
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        KeyPair untrusted = generator.generateKeyPair();
+        assertThrows(IllegalArgumentException.class,
+            () -> fenceVerifier.verifySignedLease(signedFenceJwt(
+                untrusted, REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM,
+                FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+                "runtime-local-fence-review", "runtime", issued, expires)),
+            "Signed lease from a different RSA key must not authenticate");
+
+        for (String[] wrong : new String[][]{
+                {"https://attacker.example.invalid", FENCE_AUDIENCE, FENCE_KID,
+                    "runtime-local-fence-review", "runtime"},
+                {FENCE_ISSUER, "wrong-target", FENCE_KID,
+                    "runtime-local-fence-review", "runtime"},
+                {FENCE_ISSUER, FENCE_AUDIENCE, "untrusted-key-id",
+                    "runtime-local-fence-review", "runtime"},
+                {FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+                    "different-purpose", "runtime"},
+                {FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+                    "runtime-local-fence-review", "other-resource"}}) {
+            String invalid = signedFenceJwt(fenceSigningKey,
+                REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM,
+                wrong[0], wrong[1], wrong[2], wrong[3], wrong[4],
+                issued, expires);
+            assertThrows(IllegalArgumentException.class,
+                () -> fenceVerifier.verifySignedLease(invalid),
+                "Issuer, audience, kid, purpose and resource are all pinned");
+        }
+        for (String invalidEndpoint : List.of("UPPER-ENDPOINT", "../escape")) {
+            assertThrows(IllegalArgumentException.class,
+                () -> fenceVerifier.verifySignedLease(signedFenceJwt(
+                    fenceSigningKey, invalidEndpoint, REVIEW_LOCAL_TERM,
+                    FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+                    "runtime-local-fence-review", "runtime", issued, expires)));
+        }
+        assertThrows(IllegalArgumentException.class,
+            () -> signedFence(REVIEW_LOCAL_ENDPOINT, 0));
+        assertThrows(IllegalArgumentException.class,
+            () -> fenceVerifier.verifySignedLease(signedFenceJwt(
+                fenceSigningKey, REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM,
+                FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+                "runtime-local-fence-review", "runtime",
+                now.minusSeconds(5), now.plusSeconds(120))),
+            "A 125-second lease must exceed the 90-second ceiling");
+        assertThrows(IllegalArgumentException.class,
+            () -> fenceVerifier.verifySignedLease(signedFenceJwt(
+                fenceSigningKey, REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM,
+                FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+                "runtime-local-fence-review", "runtime",
+                now.minusSeconds(25), now.minusSeconds(5))),
+            "An expired signed lease must never validate");
+        assertThrows(IllegalArgumentException.class,
+            () -> fenceVerifier.verifySignedLease(signedFenceJwt(
+                fenceSigningKey, REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM,
+                FENCE_ISSUER, FENCE_AUDIENCE, FENCE_KID,
+                "runtime-local-fence-review", "runtime",
+                now.plusSeconds(20), now.plusSeconds(50))),
+            "Signed issuance in the future must not validate");
+        assertThrows(IllegalArgumentException.class,
+            () -> fenceVerifier.verifySignedLease("Bearer " + valid));
+
+        AtomicReference<Instant> trustedNow = new AtomicReference<>(now);
+        Clock advancing = new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) {
+                return Clock.fixed(trustedNow.get(), zone);
+            }
+            @Override public Instant instant() { return trustedNow.get(); }
+        };
+        var retainedVerifier = new RuntimePinnedLocalFenceLeaseVerifier(
+            publicKeyPem(fenceSigningKey), FENCE_KID, FENCE_ISSUER,
+            FENCE_AUDIENCE, advancing);
+        var retained = retainedVerifier.verifySignedLease(valid);
+        assertTrue(retained.isFresh());
+        trustedNow.set(now.plusSeconds(60));
+        assertFalse(retained.isFresh(),
+            "Previously verified leases cannot be retained beyond expiry");
+    }
+
+    @Test
+    void signedJtiTaskOwnerSessionAndEmergencyRevocationMustAgreeAtomically()
+            throws Exception {
+        // Three synthetic session/B62 tables exist only inside this
+        // disposable JDBC connection and this rollback-only SAVEPOINT.
+        Savepoint lab = connection.setSavepoint("joint_session_owner_lab");
+        var combined = new RuntimeVerifiedTaskSessionReadProbe();
+        try {
+            try (var setup = connection.createStatement()) {
+                setup.execute("""
+                    CREATE TEMP TABLE synthetic_session_registration(
+                      issuer text NOT NULL, kid text NOT NULL,
+                      jti text NOT NULL, uid bigint NOT NULL,
+                      iat_seconds bigint NOT NULL,
+                      state text NOT NULL CHECK(state IN ('ACTIVE','REVOKED')),
+                      PRIMARY KEY(issuer,kid,jti))
+                    """);
+                setup.execute("""
+                    CREATE TEMP TABLE blocked_signer_kids(
+                      issuer text NOT NULL, kid text NOT NULL,
+                      PRIMARY KEY(issuer,kid))
+                    """);
+                setup.execute("""
+                    CREATE TEMP TABLE principal_epochs(
+                      principal_id bigint PRIMARY KEY,
+                      reject_issued_at_or_before_epoch bigint NOT NULL)
+                    """);
+                setup.execute("""
+                    CREATE TEMP TABLE b62_local_resource_fence(
+                      resource_key text PRIMARY KEY,
+                      endpoint text NOT NULL,
+                      term bigint NOT NULL CHECK(term>0),
+                      state text NOT NULL CHECK(state IN ('ACTIVE','FENCED')),
+                      expires_at timestamptz NOT NULL)
+                    """);
+                setup.execute("""
+                    CREATE TEMP TABLE synthetic_guarded_task_effects(
+                      effect_id uuid PRIMARY KEY,
+                      task_id uuid NOT NULL,
+                      fence_term bigint NOT NULL CHECK(fence_term>0),
+                      workload_subject text NOT NULL)
+                    """);
+            }
+
+            var alice = signedJti(42, UUID.randomUUID().toString());
+            var anotherAliceSession = signedJti(42, UUID.randomUUID().toString());
+            var bob = signedJti(77, UUID.randomUUID().toString());
+            var signed = alice.requireRevocationFacts();
+            long iat = signed.signedIssuedAt().getEpochSecond();
+
+            // Neither signed ownership nor absence of emergency blocks
+            // substitutes for an explicitly registered active session.
+            assertTrue(probe.canRead(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA));
+            assertFalse(fenced(combined, connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA));
+            try (var register = connection.prepareStatement("""
+                    INSERT INTO synthetic_session_registration
+                      (issuer,kid,jti,uid,iat_seconds,state)
+                    VALUES (?,?,?,?,?,'ACTIVE')
+                    """)) {
+                register.setString(1, signed.verifiedIssuer());
+                register.setString(2, signed.verifiedKeyId());
+                register.setString(3, signed.signedTokenId());
+                register.setLong(4, signed.signedIdentityUid());
+                register.setLong(5, iat);
+                assertEquals(1, register.executeUpdate());
+            }
+            assertFalse(fenced(combined, connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "An ACTIVE JTI and owner are insufficient without a resource fence");
+            try (var local = connection.prepareStatement("""
+                    INSERT INTO b62_local_resource_fence
+                      (resource_key,endpoint,term,state,expires_at)
+                    VALUES ('runtime',?,?,'ACTIVE',clock_timestamp()+interval '30 minutes')
+                    """)) {
+                local.setString(1, REVIEW_LOCAL_ENDPOINT);
+                local.setLong(2, REVIEW_LOCAL_TERM);
+                assertEquals(1, local.executeUpdate());
+            }
+            assertTrue(fenced(combined, connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA));
+            var guardedEffects = new RuntimeSyntheticFencedEffectProbe();
+            var firstEffect = UUID.randomUUID();
+            assertTrue(guardedEffects.recordEffectSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA, firstEffect,
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Signed owner/session/workload and locked local fence must"
+                    + " conditionally INSERT a disposable effect");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA, firstEffect,
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Duplicate effect_id must not repeat a pending mutation");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, bob,
+                "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "A second valid signed UID cannot mutate another owner's task");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection,
+                anotherAliceSession, "tenant-alpha", "project-red",
+                ALICE_ALPHA, UUID.randomUUID(),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Unregistered signed JTI cannot execute an effect");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_B)),
+                "Different correctly signed workload must DENY effects");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM - 1),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Signed stale term cannot mutate resource with newer local term");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                "tenant-alpha", "project-red", LEGACY, UUID.randomUUID(),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Legacy ownerless task must never produce protected effects");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                null, signedWorkload(REVIEW_WORKLOAD_A)),
+                "Missing verified lease cannot execute an effect");
+            try (var rows = connection.createStatement().executeQuery("""
+                    SELECT task_id,fence_term,workload_subject
+                    FROM synthetic_guarded_task_effects
+                    """)) {
+                assertTrue(rows.next());
+                assertEquals(ALICE_ALPHA, rows.getObject(1, UUID.class));
+                assertEquals(REVIEW_LOCAL_TERM, rows.getLong(2));
+                assertEquals(REVIEW_WORKLOAD_A, rows.getString(3));
+                assertFalse(rows.next(), "Exactly one disposable effect is pending");
+            }
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA,
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_B)),
+                "Two valid signatures with different workload subjects must DENY");
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA,
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM), null),
+                "Missing independently signed workload identity must DENY");
+            assertFalse(fenced(combined, connection, alice,
+                "tenant-alpha", "project-red", LEGACY));
+            assertFalse(fenced(combined, connection, alice,
+                "tenant-alpha", "project-blue", BOB_ALPHA));
+            assertFalse(fenced(combined, connection, alice,
+                "tenant-beta", "project-red", ALICE_ALPHA));
+            assertFalse(fenced(combined, connection, bob,
+                "tenant-alpha", "project-red", ALICE_ALPHA));
+            assertFalse(fenced(combined, connection, anotherAliceSession,
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "An unregistered signed JTI must not borrow another valid JTI");
+            assertFalse(fenced(combined, connection, alice,
+                "invalid' OR true --", "project-red", ALICE_ALPHA));
+            assertFalse(fenced(combined, connection,
+                signed(42, List.of("orchestrator:read")),
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "A signed token with no JTI cannot supply active-session proof");
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA,
+                signedFence("b62-review-other", REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "A different pinned endpoint must not match the local resource");
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA,
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM - 1),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Obsolete term must not match a current local fence");
+            assertThrows(IllegalArgumentException.class,
+                () -> signedFence(REVIEW_LOCAL_ENDPOINT, 0),
+                "Nonpositive signed term must be rejected at signature proof");
+            assertFalse(combined.canReadSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA,
+                null, signedWorkload(REVIEW_WORKLOAD_A)),
+                "Missing signed authority must fail closed");
+            try (var change = connection.createStatement()) {
+                assertEquals(1, change.executeUpdate(
+                    "UPDATE b62_local_resource_fence SET state='FENCED'"));
+                assertFalse(fenced(combined, connection, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA),
+                    "Explicitly fenced resource must deny every positive JTI");
+                assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                    signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                    signedWorkload(REVIEW_WORKLOAD_A)),
+                    "An explicitly fenced row cannot admit actual local writes");
+                assertEquals(1, change.executeUpdate(
+                    "UPDATE b62_local_resource_fence SET state='ACTIVE',"
+                    + " expires_at=clock_timestamp()-interval '1 minute'"));
+                assertFalse(fenced(combined, connection, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA),
+                    "Expired local lease must deny even without JTI revocation");
+                assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                    signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                    signedWorkload(REVIEW_WORKLOAD_A)),
+                    "Expired local resource lease must not insert effects");
+                assertEquals(1, change.executeUpdate(
+                    "UPDATE b62_local_resource_fence SET "
+                    + "expires_at=clock_timestamp()+interval '30 minutes',"
+                    + "endpoint='b62-review-stale', term=6"));
+                assertFalse(fenced(combined, connection, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA),
+                    "A new expected term cannot accept a stale local row");
+                assertTrue(combined.canReadSynthetic(connection, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA,
+                    signedFence("b62-review-stale", 6),
+                    signedWorkload(REVIEW_WORKLOAD_A)),
+                    "NEGATIVE COUNTEREXAMPLE: an authentic signed stale lease"
+                    + " still matches its LOCAL row, not global leadership");
+                assertTrue(guardedEffects.recordEffectSynthetic(connection, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                    signedFence("b62-review-stale", 6),
+                    signedWorkload(REVIEW_WORKLOAD_A)),
+                    "UNSAFE COUNTEREXAMPLE: an authentic stale leader can still"
+                        + " insert an effect into its own stale local resource");
+                assertEquals(1, change.executeUpdate(
+                    "UPDATE b62_local_resource_fence SET "
+                    + "endpoint='b62-review-promoted', term=7"));
+            }
+            assertTrue(fenced(combined, connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA));
+
+            try (var block = connection.prepareStatement(
+                    "INSERT INTO blocked_signer_kids VALUES (?,?)")) {
+                block.setString(1, signed.verifiedIssuer());
+                block.setString(2, signed.verifiedKeyId());
+                assertEquals(1, block.executeUpdate());
+            }
+            assertFalse(fenced(combined, connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "Emergency signer block must override active session");
+            try (var unBlock = connection.createStatement()) {
+                assertEquals(1, unBlock.executeUpdate(
+                    "DELETE FROM blocked_signer_kids"));
+            }
+
+            try (var cutoff = connection.prepareStatement(
+                    "INSERT INTO principal_epochs VALUES (?,?)")) {
+                cutoff.setLong(1, signed.signedIdentityUid());
+                cutoff.setLong(2, iat);
+                assertEquals(1, cutoff.executeUpdate());
+            }
+            assertFalse(fenced(combined, connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "Signed issue second equal to emergency cutoff must DENY");
+            try (var olderCutoff = connection.prepareStatement(
+                    "UPDATE principal_epochs SET reject_issued_at_or_before_epoch=?")) {
+                olderCutoff.setLong(1, iat - 1);
+                assertEquals(1, olderCutoff.executeUpdate());
+            }
+            assertTrue(fenced(combined, connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "Only issuance strictly after cutoff can pass");
+            try (var revoke = connection.createStatement()) {
+                assertEquals(1, revoke.executeUpdate(
+                    "UPDATE synthetic_session_registration SET state='REVOKED'"));
+            }
+            assertFalse(fenced(combined, connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA),
+                "Individually revoked JTI must deny despite eligible owner");
+            assertFalse(guardedEffects.recordEffectSynthetic(connection, alice,
+                "tenant-alpha", "project-red", ALICE_ALPHA, UUID.randomUUID(),
+                signedFence(REVIEW_LOCAL_ENDPOINT, REVIEW_LOCAL_TERM),
+                signedWorkload(REVIEW_WORKLOAD_A)),
+                "Revoked session cannot insert a protected effect");
+            try (var rows = connection.createStatement().executeQuery(
+                    "SELECT count(*) FROM synthetic_guarded_task_effects")) {
+                assertTrue(rows.next());
+                assertEquals(2L, rows.getLong(1),
+                    "One authorized effect + one deliberately unsafe stale effect");
+            }
+
+            try (Connection auto = DriverManager.getConnection(
+                    "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                    "ownerlab_ci", System.getenv("PGPASSWORD"))) {
+                assertTrue(auto.getAutoCommit());
+                assertFalse(fenced(combined, auto, alice,
+                    "tenant-alpha", "project-red", ALICE_ALPHA),
+                    "Implicit autocommit cannot pass composite admission");
+            }
+        } finally {
+            connection.rollback(lab);
+        }
     }
 
     @Test
@@ -225,6 +868,577 @@ class RuntimeVerifiedTaskReadProbeTest {
             assertFalse(allowed(42,"tenant-alpha","project-red",ALICE_ALPHA));
         } finally {
             connection.rollback(expiryRestore);
+        }
+    }
+
+    @Test
+    void membershipExpiryAdvancesWithinOneOpenTransaction() throws Exception {
+        // PostgreSQL CURRENT_TIMESTAMP is fixed at transaction start. Both
+        // tenant and project permissions must expire on later reads, even
+        // when the JDBC transaction has remained open the entire time.
+        Savepoint tenantRestore = connection.setSavepoint("tenant_elapsed_expiry");
+        try {
+            try (var sql = connection.createStatement()) {
+                assertEquals(1, sql.executeUpdate("""
+                    UPDATE tenant_memberships
+                    SET valid_until = statement_timestamp() + interval '2 seconds'
+                    WHERE tenant_key='tenant-alpha' AND identity_uid=42
+                    """));
+            }
+            assertTrue(allowed(42,"tenant-alpha","project-red",ALICE_ALPHA));
+            Thread.sleep(2300);
+            assertFalse(allowed(42,"tenant-alpha","project-red",ALICE_ALPHA),
+                "Expired tenant membership must not be accepted by an old transaction clock");
+        } finally {
+            connection.rollback(tenantRestore);
+        }
+
+        Savepoint projectRestore = connection.setSavepoint("project_elapsed_expiry");
+        try {
+            try (var sql = connection.createStatement()) {
+                assertEquals(1, sql.executeUpdate("""
+                    UPDATE project_memberships
+                    SET valid_until = statement_timestamp() + interval '2 seconds'
+                    WHERE tenant_key='tenant-alpha'
+                      AND project_key='project-red' AND identity_uid=42
+                    """));
+            }
+            assertTrue(allowed(42,"tenant-alpha","project-red",ALICE_ALPHA));
+            Thread.sleep(2300);
+            assertFalse(allowed(42,"tenant-alpha","project-red",ALICE_ALPHA),
+                "Expired project membership must not be accepted by an old transaction clock");
+        } finally {
+            connection.rollback(projectRestore);
+        }
+    }
+
+    @Test
+    void matchingMembershipMustRejectStaleTransactionIsolation() throws Exception {
+        // Real PG16 sessions contain valid matching task and membership rows.
+        // A stale-snapshot denial cannot pass merely because a row is absent.
+        assertTrue(ownerReadAtIsolation(Connection.TRANSACTION_READ_COMMITTED));
+        assertFalse(ownerReadAtIsolation(Connection.TRANSACTION_REPEATABLE_READ));
+        assertFalse(ownerReadAtIsolation(Connection.TRANSACTION_SERIALIZABLE));
+        // PG treats this as READ COMMITTED internally, but policy is exact.
+        assertFalse(ownerReadAtIsolation(Connection.TRANSACTION_READ_UNCOMMITTED));
+    }
+
+    private boolean ownerReadAtIsolation(int isolation) throws Exception {
+        try (Connection other = DriverManager.getConnection(
+                "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                "ownerlab_ci", System.getenv("PGPASSWORD"))) {
+            other.setTransactionIsolation(isolation);
+            other.setAutoCommit(false);
+            try {
+                try (var sql = other.createStatement()) {
+                    sql.execute("""
+                        CREATE TEMP TABLE aetheris_tasks AS
+                        SELECT '22222222-2222-4222-8222-222222222222'::uuid AS id,
+                               42::bigint AS owner_identity_uid,
+                               'tenant-alpha'::text AS owner_tenant_key,
+                               'project-red'::text AS owner_project_key,
+                               statement_timestamp() AS owner_verified_at
+                        """);
+                    sql.execute("""
+                        CREATE TEMP TABLE tenant_memberships AS
+                        SELECT 'tenant-alpha'::text AS tenant_key,
+                               42::bigint AS identity_uid,
+                               'ACTIVE'::text AS status,
+                               NULL::timestamptz AS revoked_at,
+                               statement_timestamp() + interval '1 day' AS valid_until
+                        """);
+                    sql.execute("""
+                        CREATE TEMP TABLE project_memberships AS
+                        SELECT 'tenant-alpha'::text AS tenant_key,
+                               'project-red'::text AS project_key,
+                               42::bigint AS identity_uid,
+                               'ACTIVE'::text AS status,
+                               NULL::timestamptz AS revoked_at,
+                               statement_timestamp() + interval '1 day' AS valid_until
+                        """);
+                }
+                try (var sql = other.createStatement();
+                     var settings = sql.executeQuery("SHOW transaction_isolation")) {
+                    assertTrue(settings.next());
+                    String expected = switch (isolation) {
+                        case Connection.TRANSACTION_READ_COMMITTED -> "read committed";
+                        case Connection.TRANSACTION_REPEATABLE_READ -> "repeatable read";
+                        case Connection.TRANSACTION_SERIALIZABLE -> "serializable";
+                        case Connection.TRANSACTION_READ_UNCOMMITTED -> "read uncommitted";
+                        default -> throw new IllegalArgumentException("Unsupported test isolation");
+                    };
+                    assertEquals(expected, settings.getString(1));
+                }
+                return probe.canRead(other, signed(42, List.of("orchestrator:read")),
+                    "tenant-alpha", "project-red", ALICE_ALPHA);
+            } finally {
+                other.rollback(); // TEMP objects and records remain disposable.
+            }
+        }
+    }
+
+    @Test
+    void committedExternalMembershipRevocationIsSeenByOpenReaderTransaction()
+            throws Exception {
+        // PostgreSQL TEMP tables are session-local and cannot prove a
+        // cross-connection revocation. Use a uniquely named, short-lived
+        // schema ONLY in the disposable CI database. Drop it in finally.
+        String schema = "ownerlab_xconn_" + UUID.randomUUID().toString().replace("-", "");
+        String password = System.getenv("PGPASSWORD");
+        try {
+            try (Connection setup = DriverManager.getConnection(
+                    "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                    "ownerlab_ci", password)) {
+                try (var ddl = setup.createStatement()) {
+                    ddl.execute("CREATE SCHEMA " + schema);
+                }
+                setup.setSchema(schema);
+                try (var ddl = setup.createStatement()) {
+                    ddl.execute("""
+                        CREATE TABLE aetheris_tasks AS
+                        SELECT '22222222-2222-4222-8222-222222222222'::uuid AS id,
+                               42::bigint AS owner_identity_uid,
+                               'tenant-alpha'::text AS owner_tenant_key,
+                               'project-red'::text AS owner_project_key,
+                               statement_timestamp() AS owner_verified_at
+                        """);
+                    ddl.execute("""
+                        CREATE TABLE tenant_memberships AS
+                        SELECT 'tenant-alpha'::text AS tenant_key,
+                               42::bigint AS identity_uid,
+                               'ACTIVE'::text AS status,
+                               NULL::timestamptz AS revoked_at,
+                               statement_timestamp() + interval '1 day' AS valid_until
+                        """);
+                    ddl.execute("""
+                        CREATE TABLE project_memberships AS
+                        SELECT 'tenant-alpha'::text AS tenant_key,
+                               'project-red'::text AS project_key,
+                               42::bigint AS identity_uid,
+                               'ACTIVE'::text AS status,
+                               NULL::timestamptz AS revoked_at,
+                               statement_timestamp() + interval '1 day' AS valid_until
+                        """);
+                }
+            }
+
+            try (Connection reader = DriverManager.getConnection(
+                     "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                     "ownerlab_ci", password);
+                 Connection writer = DriverManager.getConnection(
+                     "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                     "ownerlab_ci", password)) {
+                reader.setSchema(schema);
+                writer.setSchema(schema);
+                reader.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+                reader.setAutoCommit(false);
+                writer.setAutoCommit(false);
+                var alice = signed(42, List.of("orchestrator:read"));
+                var bob = signed(77, List.of("orchestrator:read"));
+                try {
+                    assertTrue(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA));
+                    assertFalse(probe.canRead(reader, bob,
+                        "tenant-alpha", "project-red", ALICE_ALPHA));
+
+                    try (var update = writer.prepareStatement("""
+                        UPDATE tenant_memberships
+                        SET status='REVOKED', revoked_at=statement_timestamp()
+                        WHERE tenant_key='tenant-alpha' AND identity_uid=42
+                        """)) {
+                        assertEquals(1, update.executeUpdate());
+                    }
+                    assertTrue(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "Uncommitted changes by another connection must not leak");
+                    writer.commit();
+                    assertFalse(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "A committed tenant revocation must deny the next read");
+                    try (var restore = writer.prepareStatement("""
+                        UPDATE tenant_memberships
+                        SET status='ACTIVE', revoked_at=NULL
+                        WHERE tenant_key='tenant-alpha' AND identity_uid=42
+                        """)) {
+                        assertEquals(1, restore.executeUpdate());
+                    }
+                    writer.commit();
+                    assertTrue(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "A newly committed tenant membership must be visible");
+
+                    try (var update = writer.prepareStatement("""
+                        UPDATE project_memberships
+                        SET status='REVOKED', revoked_at=statement_timestamp()
+                        WHERE tenant_key='tenant-alpha'
+                          AND project_key='project-red' AND identity_uid=42
+                        """)) {
+                        assertEquals(1, update.executeUpdate());
+                    }
+                    assertTrue(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "Uncommitted project revocation must not leak");
+                    writer.commit();
+                    assertFalse(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "A committed project revocation must deny the next read");
+                    try (var restore = writer.prepareStatement("""
+                        UPDATE project_memberships
+                        SET status='ACTIVE', revoked_at=NULL
+                        WHERE tenant_key='tenant-alpha'
+                          AND project_key='project-red' AND identity_uid=42
+                        """)) {
+                        assertEquals(1, restore.executeUpdate());
+                    }
+                    writer.commit();
+                    assertTrue(probe.canRead(reader, alice,
+                        "tenant-alpha", "project-red", ALICE_ALPHA),
+                        "The reader must see the latest committed project grant");
+                } finally {
+                    writer.rollback();
+                    reader.rollback();
+                }
+            }
+        } finally {
+            // CI-only short-lived shared tables are never left behind.
+            // The schema identifier is generated locally from UUID hex,
+            // never derived from untrusted user or model input.
+            try (Connection cleanup = DriverManager.getConnection(
+                    "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                    "ownerlab_ci", password)) {
+                try (var drop = cleanup.createStatement()) {
+                    drop.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
+                }
+                try (var check = cleanup.prepareStatement(
+                        "SELECT COUNT(*) FROM pg_namespace WHERE nspname = ?")) {
+                    check.setString(1, schema);
+                    try (var result = check.executeQuery()) {
+                        assertTrue(result.next());
+                        assertEquals(0L, result.getLong(1),
+                            "No short-lived revocation schema may survive cleanup");
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void cachedPrincipalExpiresBeforeAnotherRealJdbcTaskRead() throws Exception {
+        // The identity was verified only once; reusing the same sealed Java
+        // object after signed JWT expiry must deny the NEXT database read.
+        Instant issued = Instant.now();
+        AtomicReference<Instant> trustedNow = new AtomicReference<>(issued);
+        Clock advancing = new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) {
+                return Clock.fixed(trustedNow.get(), zone);
+            }
+            @Override public Instant instant() { return trustedNow.get(); }
+        };
+        String pem = "-----BEGIN PUBLIC KEY-----\n"
+            + Base64.getMimeEncoder(64, new byte[]{'\n'})
+                .encodeToString(signingKey.getPublic().getEncoded())
+            + "\n-----END PUBLIC KEY-----";
+        var localVerifier = new RuntimePinnedPrincipalVerifier(
+            pem, KEY_ID, ISSUER, AUDIENCE, advancing);
+        String jwt = Jwts.builder().header().keyId(KEY_ID).and()
+            .subject("synthetic-owner-42@example.invalid").issuer(ISSUER)
+            .claim("aud", List.of(AUDIENCE)).claim("uid", 42L)
+            .claim("role", "DEVELOPER")
+            .claim("scopes", List.of("orchestrator:read"))
+            .issuedAt(Date.from(issued.minusSeconds(10)))
+            .expiration(Date.from(issued.plusSeconds(75)))
+            .signWith(signingKey.getPrivate(), Jwts.SIG.RS256).compact();
+        var retained = localVerifier.verifyBearer("Bearer " + jwt);
+        assertTrue(probe.canRead(connection, retained,
+            "tenant-alpha", "project-red", ALICE_ALPHA));
+        trustedNow.set(issued.plusSeconds(76));
+        assertFalse(retained.hasScope("orchestrator:read"));
+        assertFalse(probe.canRead(connection, retained,
+            "tenant-alpha", "project-red", ALICE_ALPHA),
+            "An expired retained principal must not authorize a fresh SQL read");
+    }
+
+    @Test
+    void signedClosureAckChallengeAndDurableOneShotConsumptionReview()
+            throws Exception {
+        // A separate synthetic authority signs the closure ACK. The signer
+        // is unrelated to the identity, fence and workload keys above.
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        KeyPair ackSigner = generator.generateKeyPair();
+        KeyPair attacker = generator.generateKeyPair();
+        String issuer = "https://closure.aetheris.example.invalid";
+        String audience = "aetheris-runtime-closure-review";
+        String kid = "b62-review-closure-key";
+        String node = "b62-review-promoted";
+        long term = 7;
+        UUID receipt = UUID.randomUUID();
+        UUID challenge = UUID.randomUUID();
+        Instant now = Instant.now();
+        Instant issued = now.minusSeconds(5);
+        Instant expires = now.plusSeconds(55);
+        var ackVerifier = new RuntimePinnedClosureAckVerifier(
+            publicKeyPem(ackSigner), kid, issuer, audience, Clock.systemUTC());
+        String token = signedClosureAckJwt(ackSigner, node, term,
+            receipt, challenge, issuer, audience, kid,
+            "runtime-resource-closure-review", issued, expires);
+        var ack = ackVerifier.verifySignedAck(token);
+        assertEquals(0, RuntimePinnedClosureAckVerifier.VerifiedAck.class
+            .getConstructors().length);
+        assertTrue(ack.matches(node, term, receipt, challenge));
+        assertFalse(ack.matches("b62-review-old-primary", term,
+            receipt, challenge), "A valid peer receipt is not this node");
+        assertFalse(ack.matches(node, term + 1, receipt, challenge));
+        assertFalse(ack.matches(node, term, UUID.randomUUID(), challenge));
+        assertFalse(ack.matches(node, term, receipt, UUID.randomUUID()));
+
+        assertThrows(IllegalArgumentException.class, () ->
+            ackVerifier.verifySignedAck(signedClosureAckJwt(attacker,
+                node, term, receipt, challenge, issuer, audience, kid,
+                "runtime-resource-closure-review", issued, expires)));
+        assertThrows(IllegalArgumentException.class, () ->
+            ackVerifier.verifySignedAck(signedClosureAckJwt(ackSigner,
+                node, term, receipt, challenge, "https://attacker.invalid",
+                audience, kid, "runtime-resource-closure-review",
+                issued, expires)));
+        assertThrows(IllegalArgumentException.class, () ->
+            ackVerifier.verifySignedAck(signedClosureAckJwt(ackSigner,
+                node, term, receipt, challenge, issuer,
+                "wrong-audience", kid, "runtime-resource-closure-review",
+                issued, expires)));
+        assertThrows(IllegalArgumentException.class, () ->
+            ackVerifier.verifySignedAck(signedClosureAckJwt(ackSigner,
+                node, term, receipt, challenge, issuer, audience,
+                "unknown-key", "runtime-resource-closure-review",
+                issued, expires)));
+        assertThrows(IllegalArgumentException.class, () ->
+            ackVerifier.verifySignedAck(signedClosureAckJwt(ackSigner,
+                node, term, receipt, challenge, issuer, audience,
+                kid, "wrong-purpose", issued, expires)));
+        assertThrows(IllegalArgumentException.class, () ->
+            ackVerifier.verifySignedAck(signedClosureAckJwt(ackSigner,
+                node, term, receipt, challenge, issuer, audience, kid,
+                "runtime-resource-closure-review", issued, now.plusSeconds(95))));
+        assertThrows(IllegalArgumentException.class, () ->
+            ackVerifier.verifySignedAck(signedClosureAckJwt(ackSigner,
+                node, term, receipt, challenge, issuer, audience, kid,
+                "runtime-resource-closure-review",
+                now.minusSeconds(90), now.minusSeconds(5))));
+        assertThrows(IllegalArgumentException.class,
+            () -> ackVerifier.verifySignedAck("Bearer " + token));
+
+        // Use a dedicated, DISPOSABLE schema rather than a TEMP table.
+        // A commit and new JDBC session must preserve the unique replay
+        // journal. DROP SCHEMA CASCADE in finally; no production migration.
+        String schema = "b62_ack_" + UUID.randomUUID().toString().replace("-", "");
+        String password = System.getenv("PGPASSWORD");
+        var consumer = new RuntimeSyntheticClosureAckConsumptionProbe();
+        try {
+            try (Connection db = DriverManager.getConnection(
+                    "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                    "ownerlab_ci", password)) {
+                db.setAutoCommit(false);
+                try (var sql = db.createStatement()) {
+                    sql.execute("CREATE SCHEMA " + schema);
+                    sql.execute("SET search_path TO " + schema);
+                    sql.execute("""
+                        CREATE TABLE b62_writer_gate (
+                          resource_key text PRIMARY KEY,
+                          state text NOT NULL CHECK(state IN ('OPEN','CLOSED')))
+                        """);
+                    sql.execute("""
+                        CREATE TABLE b62_closure_receipts (
+                          resource_key text PRIMARY KEY,
+                          node_identity text NOT NULL,
+                          fence_term bigint NOT NULL CHECK(fence_term>0),
+                          receipt_nonce uuid NOT NULL UNIQUE)
+                        """);
+                    sql.execute("""
+                        CREATE TABLE b62_pending_closure_challenges (
+                          challenge_id uuid PRIMARY KEY,
+                          resource_key text NOT NULL,
+                          expected_node text NOT NULL,
+                          expected_term bigint NOT NULL,
+                          receipt_nonce uuid NOT NULL,
+                          expires_at timestamptz NOT NULL)
+                        """);
+                    sql.execute("""
+                        CREATE TABLE b62_consumed_closure_acks (
+                          challenge_id uuid PRIMARY KEY,
+                          receipt_nonce uuid NOT NULL UNIQUE,
+                          node_identity text NOT NULL,
+                          fence_term bigint NOT NULL CHECK(fence_term>0))
+                        """);
+                    sql.execute("INSERT INTO b62_writer_gate VALUES ('runtime','OPEN')");
+                }
+                try (var insert = db.prepareStatement("""
+                        INSERT INTO b62_closure_receipts
+                            (resource_key,node_identity,fence_term,receipt_nonce)
+                        VALUES('runtime',?,?,?)
+                        """)) {
+                    insert.setString(1, node);
+                    insert.setLong(2, term);
+                    insert.setObject(3, receipt);
+                    assertEquals(1, insert.executeUpdate());
+                }
+                try (var insert = db.prepareStatement("""
+                        INSERT INTO b62_pending_closure_challenges
+                            (challenge_id,resource_key,expected_node,
+                             expected_term,receipt_nonce,expires_at)
+                        VALUES(?,'runtime',?,?,?,clock_timestamp()+interval '1 minute')
+                        """)) {
+                    insert.setObject(1, challenge);
+                    insert.setString(2, node);
+                    insert.setLong(3, term);
+                    insert.setObject(4, receipt);
+                    assertEquals(1, insert.executeUpdate());
+                }
+                db.commit();
+                assertFalse(consumer.consumeReview(db, ack, node, term,
+                    receipt, challenge), "OPEN local writer denies ACK consumption");
+                try (var sql = db.createStatement()) {
+                    assertEquals(1, sql.executeUpdate(
+                        "UPDATE b62_writer_gate SET state='CLOSED' WHERE resource_key='runtime'"));
+                }
+                assertFalse(consumer.consumeReview(db, ack,
+                    "b62-review-old-primary", term, receipt, challenge));
+                assertFalse(consumer.consumeReview(db, ack, node,
+                    term + 1, receipt, challenge));
+                assertFalse(consumer.consumeReview(db, ack, node,
+                    term, receipt, UUID.randomUUID()));
+                // Make the local CLOSED state visible to a second REAL JDBC
+                // connection, but do not yet consume this one-time ACK.
+                db.commit();
+                try (Connection rival = DriverManager.getConnection(
+                        "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                        "ownerlab_ci", password)) {
+                    rival.setAutoCommit(false);
+                    int rivalPid;
+                    try (var sql = rival.createStatement()) {
+                        sql.execute("SET search_path TO " + schema);
+                        try (var pid = sql.executeQuery("SELECT pg_backend_pid()")) {
+                            assertTrue(pid.next());
+                            rivalPid = pid.getInt(1);
+                        }
+                    }
+                    // A pending one-time consume must NOT be permanently burned
+                    // by rollback; the same durable closure receipt must not
+                    // be rewritten or forged to exercise legitimate retry.
+                    assertTrue(consumer.consumeReview(db, ack, node, term,
+                        receipt, challenge), "First claim is not committed");
+                    db.rollback();
+                    assertTrue(consumer.consumeReview(db, ack, node, term,
+                        receipt, challenge), "Rolled-back claim may be retried");
+                    // Winner holds the second claim OPEN. The concurrent
+                    // session must wait on the actual uniqueness conflict.
+                    // A timer-only claim of concurrency is insufficient.
+                    assertFalse(consumer.consumeReview(db, ack, node, term,
+                        receipt, challenge), "Same transaction replay must deny");
+                    AtomicReference<Boolean> rivalResult = new AtomicReference<>();
+                    AtomicReference<Throwable> rivalFailure = new AtomicReference<>();
+                    Thread rivalThread = new Thread(() -> {
+                        try {
+                            rivalResult.set(consumer.consumeReview(rival, ack,
+                                node, term, receipt, challenge));
+                        } catch (Throwable failure) {
+                            rivalFailure.set(failure);
+                        }
+                    }, "disposable-b62-ack-concurrent-replay");
+                    rivalThread.setDaemon(true);
+                    rivalThread.start();
+                    boolean observedRealLockWait = false;
+                    try {
+                        for (int attempt = 0; attempt < 35; attempt++) {
+                            try (var monitor = db.prepareStatement("""
+                                    SELECT count(*) FROM pg_stat_activity
+                                    WHERE pid=? AND wait_event_type='Lock'
+                                    """)) {
+                                monitor.setInt(1, rivalPid);
+                                try (var state = monitor.executeQuery()) {
+                                    assertTrue(state.next());
+                                    if (state.getLong(1) == 1L) {
+                                        observedRealLockWait = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!rivalThread.isAlive()) break;
+                            Thread.sleep(40);
+                        }
+                    } finally {
+                        // Release the competing claim even when monitoring
+                        // fails; never strand a CI transaction or worker.
+                        try { db.commit(); } finally { rivalThread.join(5000); }
+                    }
+                    assertTrue(observedRealLockWait,
+                        "The losing PG16 session must visibly wait on a real SQL lock");
+                    assertFalse(rivalThread.isAlive(), "Competing session must finish");
+                    assertNull(rivalFailure.get(), "Racing SQL query must not fail");
+                    assertEquals(Boolean.FALSE, rivalResult.get(),
+                        "Committed winner must cause the concurrent replay to DENY");
+                    rival.commit();
+                }
+            }
+            try (Connection fresh = DriverManager.getConnection(
+                    "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                    "ownerlab_ci", password)) {
+                fresh.setAutoCommit(false);
+                try (var sql = fresh.createStatement()) {
+                    sql.execute("SET search_path TO " + schema);
+                    try (var rows = sql.executeQuery("""
+                            SELECT challenge_id,receipt_nonce,node_identity,fence_term
+                              FROM b62_consumed_closure_acks
+                            """)) {
+                        assertTrue(rows.next());
+                        assertEquals(challenge, rows.getObject(1, UUID.class));
+                        assertEquals(receipt, rows.getObject(2, UUID.class));
+                        assertEquals(node, rows.getString(3));
+                        assertEquals(term, rows.getLong(4));
+                        assertFalse(rows.next());
+                    }
+                }
+                assertFalse(consumer.consumeReview(fresh, ack, node, term,
+                    receipt, challenge),
+                    "A committed ACK replay denies on another real DB session");
+                UUID anotherChallenge = UUID.randomUUID();
+                try (var insert = fresh.prepareStatement("""
+                        INSERT INTO b62_pending_closure_challenges
+                            (challenge_id,resource_key,expected_node,
+                             expected_term,receipt_nonce,expires_at)
+                        VALUES(?,'runtime',?,?,?,clock_timestamp()+interval '1 minute')
+                        """)) {
+                    insert.setObject(1, anotherChallenge);
+                    insert.setString(2, node);
+                    insert.setLong(3, term);
+                    insert.setObject(4, receipt);
+                    assertEquals(1, insert.executeUpdate());
+                }
+                var secondAck = ackVerifier.verifySignedAck(signedClosureAckJwt(
+                    ackSigner, node, term, receipt, anotherChallenge,
+                    issuer, audience, kid, "runtime-resource-closure-review",
+                    Instant.now().minusSeconds(2), Instant.now().plusSeconds(55)));
+                assertFalse(consumer.consumeReview(fresh, secondAck, node, term,
+                    receipt, anotherChallenge),
+                    "Reusing one receipt with a NEW signed challenge must deny");
+                try (var sql = fresh.createStatement();
+                     var rows = sql.executeQuery(
+                         "SELECT count(*) FROM b62_consumed_closure_acks")) {
+                    assertTrue(rows.next());
+                    assertEquals(1L, rows.getLong(1));
+                }
+                fresh.rollback();
+                fresh.rollback();
+            }
+        } finally {
+            // Best-effort cleanup always uses a separate connection so a
+            // failed statement/transaction cannot strand the lab schema.
+            try (Connection cleanup = DriverManager.getConnection(
+                    "jdbc:postgresql://127.0.0.1:5432/ownerlab_disposable",
+                    "ownerlab_ci", password);
+                 var sql = cleanup.createStatement()) {
+                sql.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
+            }
         }
     }
 

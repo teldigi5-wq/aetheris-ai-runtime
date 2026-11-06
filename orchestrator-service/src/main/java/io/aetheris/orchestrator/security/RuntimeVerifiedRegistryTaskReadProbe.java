@@ -12,6 +12,13 @@ import java.util.UUID;
  * Only a sealed, cryptographically verified principal can supply the UID.
  * This does not verify session revocation, own the connection or expose HTTP.
  * The dedicated database role must separately DENY all mutation/DDL.
+ *
+ * SQL rejects hot-standby reads, but cannot distinguish divergent writable
+ * primaries: the independent B62 resource-fencing gate remains unresolved.
+ * The server-side READ COMMITTED predicate is required: under REPEATABLE READ
+ * or SERIALIZABLE a long-lived snapshot could preserve revoked membership
+ * even when clock_timestamp() advances. Do not replace it with a clock-only
+ * check or rely solely on caller-selected JDBC isolation.
  */
 public final class RuntimeVerifiedRegistryTaskReadProbe {
     private static final String SELECTOR = "[a-z0-9][a-z0-9_-]{0,95}";
@@ -31,7 +38,9 @@ public final class RuntimeVerifiedRegistryTaskReadProbe {
             ON pm.tenant_key = t.owner_tenant_key
             AND pm.project_key = t.owner_project_key
             AND pm.identity_uid = t.owner_identity_uid
-          WHERE t.id = ?
+          WHERE current_setting('transaction_isolation') = 'read committed'
+            AND NOT pg_is_in_recovery()
+            AND t.id = ?
             AND t.owner_identity_uid = ?
             AND t.owner_tenant_key = ?
             AND t.owner_project_key = ?
