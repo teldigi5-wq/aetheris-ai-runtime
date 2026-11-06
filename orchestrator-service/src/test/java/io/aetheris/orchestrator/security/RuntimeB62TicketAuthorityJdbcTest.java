@@ -45,6 +45,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
     private static String schema, ownerPassword;
     private static String workerRole, workerPassword, otherWorkerRole, otherWorkerPassword;
     private static String issuerRole, issuerPassword, guardRole;
+    private static String cancelRole, cancelPassword;
     private static KeyPair personKey, workloadKey, fenceKey;
     private static RuntimePinnedPrincipalVerifier principalVerifier;
     private static RuntimePinnedWorkloadIdentityVerifier workloadVerifier;
@@ -76,6 +77,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
     private static Connection worker() throws SQLException { return db(workerRole, workerPassword); }
     private static Connection workerB() throws SQLException { return db(otherWorkerRole, otherWorkerPassword); }
     private static Connection ticketIssuer() throws SQLException { return db(issuerRole, issuerPassword); }
+    private static Connection canceller() throws SQLException { return db(cancelRole, cancelPassword); }
 
     private static RuntimePinnedPrincipalVerifier.VerifiedPrincipal principal(long uid, List<String> scopes) {
         Instant issued = Instant.now().minusSeconds(8);
@@ -242,6 +244,36 @@ class RuntimeB62TicketAuthorityJdbcTest {
         }
     }
 
+
+    private static int cancelApproval(UUID id) throws SQLException {
+        try (Connection c = canceller(); PreparedStatement p = c.prepareStatement(
+                "UPDATE b62_approved_effect_requests SET state='CANCELED' "
+                  + "WHERE effect_id=? AND state='APPROVED'")) {
+            p.setObject(1,id);
+            return p.executeUpdate();
+        }
+    }
+
+    private static int cancelTicket(UUID id) throws SQLException {
+        try (Connection c = canceller(); PreparedStatement p = c.prepareStatement(
+                "UPDATE b62_effect_tickets SET state='CANCELED' "
+                  + "WHERE ticket_id=? AND state='ISSUED'")) {
+            p.setObject(1,id);
+            return p.executeUpdate();
+        }
+    }
+
+    private static String approvalState(UUID id) throws SQLException {
+        try (Connection c = owner(); PreparedStatement p = c.prepareStatement(
+                "SELECT state FROM b62_approved_effect_requests WHERE effect_id=?")) {
+            p.setObject(1,id);
+            try (var rows = p.executeQuery()) {
+                assertTrue(rows.next());
+                return rows.getString(1);
+            }
+        }
+    }
+
     @BeforeAll
     static void disposableCIOnly() throws Exception {
         assertEquals("yes", System.getenv("AETHERIS_B62_FULL_EFFECT_JDBC_MUST_RUN"));
@@ -274,10 +306,12 @@ class RuntimeB62TicketAuthorityJdbcTest {
         otherWorkerRole = "b62_ticket_other_" + suffix;
         issuerRole = "b62_ticket_issuer_" + suffix;
         guardRole = "b62_ticket_guard_" + suffix;
+        cancelRole = "b62_ticket_cancel_" + suffix;
         workerPassword = secret();
         otherWorkerPassword = secret();
         issuerPassword = secret();
-        for (String role : List.of(workerRole, otherWorkerRole, issuerRole, guardRole)) {
+        cancelPassword = secret();
+        for (String role : List.of(workerRole, otherWorkerRole, issuerRole, guardRole, cancelRole)) {
             assertTrue(role.matches("b62_ticket_[a-z]+_[0-9a-f]{20}"));
         }
         assertTrue(schema.matches("b62_ticket_[0-9a-f]{32}"));
@@ -286,6 +320,7 @@ class RuntimeB62TicketAuthorityJdbcTest {
             s.execute("CREATE ROLE " + workerRole + " LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD '" + workerPassword + "'");
             s.execute("CREATE ROLE " + otherWorkerRole + " LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD '" + otherWorkerPassword + "'");
             s.execute("CREATE ROLE " + issuerRole + " LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD '" + issuerPassword + "'");
+            s.execute("CREATE ROLE " + cancelRole + " LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD '" + cancelPassword + "'");
             s.execute("CREATE ROLE " + guardRole + " NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT");
             s.execute("CREATE SCHEMA " + schema);
             s.execute("SET search_path TO " + schema + ", pg_catalog");
@@ -300,15 +335,17 @@ class RuntimeB62TicketAuthorityJdbcTest {
             s.execute("CREATE TABLE b62_issuer_role_bindings(issuer_role text PRIMARY KEY,worker_role text NOT NULL,state text NOT NULL CHECK(state IN ('ACTIVE','SUSPENDED')))");
             s.execute("INSERT INTO b62_issuer_role_bindings VALUES ('" + issuerRole + "','" + workerRole + "','ACTIVE')");
             s.execute("CREATE TABLE b62_guarded_effects(effect_id uuid PRIMARY KEY,task_id uuid NOT NULL,fence_term bigint NOT NULL,workload_subject text NOT NULL)");
-            s.execute("CREATE TABLE b62_approved_effect_requests(effect_id uuid PRIMARY KEY,issuer_role text NOT NULL,worker_role text NOT NULL,task_id uuid NOT NULL,uid bigint NOT NULL,tenant_key text NOT NULL,project_key text NOT NULL,issuer text NOT NULL,kid text NOT NULL,jti text NOT NULL,iat_seconds bigint NOT NULL,endpoint text NOT NULL,term bigint NOT NULL,workload_subject text NOT NULL,state text NOT NULL CHECK(state IN ('APPROVED','ISSUED')),expires_at timestamptz NOT NULL)");
-            s.execute("CREATE TABLE b62_effect_tickets(ticket_id uuid PRIMARY KEY,requestor_role text NOT NULL,task_id uuid NOT NULL,uid bigint NOT NULL,tenant_key text NOT NULL,project_key text NOT NULL,issuer text NOT NULL,kid text NOT NULL,jti text NOT NULL,iat_seconds bigint NOT NULL,endpoint text NOT NULL,term bigint NOT NULL,workload_subject text NOT NULL,state text NOT NULL CHECK(state IN ('ISSUED','CONSUMED')),expires_at timestamptz NOT NULL)");
+            s.execute("CREATE TABLE b62_approved_effect_requests(effect_id uuid PRIMARY KEY,issuer_role text NOT NULL,worker_role text NOT NULL,task_id uuid NOT NULL,uid bigint NOT NULL,tenant_key text NOT NULL,project_key text NOT NULL,issuer text NOT NULL,kid text NOT NULL,jti text NOT NULL,iat_seconds bigint NOT NULL,endpoint text NOT NULL,term bigint NOT NULL,workload_subject text NOT NULL,state text NOT NULL CHECK(state IN ('APPROVED','ISSUED','CANCELED')),expires_at timestamptz NOT NULL)");
+            s.execute("CREATE TABLE b62_effect_tickets(ticket_id uuid PRIMARY KEY,requestor_role text NOT NULL,task_id uuid NOT NULL,uid bigint NOT NULL,tenant_key text NOT NULL,project_key text NOT NULL,issuer text NOT NULL,kid text NOT NULL,jti text NOT NULL,iat_seconds bigint NOT NULL,endpoint text NOT NULL,term bigint NOT NULL,workload_subject text NOT NULL,state text NOT NULL CHECK(state IN ('ISSUED','CONSUMED','CANCELED')),expires_at timestamptz NOT NULL)");
             s.execute("REVOKE CREATE ON SCHEMA " + schema + " FROM PUBLIC");
-            s.execute("GRANT USAGE ON SCHEMA " + schema + " TO " + workerRole + "," + otherWorkerRole + "," + issuerRole + "," + guardRole);
+            s.execute("GRANT USAGE ON SCHEMA " + schema + " TO " + workerRole + "," + otherWorkerRole + "," + issuerRole + "," + guardRole + "," + cancelRole);
             s.execute("GRANT SELECT ON ALL TABLES IN SCHEMA " + schema + " TO " + guardRole);
             s.execute("GRANT UPDATE(lock_guard) ON b62_local_resource_fence,aetheris_tasks,tenant_memberships,project_memberships,synthetic_session_registration,signer_authorizations,principal_epochs TO " + guardRole);
             s.execute("GRANT UPDATE(state) ON b62_effect_tickets,b62_approved_effect_requests TO " + guardRole);
             s.execute("GRANT INSERT ON b62_guarded_effects TO " + guardRole);
             s.execute("GRANT INSERT ON b62_effect_tickets TO " + issuerRole);
+            s.execute("GRANT SELECT(effect_id,state), UPDATE(state) ON b62_approved_effect_requests TO " + cancelRole);
+            s.execute("GRANT SELECT(ticket_id,state), UPDATE(state) ON b62_effect_tickets TO " + cancelRole);
         }
 
         // Owned by a NOLOGIN role with only narrow table grants. Untrusted
@@ -461,10 +498,64 @@ class RuntimeB62TicketAuthorityJdbcTest {
             END;
             %s;
             """.formatted(schema, schema, tag, tag);
+        // Review-only monotonic transition guards. Effective role changes
+        // while the ticket/issuance SECURITY DEFINER methods execute; the
+        // original session role must independently match the permitted actor.
+        // These do not protect against a privileged PostgreSQL owner.
+        String transitionTag = "$b62_transition$";
+        String approvalFlow = """
+            CREATE FUNCTION %s.b62_approval_transition()
+            RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER
+            SET search_path=pg_catalog AS %s
+            BEGIN
+              IF OLD.state='APPROVED' AND NEW.state='ISSUED'
+                 AND current_user='%s' AND session_user='%s' THEN
+                RETURN NEW;
+              END IF;
+              IF OLD.state='APPROVED' AND NEW.state='CANCELED'
+                 AND current_user='%s' AND session_user='%s' THEN
+                RETURN NEW;
+              END IF;
+              RAISE EXCEPTION 'B62_APPROVAL_TRANSITION_DENIED' USING ERRCODE='42501';
+            END;
+            %s;
+            """.formatted(schema,transitionTag,guardRole,issuerRole,
+                cancelRole,cancelRole,transitionTag);
+        String ticketFlow = """
+            CREATE FUNCTION %s.b62_ticket_transition()
+            RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER
+            SET search_path=pg_catalog AS %s
+            BEGIN
+              IF OLD.state='ISSUED' AND NEW.state='CONSUMED'
+                 AND current_user='%s'
+                 AND session_user IN ('%s','%s') THEN
+                RETURN NEW;
+              END IF;
+              IF OLD.state='ISSUED' AND NEW.state='CANCELED'
+                 AND current_user='%s' AND session_user='%s' THEN
+                RETURN NEW;
+              END IF;
+              RAISE EXCEPTION 'B62_TICKET_TRANSITION_DENIED' USING ERRCODE='42501';
+            END;
+            %s;
+            """.formatted(schema,transitionTag,guardRole,workerRole,otherWorkerRole,
+                cancelRole,cancelRole,transitionTag);
         try (Connection c = owner(); Statement s = c.createStatement()) {
             c.setAutoCommit(false);
             s.execute(ddl);
             s.execute(issuerPolicy);
+            s.execute(approvalFlow);
+            s.execute(ticketFlow);
+            String approvalFn = schema + ".b62_approval_transition()";
+            String ticketFn = schema + ".b62_ticket_transition()";
+            s.execute("REVOKE ALL ON FUNCTION " + approvalFn + " FROM PUBLIC");
+            s.execute("REVOKE ALL ON FUNCTION " + ticketFn + " FROM PUBLIC");
+            s.execute("CREATE TRIGGER b62_approval_transition BEFORE UPDATE OF state "
+                + "ON " + schema + ".b62_approved_effect_requests FOR EACH ROW "
+                + "EXECUTE FUNCTION " + approvalFn);
+            s.execute("CREATE TRIGGER b62_ticket_transition BEFORE UPDATE OF state "
+                + "ON " + schema + ".b62_effect_tickets FOR EACH ROW "
+                + "EXECUTE FUNCTION " + ticketFn);
             String triggerSignature = schema + ".b62_check_ticket_issuance()";
             s.execute("REVOKE ALL ON FUNCTION " + triggerSignature + " FROM PUBLIC");
             s.execute("ALTER FUNCTION " + triggerSignature + " OWNER TO " + guardRole);
@@ -856,13 +947,120 @@ class RuntimeB62TicketAuthorityJdbcTest {
         assertEquals(0L, countEffects());
     }
 
+
+    @Test
+    void cancellationBeforeIssuanceDeniesAndCannotBeReopened() throws Exception {
+        UUID id=UUID.randomUUID();
+        approveRequest(workerRole,alice,"tenant-a","project-a",ALICE_TASK,id,55);
+        assertEquals(1,cancelApproval(id));
+        assertEquals("CANCELED",approvalState(id));
+        SQLException blocked=assertThrows(SQLException.class,()->
+            issue(workerRole,alice,"tenant-a","project-a",ALICE_TASK,id,40));
+        assertEquals("42501",blocked.getSQLState());
+        try (Connection c=canceller(); PreparedStatement p=c.prepareStatement(
+                "UPDATE b62_approved_effect_requests SET state='APPROVED' WHERE effect_id=?")) {
+            p.setObject(1,id);
+            SQLException denied=assertThrows(SQLException.class,p::executeUpdate);
+            assertEquals("42501",denied.getSQLState());
+        }
+        assertEquals("CANCELED",approvalState(id));
+        assertEquals(0L,countEffects());
+    }
+
+    @Test
+    void cancellationOfUnusedTicketDeniesAndCannotBeReopened() throws Exception {
+        UUID id=UUID.randomUUID();
+        approvedIssue(workerRole,alice,"tenant-a","project-a",ALICE_TASK,id,40);
+        assertEquals(1,cancelTicket(id));
+        assertEquals("CANCELED",state(id));
+        try(Connection c=worker()){
+            c.setAutoCommit(false);
+            assertFalse(effect(c,alice,"tenant-a","project-a",ALICE_TASK,id));
+            c.rollback();
+        }
+        try(Connection c=canceller(); PreparedStatement p=c.prepareStatement(
+                "UPDATE b62_effect_tickets SET state='ISSUED' WHERE ticket_id=?")){
+            p.setObject(1,id);
+            SQLException denied=assertThrows(SQLException.class,p::executeUpdate);
+            assertEquals("42501",denied.getSQLState());
+        }
+        assertEquals("CANCELED",state(id));
+        assertEquals(0L,countEffects());
+    }
+
+    @Test
+    void cancellerCannotForgePositiveAuthorityTransitions() throws Exception {
+        UUID pending=UUID.randomUUID();
+        approveRequest(workerRole,alice,"tenant-a","project-a",ALICE_TASK,pending,55);
+        try(Connection c=canceller();PreparedStatement p=c.prepareStatement(
+                "UPDATE b62_approved_effect_requests SET state='ISSUED' WHERE effect_id=?")){
+            p.setObject(1,pending);
+            SQLException denied=assertThrows(SQLException.class,p::executeUpdate);
+            assertEquals("42501",denied.getSQLState());
+        }
+        assertEquals("APPROVED",approvalState(pending));
+        UUID issued=UUID.randomUUID();
+        approvedIssue(workerRole,alice,"tenant-a","project-a",ALICE_TASK,issued,40);
+        try(Connection c=canceller();PreparedStatement p=c.prepareStatement(
+                "UPDATE b62_effect_tickets SET state='CONSUMED' WHERE ticket_id=?")){
+            p.setObject(1,issued);
+            SQLException denied=assertThrows(SQLException.class,p::executeUpdate);
+            assertEquals("42501",denied.getSQLState());
+        }
+        assertEquals("ISSUED",state(issued));
+        assertEquals(0L,countEffects());
+    }
+
+    @Test
+    void issuerAndWorkerCannotCancelTicket() throws Exception {
+        UUID id=UUID.randomUUID();
+        approvedIssue(workerRole,alice,"tenant-a","project-a",ALICE_TASK,id,40);
+        try(Connection issuer=ticketIssuer(); Connection workerSession=worker()){
+            for(Connection c:List.of(issuer,workerSession)){
+                try(PreparedStatement p=c.prepareStatement(
+                        "UPDATE b62_effect_tickets SET state='CANCELED' WHERE ticket_id=?")){
+                    p.setObject(1,id);
+                    SQLException denied=assertThrows(SQLException.class,p::executeUpdate);
+                    assertEquals("42501",denied.getSQLState());
+                }
+            }
+        }
+        assertEquals("ISSUED",state(id));
+    }
+
+    @Test
+    void cancellationCannotOvertakeAnAlreadyPendingEffect() throws Exception {
+        UUID id=UUID.randomUUID();
+        approvedIssue(workerRole,alice,"tenant-a","project-a",ALICE_TASK,id,40);
+        try(Connection pending=worker(); Connection cancellation=canceller()){
+            pending.setAutoCommit(false);
+            assertTrue(effect(pending,alice,"tenant-a","project-a",ALICE_TASK,id));
+            cancellation.setAutoCommit(false);
+            try(Statement s=cancellation.createStatement()){
+                s.execute("SET LOCAL lock_timeout='350ms'");
+            }
+            try(PreparedStatement p=cancellation.prepareStatement(
+                    "UPDATE b62_effect_tickets SET state='CANCELED' "
+                        + "WHERE ticket_id=? AND state='ISSUED'")){
+                p.setObject(1,id);
+                SQLException blocked=assertThrows(SQLException.class,p::executeUpdate);
+                assertEquals("55P03",blocked.getSQLState());
+            }
+            cancellation.rollback();
+            pending.commit();
+        }
+        assertEquals("CONSUMED",state(id));
+        assertEquals(0,cancelTicket(id));
+        assertEquals(1L,countEffects());
+    }
+
     @AfterAll
     static void eraseDisposableObjects() throws Exception {
         if (schema == null) return;
         assertTrue(schema.matches("b62_ticket_[0-9a-f]{32}"));
         try (Connection c = owner(); Statement s = c.createStatement()) {
             s.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
-            for (String role : List.of(workerRole, otherWorkerRole, issuerRole, guardRole)) {
+            for (String role : List.of(workerRole, otherWorkerRole, issuerRole, guardRole, cancelRole)) {
                 s.execute("DROP ROLE IF EXISTS " + role);
             }
             try (PreparedStatement find = c.prepareStatement(

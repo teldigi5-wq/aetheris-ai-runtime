@@ -428,7 +428,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET
-          specs={"RuntimeB62FullEffectJdbcTest":14,"RuntimeB62TicketAuthorityJdbcTest":19}
+          specs={"RuntimeB62FullEffectJdbcTest":14,"RuntimeB62TicketAuthorityJdbcTest":24}
           directory=Path("orchestrator-service/target/surefire-reports")
           for name, minimum in specs.items():
               reports=list(directory.glob(
