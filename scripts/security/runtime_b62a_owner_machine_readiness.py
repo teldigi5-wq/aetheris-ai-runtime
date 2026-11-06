@@ -17,8 +17,10 @@ SCHEMA = "aetheris.s-b62-a.owner-cli-readiness.v1"
 TOOLS = ("docker", "psql", "pg_ctl", "kubectl", "helm", "openssl", "ssh", "git")
 
 
-def readiness(which=shutil.which):
-    """Deterministic, non-secret-preserving command presence indicators only."""
+def readiness(which=None):
+    """Deterministic, non-secret-leaking command presence indicators only."""
+    if which is None:
+        which = shutil.which
     found = {name: which(name) is not None for name in TOOLS}
     return {
         "schema": SCHEMA,
