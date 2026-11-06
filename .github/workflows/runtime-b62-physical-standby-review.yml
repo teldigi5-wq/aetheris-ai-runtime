@@ -357,3 +357,80 @@ jobs:
             -Dtest=RuntimeSyntheticFencedEffectScopeTest test
           echo AETHERIS_B62_SIGNED_READ_ONLY_CANNOT_REACH_JDBC_EFFECT_PASS
           echo AETHERIS_B62_REVIEW_EFFECT_SCOPE_NONPRODUCTION_STAGE45_NO_GO
+
+  b62-full-effect-jdbc:
+    name: b62-full-effect-jdbc
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact Runtime draft without persisted credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Java 21 and Maven cache
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Full signed Java effect query on real disposable PostgreSQL 16, restricted logins
+        shell: bash
+        env:
+          AETHERIS_SYNTRA_OWNER_RUNTIME_ENABLED: "false"
+          AETHERIS_DISPATCHER_ENABLED: "false"
+          AETHERIS_B62_FULL_EFFECT_JDBC_MUST_RUN: "yes"
+          AETHERIS_B62_EFFECT_DISPOSABLE_CI_ONLY: "yes"
+          PGHOST: "127.0.0.1"
+          PGDATABASE: "b62_effect_disposable"
+          PGUSER: "b62_effect_owner"
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          name="aetheris-b62-effect-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ && "$GITHUB_RUN_ATTEMPT" =~ ^[0-9]+$ ]]
+          owner_pass="$(openssl rand -hex 24)"
+          echo "::add-mask::$owner_pass"
+          cleanup() {
+            result=$?
+            trap - EXIT
+            docker rm -fv "$name" >/dev/null 2>&1 || true
+            unset owner_pass PGPASSWORD
+            exit "$result"
+          }
+          trap cleanup EXIT
+          docker run -d --name "$name" -p 127.0.0.1:5432:5432 \
+            -e POSTGRES_USER="$PGUSER" -e POSTGRES_PASSWORD="$owner_pass" \
+            -e POSTGRES_DB="$PGDATABASE" \
+            -e POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 \
+            postgres:16 >/dev/null
+          export PGPASSWORD="$owner_pass"
+          ready=no
+          for attempt in $(seq 1 50); do
+            if docker exec "$name" pg_isready -q -U "$PGUSER" -d "$PGDATABASE"; then
+              ready=yes
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = yes
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml \
+            -Dtest=RuntimeB62FullEffectJdbcTest test
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          reports=list(Path("orchestrator-service/target/surefire-reports").glob(
+              "TEST-io.aetheris.orchestrator.security.RuntimeB62FullEffectJdbcTest.xml"))
+          assert len(reports)==1, "Required REAL Java JDBC test not executed"
+          root=ET.parse(reports[0]).getroot()
+          assert int(root.get("tests", "0")) >= 5
+          assert int(root.get("failures", "1")) == 0
+          assert int(root.get("errors", "1")) == 0
+          assert int(root.get("skipped", "1")) == 0
+          print("AETHERIS_B62_FULL_JAVA_PG16_RESTRICTED_SCOPE_PASS")
+          PY
+          test -z "$(docker exec "$name" psql -X -A -t -U "$PGUSER" -d "$PGDATABASE" \
+            -c "SELECT nspname FROM pg_namespace WHERE nspname LIKE 'b62_effect_%'")"
+          echo AETHERIS_B62_FULL_EFFECT_DISPOSABLE_SCHEMA_CLEANUP_PASS
+          echo AETHERIS_B62_FULL_EFFECT_NONPRODUCTION_STAGE45_NO_GO
