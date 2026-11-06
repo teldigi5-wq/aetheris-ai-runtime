@@ -111,7 +111,7 @@ class RuntimeB62FullEffectJdbcTest {
             .claim("aud", List.of("runtime-workload"))
             .claim("purpose", "runtime-workload-review")
             .claim("resource", "runtime")
-            .issuedAt(Date.from(issued)).expiration(Date.from(issued.plusSeconds(120)))
+            .issuedAt(Date.from(issued)).expiration(Date.from(issued.plusSeconds(60)))
             .signWith(workloadKey.getPrivate(), Jwts.SIG.RS256).compact();
         return workloadVerifier.verifySignedWorkload(jwt);
     }
@@ -123,7 +123,7 @@ class RuntimeB62FullEffectJdbcTest {
             .claim("purpose", "runtime-local-fence-review")
             .claim("resource", "runtime").claim("endpoint", "synthetic-primary")
             .claim("term", 2).claim("workload", "synthetic-worker")
-            .issuedAt(Date.from(issued)).expiration(Date.from(issued.plusSeconds(120)))
+            .issuedAt(Date.from(issued)).expiration(Date.from(issued.plusSeconds(60)))
             .signWith(fenceKey.getPrivate(), Jwts.SIG.RS256).compact();
         return leaseVerifier.verifySignedLease(jwt);
     }
