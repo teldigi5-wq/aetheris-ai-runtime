@@ -57,6 +57,33 @@ class OwnerReadiness(unittest.TestCase):
         self.assertNotIn("SECRET-NEVER-ECHO", stream.getvalue())
         self.assertEqual(json.loads(stream.getvalue())["release_decision"], "STAGE45_NO_GO")
 
+    def test_command_probe_oserror_is_redacted_and_other_tools_continue(self):
+        sensitive = "INTERNAL-HOST-PATH-DO-NOT-PRINT"
+        def lookup(name):
+            if name == "docker":
+                raise OSError(sensitive)
+            return "/fixture/" + name
+        outcome = review.readiness(lookup)
+        self.assertFalse(outcome["tools_present"]["docker"])
+        self.assertTrue(outcome["tools_present"]["psql"])
+        self.assertNotIn(sensitive, json.dumps(outcome))
+        self.assertEqual(outcome["release_decision"], "STAGE45_NO_GO")
+
+    def test_invalid_path_encoding_fails_closed_without_traceback(self):
+        sensitive = "SECRET-IN-PATH-DO-NOT-PRINT"
+        with patch.object(review.shutil, "which",
+                          side_effect=ValueError(sensitive)), \
+                patch("sys.argv", ["readiness"]), \
+                contextlib.redirect_stdout(io.StringIO()) as stdout, \
+                contextlib.redirect_stderr(io.StringIO()) as stderr:
+            status = review.main()
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(status, 1)
+        self.assertTrue(all(v is False for v in payload["tools_present"].values()))
+        self.assertEqual(payload["release_decision"], "STAGE45_NO_GO")
+        self.assertNotIn(sensitive, stdout.getvalue() + stderr.getvalue())
+        self.assertEqual(stderr.getvalue(), "")
+
     def test_script_imports_no_network_or_command_execution_library(self):
         text = (Path(__file__).resolve().parents[2] /
                 "scripts/security/runtime_b62a_owner_machine_readiness.py").read_text(

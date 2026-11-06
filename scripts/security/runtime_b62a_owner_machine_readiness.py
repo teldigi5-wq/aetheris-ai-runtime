@@ -21,7 +21,14 @@ def readiness(which=None):
     """Deterministic, non-secret-leaking command presence indicators only."""
     if which is None:
         which = shutil.which
-    found = {name: which(name) is not None for name in TOOLS}
+    # Some local command/PATH lookups fail with OS or decoding errors.
+    # Treat them as absent; never expose an exception containing host paths.
+    found = {}
+    for name in TOOLS:
+        try:
+            found[name] = which(name) is not None
+        except (OSError, ValueError):
+            found[name] = False
     return {
         "schema": SCHEMA,
         "scope": "local-command-presence-only",
