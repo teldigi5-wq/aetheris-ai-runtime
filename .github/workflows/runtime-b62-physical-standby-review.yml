@@ -351,6 +351,12 @@ jobs:
               assert marker in src, marker
           for forbidden in ('@Component', '@Bean', 'request.getHeader('):
               assert forbidden not in src, forbidden
+          candidate=(root/"security/RuntimeSyntheticTicketEffectProbe.java").read_text()
+          assert "SELECT b62_record_ticket_effect(" in candidate
+          assert "INSERT INTO" not in candidate
+          assert "@Component" not in candidate and "@Bean" not in candidate
+          assert "request.getHeader(" not in candidate
+          print("AETHERIS_B62_TICKET_PROBE_NO_HTTP_NO_DML_SOURCE_PASS")
           lock=(root/"api/OwnerlessTaskMissionHttpFilter.java").read_text()
           assert "@Component" in lock and "SC_NOT_FOUND" in lock
           print("AETHERIS_B62_SYNTHETIC_EFFECT_SOURCE_WRITE_SCOPE_DENY_ONLY_PASS")
@@ -422,7 +428,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET
-          specs={"RuntimeB62FullEffectJdbcTest":14,"RuntimeB62TicketAuthorityJdbcTest":8}
+          specs={"RuntimeB62FullEffectJdbcTest":14,"RuntimeB62TicketAuthorityJdbcTest":10}
           directory=Path("orchestrator-service/target/surefire-reports")
           for name, minimum in specs.items():
               reports=list(directory.glob(

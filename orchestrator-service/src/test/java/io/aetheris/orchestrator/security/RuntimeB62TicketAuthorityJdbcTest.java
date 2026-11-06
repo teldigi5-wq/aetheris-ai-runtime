@@ -512,6 +512,50 @@ class RuntimeB62TicketAuthorityJdbcTest {
         assertEquals(0L, countEffects());
     }
 
+
+    @Test
+    void concurrentTicketConsumptionSerializesUnderRowLock() throws Exception {
+        UUID id = UUID.randomUUID();
+        issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
+        try (Connection first = worker(); Connection contender = worker()) {
+            first.setAutoCommit(false);
+            assertTrue(effect(first, alice, "tenant-a", "project-a", ALICE_TASK, id));
+            contender.setAutoCommit(false);
+            try (Statement timeout = contender.createStatement()) {
+                timeout.execute("SET LOCAL lock_timeout='350ms'");
+            }
+            SQLException blocked = assertThrows(SQLException.class, () ->
+                effect(contender, alice, "tenant-a", "project-a", ALICE_TASK, id));
+            assertEquals("55P03", blocked.getSQLState(),
+                "Unconsumed ticket must be locked until first transaction settles");
+            contender.rollback();
+            first.commit();
+            assertEquals("CONSUMED", state(id));
+            assertFalse(effect(contender, alice, "tenant-a", "project-a", ALICE_TASK, id));
+            contender.rollback();
+        }
+        assertEquals(1L, countEffects());
+    }
+
+    @Test
+    void principalEpochRevocationRejectsPreviouslyIssuedTicket() throws Exception {
+        UUID id = UUID.randomUUID();
+        issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 40);
+        long cutoff = alice.requireRevocationFacts().signedIssuedAt().getEpochSecond();
+        try (Connection c = owner(); PreparedStatement stmt = c.prepareStatement(
+                "UPDATE principal_epochs SET reject_issued_at_or_before_epoch=? WHERE principal_id=42")) {
+            stmt.setLong(1, cutoff);
+            assertEquals(1, stmt.executeUpdate());
+        }
+        try (Connection c = worker()) {
+            c.setAutoCommit(false);
+            assertFalse(effect(c, alice, "tenant-a", "project-a", ALICE_TASK, id));
+            c.rollback();
+        }
+        assertEquals("ISSUED", state(id));
+        assertEquals(0L, countEffects());
+    }
+
     @AfterAll
     static void eraseDisposableObjects() throws Exception {
         if (schema == null) return;
