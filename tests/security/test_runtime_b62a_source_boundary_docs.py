@@ -28,7 +28,7 @@ class IndependentFencingSourceInventory(unittest.TestCase):
                 self.assertIn("| `" + name + "` | `" + expected + "` |", table)
                 data = (ROOT / name).read_bytes()
                 actual = hashlib.sha1(
-                    b"blob " + str(len(data)).encode("ascii") + b"\\0" + data
+                    b"blob " + str(len(data)).encode("ascii") + bytes([0]) + data
                 ).hexdigest()
                 self.assertEqual(actual, expected, "source changed: review/re-pin inventory")
 
