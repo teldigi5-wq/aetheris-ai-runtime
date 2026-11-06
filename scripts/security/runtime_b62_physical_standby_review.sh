@@ -1368,6 +1368,135 @@ test "$(b62_consume_physical_ack "$b62_replay_challenge" "$ack_nonce")" = t
 test "$(standby_sql 'SELECT count(*) FROM public.b62_ack_consumed')" = 1
 echo AETHERIS_B62_PRIVILEGED_ACK_LEDGER_ERASURE_REPLAY_NO_GO_PASS
 
+# Third-DB review fixture: the coordinator has an INDEPENDENT replay ledger.
+# This is neither a real signed-ACK validation path nor a globally trusted
+# authority: synthetic-issued challenge values are written by the lab
+# operator, and the coordinator's privileged owner can still erase rows.
+docker start "$authority" >/dev/null
+coord_ready=false
+for attempt in $(seq 1 50); do
+  if test "$(coord_write 'SELECT 1' 2>/dev/null || true)" = 1; then
+    coord_ready=true; break
+  fi
+  sleep 1
+done
+test "$coord_ready" = true
+coord_write "BEGIN;
+  CREATE TABLE public.b62_independent_ack_issued(
+    challenge_id uuid PRIMARY KEY,
+    receipt_nonce uuid NOT NULL,
+    node_identity text NOT NULL,
+    fence_term bigint NOT NULL CHECK(fence_term>0),
+    expires_at timestamptz NOT NULL);
+  CREATE TABLE public.b62_independent_ack_consumed(
+    challenge_id uuid PRIMARY KEY,
+    receipt_nonce uuid NOT NULL UNIQUE,
+    node_identity text NOT NULL,
+    fence_term bigint NOT NULL CHECK(fence_term>0));
+  REVOKE ALL ON public.b62_independent_ack_issued,
+    public.b62_independent_ack_consumed FROM PUBLIC;
+  CREATE ROLE b62_ack_exec_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+  GRANT USAGE ON SCHEMA public TO b62_ack_exec_owner;
+  GRANT SELECT ON public.b62_independent_ack_issued TO b62_ack_exec_owner;
+  GRANT INSERT ON public.b62_independent_ack_consumed TO b62_ack_exec_owner;
+  CREATE FUNCTION public.b62_consume_independent_ack(
+    p_challenge uuid,p_receipt uuid,p_node text,p_term bigint)
+  RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER
+  SET search_path=pg_catalog,pg_temp
+  AS \$b62_independent\$
+  DECLARE result boolean;
+  BEGIN
+    IF session_user <> '$fence_new'
+       OR p_challenge IS NULL OR p_receipt IS NULL
+       OR p_node <> '$standby' OR p_term <> 5
+       OR current_setting('transaction_isolation') <> 'read committed'
+       OR pg_is_in_recovery() THEN
+      RETURN false;
+    END IF;
+    WITH inserted AS (
+      INSERT INTO public.b62_independent_ack_consumed(
+        challenge_id,receipt_nonce,node_identity,fence_term)
+      SELECT issued.challenge_id,issued.receipt_nonce,
+             issued.node_identity,issued.fence_term
+      FROM public.b62_independent_ack_issued issued
+      WHERE issued.challenge_id=p_challenge
+        AND issued.receipt_nonce=p_receipt
+        AND issued.node_identity=p_node
+        AND issued.fence_term=p_term
+        AND issued.expires_at>clock_timestamp()
+      ON CONFLICT DO NOTHING
+      RETURNING challenge_id
+    ) SELECT EXISTS(SELECT 1 FROM inserted) INTO result;
+    RETURN result;
+  END
+  \$b62_independent\$;
+  ALTER FUNCTION public.b62_consume_independent_ack(
+    uuid,uuid,text,bigint) OWNER TO b62_ack_exec_owner;
+  REVOKE ALL ON FUNCTION public.b62_consume_independent_ack(
+    uuid,uuid,text,bigint) FROM PUBLIC;
+  GRANT EXECUTE ON FUNCTION public.b62_consume_independent_ack(
+    uuid,uuid,text,bigint) TO $fence_new;
+  INSERT INTO public.b62_independent_ack_issued VALUES(
+    '$b62_replay_challenge'::uuid,'$ack_nonce'::uuid,
+    '$standby',5,clock_timestamp()+interval '30 minutes');
+  COMMIT;" >/dev/null
+independent_ack_sql="SELECT public.b62_consume_independent_ack(
+  '$b62_replay_challenge'::uuid,'$ack_nonce'::uuid,'$standby',5)"
+test "$(fence_as "$standby" "$fence_new" "$fence_new_pw" \
+  "$independent_ack_sql")" = t
+test "$(fence_as "$standby" "$fence_new" "$fence_new_pw" \
+  "$independent_ack_sql")" = f
+test "$(coord_write 'SELECT count(*) FROM public.b62_independent_ack_consumed')" = 1
+if fence_as "$standby" "$fence_new" "$fence_new_pw" \
+  "DELETE FROM public.b62_independent_ack_consumed" >/dev/null 2>&1; then
+  echo "FAIL: restricted coordinator actor erased independent replay ledger" >&2
+  exit 1
+fi
+echo AETHERIS_B62_INDEPENDENT_COORDINATOR_ACK_LEDGER_ONCE_PASS
+
+# The resource-local administrator is allowed to erase the local
+# consumed row, but this MUST NOT erase the independent coordinator row.
+standby_sql "DELETE FROM public.b62_ack_consumed
+  WHERE receipt_nonce='$ack_nonce'::uuid;" >/dev/null
+test "$(b62_consume_physical_ack "$b62_replay_challenge" "$ack_nonce")" = t
+test "$(fence_as "$standby" "$fence_new" "$fence_new_pw" \
+  "$independent_ack_sql")" = f
+test "$(coord_write 'SELECT count(*) FROM public.b62_independent_ack_consumed')" = 1
+echo AETHERIS_B62_LOCAL_ADMIN_ERASURE_CANNOT_RESET_COORDINATOR_ACK_PASS
+
+# The independent store remains durable across its OWN process restart.
+# Stop must make new admissions unavailable; restart must still DENY
+# the old spent challenge. Nothing is inferred from absence of a reply.
+docker stop "$authority" >/dev/null
+if fence_as "$standby" "$fence_new" "$fence_new_pw" \
+     "$independent_ack_sql" >/dev/null 2>&1; then
+  echo "FAIL: stopped coordinator returned a usable ACK decision" >&2
+  exit 1
+fi
+docker start "$authority" >/dev/null
+coord_ready=false
+for attempt in $(seq 1 50); do
+  if test "$(coord_write 'SELECT 1' 2>/dev/null || true)" = 1; then
+    coord_ready=true; break
+  fi
+  sleep 1
+done
+test "$coord_ready" = true
+test "$(fence_as "$standby" "$fence_new" "$fence_new_pw" \
+  "$independent_ack_sql")" = f
+test "$(coord_write 'SELECT count(*) FROM public.b62_independent_ack_consumed')" = 1
+echo AETHERIS_B62_INDEPENDENT_ACK_LEDGER_RESTART_AND_OUTAGE_PASS
+
+# This operator is the coordinator DB owner, not a restricted resource
+# actor. Privileged deletion still permits another one-time acceptance:
+# the separate storage is not an append-only external trust root.
+coord_write "DELETE FROM public.b62_independent_ack_consumed
+  WHERE challenge_id='$b62_replay_challenge'::uuid;" >/dev/null
+test "$(coord_write 'SELECT count(*) FROM public.b62_independent_ack_consumed')" = 0
+test "$(fence_as "$standby" "$fence_new" "$fence_new_pw" \
+  "$independent_ack_sql")" = t
+echo AETHERIS_B62_COORDINATOR_OWNER_ERASES_ACK_LEDGER_NO_GO_PASS
+
 # NEGATIVE COUNTEREXAMPLE: a closure receipt from the promoted node
 # cannot prove that ANOTHER physical primary is irreversibly fenced.
 # The old primary was previously stopped and had its local endpoint
