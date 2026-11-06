@@ -1,0 +1,49 @@
+# S-B62-A — Source-backed Runtime / Platform trust-boundary inventory
+
+**Prepared:** 6 November 2026 · **State:** PARTIAL INVENTORY / NEEDS OPERATIONS VERIFICATION AND INDEPENDENT REVIEW
+**Scope:** source and CI for `teldigi5-wq/aetheris-ai-runtime` review branch `test/b62-integrated-pinned-6caa4df-20261105` at `19b0256d3bf1a61cf5ccfc00644e4b3262f47998` and `teldigi5-wq/aetheris-platform` draft PR #321 at `0f296079241ca0c498e52ad0bafe259229c10735`. Not a survey of a running installation.
+
+This is the **first deliverable** of S-B62-A, not stage completion or approval of ADR B62-001. It changes no product behavior, endpoint policy, SQL migration, production credentials, real infrastructure or protected branch. Stage45 **NO_GO**; XERJ **HOLD**. Runtime #23 and Platform #251 are open.
+
+## Verified source/configuration facts — not deployment claims
+
+| Area | Pinned evidence | What the source demonstrates | Verification limit / risk |
+|---|---|---|---|
+| Current canonical protected mains | Runtime `65a6262717adcd52ac8d8a16ed6f223e299fd74d`; Platform `57ad3e0e602efa6feb275328254151b959a3499b` | Protected main refs differ from the reviewed candidate | Neither repo commit proves which image an operator currently runs |
+| Runtime API quarantine | Runtime `RuntimeUncertifiedApiHttpFilter.java`, blob `d74d380e051dfb828baedcb6f920a0a760cda7bc` | Spring-registered review filter rejects `/api` and `/actuator` paths with HTTP 404, including servlet `pathInfo`; no producer unlock | Filter is on **draft** review ancestry; not claimed deployed. Direct network exposure must be measured |
+| Runtime defaults | `orchestrator-service/src/main/resources/application.properties`, blob `dd6fbc95cd6f4c59dfa6980aca88fd69f29c116b` | Owner Runtime and cloud provider default disabled; workspace-write disabled; remote MCP allowlist empty | Defaults can be overridden by environment; inspect effective runtime settings securely on owner PC |
+| Runtime synthetic signed ACK and write gate | `RuntimePinnedClosureAckVerifier.java`, `RuntimeSyntheticClosureAckConsumptionProbe.java`, `RuntimeSyntheticFencedEffectProbe.java` on candidate | Pinned RS256 signature/claims, conditional local SQL one-shot ACK and signed `orchestrator:write` requirement in review probes | No production resource-owned signer, authenticated resource transport, old-primary invalidation or cross-resource commit authority |
+| Platform Compose service exposure | `docker-compose.yml` blob `68531681623ca9f739906fff9dbd55325fd7ef9c`; `docker-compose.core.yml` blob `51499409d41f0ef1b554b598b611e9b0ce93fe5e` | Config binds User 8081, Identity 8082, Audit 8083, Gateway 8080 to host `127.0.0.1`; full Compose also binds Runtime 8090 to host loopback. Shared Compose networking enables direct service DNS | Host-loopback is not authorization for other local processes/containers; no assertion about actual host firewall, service health or deployed topology |
+| Platform Compose Runtime revision | Full `docker-compose.yml`, same pinned blob above | Default Runtime image/build references protected Runtime main `65a6262717adcd52ac8d8a16ed6f223e299fd74d`, **not** the draft B62 filter/integration. Integration-external variant requires an operator-provided exact-revision image | Do not assume the review candidate protects a running Compose environment; operator may select a different image |
+| Platform Gateway routing and token settings | `gateway/src/main/resources/application.yml`, blob `9d8836e7c4cf2ceba044ee14259f274898259e7a` | Service DNS proxies to User, Identity, Audit and Runtime; token issuer/audience/key settings are configurable | Gateway-checked scope does not establish per-object owner identity on downstream services |
+| User/Audit direct bearer filters | Both `DirectApiJwtFilter.java` on Platform PR #321; blobs `b777c1af3180c89b3eb0658afedd8c0a9ee9c9cf`, `cfa713a452c2564439b7e646e0cdfe24faf43e8e` | Independent signed-bearer verification and ADMIN-only access/required scopes in the **draft**, with comments disclosing incomplete service revocation binding | Service-level tenant/object ownership, session transport and production enablement remain unverified; Platform #251 stays open |
+| Helm nonlocal configuration | `templates/00-safety-gate.yaml` blob `94e42eb6797ecfc7dc426c1e8c0edbac5d483079` | Template rejects known demo JWT/Postgres/RabbitMQ defaults and non-digest images in nonlocal mode; requires independent long Redis secret | Render outcome and secret provenance must be verified in approved environment, without sharing secret values |
+| Helm network policy | `templates/10-ingress-network-policies.yaml` blob `8bb0c6727b6f8d581a64ea7bd5c531d7bf2fede5` | **Ingress-only**, namespace-scoped policies for selected User/Identity/Audit and data-store Pods; no generic Runtime or gateway ingress policy in this file | Real CNI enforcement, selectors, egress, cross-namespace connectivity, DB admin access and production installation remain unknown |
+| Platform emergency revocation | `docs/security/B62G13_FUNCTION_ONLY_EMERGENCY_OWNER_REVIEW_20261027.md`, blob `845172bfbd3e5a74a99bcda218a2dc9d27542905` | Review-only function-execute writer and transactional audit lab, with no underlying table DML rights for caller | Neither real owner dual-control nor remote immutable audit; administrative rollback and production identity links remain open |
+| Physical and coordinator ACK replay | Runtime PR #257 physical shell review and candidate PG16 security suites | One-time receipt consumption and separate coordinator ledger; tests deliberately demonstrate privileged local/coordinator erasure and stale old-primary writer risk | A third disposable DB is **not** a production independent consensus/trust authority or cryptographically bound resource attestation |
+| Release evidence | Candidate three exact-commit CI workflows; nine-gate tracker; Platform #321 draft | 86/86 consolidated Java, 21/21 restricted reader and physical standby replay test at `19b0256d3bf1a61cf5ccfc00644e4b3262f47998` succeeded; all nine release gates remain uncertified | Hosted CI does not prove real operator domains, hardware, production readiness, external release review or real deployment |
+
+## Trust-zone sketch (hypothesis, to verify)
+
+The proposed boundaries are **external caller → Gateway → User/Identity/Audit/Runtime → PostgreSQL**, plus a separate resource fence decision and independent epoch/anti-replay authority. The repository describes several local Docker and Helm modes; **it does not prove** a real separate authority exists or that every internal direct backend connection is blocked. A hardened control plane must be administratively separate from every workload DB owner, physical resource administrator and untrusted client. A local three-container experiment does not satisfy that separation.
+
+## Missing operator/owner evidence (DO NOT fill with guesses)
+
+| Approval evidence needed | Owner/reviewer required | Acceptance and safe collection method |
+|---|---|---|
+| Inventory of **actual** environments, deployed image digests, active Runtime filter version, host and network topology | Deployment/operations owner | Signed or reviewer-observed redacted configuration report; not repository defaults alone |
+| Physical old-primary fencing facility, DB privilege and storage ownership, recovery/failback controls | DB/infra owner plus independent security reviewer | Fault-injection in approved isolated hardware/cluster; evidence old writable nodes cannot commit after cutover |
+| Authority failure domains, ownership and quorum | Security architect + independent operator | Architecture and administrative-role matrix showing distinct keys and failure domains; no same-host quorum claim |
+| Credential issuance, certificate CA trust chain, workload identity mapping, key custody and rotation | Identity/security owner | Redacted issuance policy and actual mTLS/session retirement observations; **never store private keys or tokens** |
+| Writable endpoint and direct port inventory for User, Audit, Runtime, DB and reverse proxies | Network owner | Controlled loopback/container/Pod/host probes, including forbidden direct paths and deployment-specific ingress/egress |
+| Database migration, backup, journal tamper/rollback recovery and monotonic epoch witness | DBA + audit owner | Reproducible sanitized rollback tests and independent append-only evidence; no mutation of live data |
+| Runtime #23 / Platform #251 object ownership and API/SSE authorization | Runtime + Platform maintainers, separate approver | Multi-owner negative and positive flows, direct-backend 401/403/404 tests and session revocation evidence |
+| Nine release gates, owner-PC hardware and formal approval | Release owner + independent reviewers | Individually attested real hardware/system tests; retain NO_GO if any evidence is missing |
+
+## Stage completion criteria
+
+S-B62-A **remains IN PROGRESS**, even with this document committed, until (1) the above unknowns are measured and owner-confirmed, (2) ADR B62-001 is approved with a concrete resource-enforcement strategy, (3) the reviewer signs off the threat model, and (4) the next S-B62-B interface/adapter design is explicitly accepted.
+
+No new mTLS certificates, real secrets, DNS, network rules, migrations, deploys, production privileges, or external services were created. Do not turn on Task/Mission/SSE from this inventory.
+
+**Forward path:** S-B62-A approved inventory → B authenticated authority/adapter → C replay/failover/restore abuse tests → D coordinated preview → E release evaluation. Separate 9 Stage45 gates and E3.9H/E4–E9 capability acceptance remain outstanding and must not be added as 9+7 sequential B62 tasks.
