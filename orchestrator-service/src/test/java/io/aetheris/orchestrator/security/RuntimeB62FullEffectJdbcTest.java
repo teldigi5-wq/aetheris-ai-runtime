@@ -177,9 +177,9 @@ class RuntimeB62FullEffectJdbcTest {
             s.execute("CREATE TABLE synthetic_guarded_task_effects(effect_id uuid PRIMARY KEY,task_id uuid NOT NULL,fence_term bigint NOT NULL,workload_subject text NOT NULL)");
             // CI-only monotonic write policy. Deliberately does not
             // prevent a privileged PostgreSQL owner disabling triggers.
-            s.execute("CREATE FUNCTION b62_deny_signer_reopen() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $ BEGIN IF OLD.state='REVOKED' AND NEW.state<>'REVOKED' THEN RAISE EXCEPTION 'B62_SIGNER_REOPEN_FORBIDDEN' USING ERRCODE='23514'; END IF; RETURN NEW; END $");
+            s.execute("CREATE FUNCTION b62_deny_signer_reopen() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $b62_guard$ BEGIN IF OLD.state='REVOKED' AND NEW.state<>'REVOKED' THEN RAISE EXCEPTION 'B62_SIGNER_REOPEN_FORBIDDEN' USING ERRCODE='23514'; END IF; RETURN NEW; END; $b62_guard$");
             s.execute("CREATE TRIGGER b62_signer_monotonic BEFORE UPDATE OF state ON signer_authorizations FOR EACH ROW EXECUTE FUNCTION b62_deny_signer_reopen()");
-            s.execute("CREATE FUNCTION b62_deny_epoch_rollback() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $ BEGIN IF NEW.reject_issued_at_or_before_epoch<OLD.reject_issued_at_or_before_epoch THEN RAISE EXCEPTION 'B62_EPOCH_ROLLBACK_FORBIDDEN' USING ERRCODE='23514'; END IF; RETURN NEW; END $");
+            s.execute("CREATE FUNCTION b62_deny_epoch_rollback() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $b62_guard$ BEGIN IF NEW.reject_issued_at_or_before_epoch<OLD.reject_issued_at_or_before_epoch THEN RAISE EXCEPTION 'B62_EPOCH_ROLLBACK_FORBIDDEN' USING ERRCODE='23514'; END IF; RETURN NEW; END; $b62_guard$");
             s.execute("CREATE TRIGGER b62_epoch_monotonic BEFORE UPDATE OF reject_issued_at_or_before_epoch ON principal_epochs FOR EACH ROW EXECUTE FUNCTION b62_deny_epoch_rollback()");
             s.execute("REVOKE ALL ON FUNCTION b62_deny_signer_reopen() FROM PUBLIC");
             s.execute("REVOKE ALL ON FUNCTION b62_deny_epoch_rollback() FROM PUBLIC");
