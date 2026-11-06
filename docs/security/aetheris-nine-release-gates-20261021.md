@@ -46,3 +46,17 @@ Previous gate statuses above remain **OPEN / NOT CERTIFIED**. The historical tra
 Canonical enterprise sequence: finish E3.9G-12B4D → advance E3.9H held-out model/3D proof → E4 model routing → E5 supervised website factory → E6 immersive rendering → E7 coordinators → E8 cockpit → E9 independent certification, with Stage45 13 blockers and Execution Phase A maintained as distinct release requirements. See [current runtime roadmap](../runtime/roadmap-current-e3-through-e9-20261025.md).
 
 **No production, live-money or host privileges were granted by this progress.**
+
+## 6 November 2026 — verified cross-repository continuation checkpoint (no gate closed)
+
+All **nine** previously defined Stage45 acceptance gates above remain **NOT CERTIFIED**. This dated append does not change the historical tracker, certify any gate or add an official stage.
+
+- **Gate 1 / security integration:** [Runtime #257](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/257), [#281](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/281), [#282](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/282), and [Platform #321](https://github.com/teldigi5-wq/aetheris-platform/pull/321) remain draft/unmerged; no reconciled protected-main promotion was performed.
+- **Gates 2–5:** direct owner/tenant authorization, independent physical resource fencing, secret/migration/restore policy, operator identity, durable STOP/recovery and independently administered revocation are **not** certified. [Runtime issue #23](https://github.com/teldigi5-wq/aetheris-ai-runtime/issues/23) and [Platform issue #251](https://github.com/teldigi5-wq/aetheris-platform/issues/251) remain open.
+- **Gates 6–7:** E3.9 held-out genuine model outcomes, E6 genuine Cinematic Studio authorship and physical GPU/browser acceptance remain incomplete. The E5→E6 draft chain [#231](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/231)→[#232](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/232)→[#233](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/233)→[#234](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/234) is not a production release.
+- **Gate 8:** owner-PC [Execution Phase A](https://github.com/teldigi5-wq/aetheris-platform/issues/49) remains BLOCKED_PENDING_HARDWARE.
+- **Gate 9:** independent release approval absent; Stage45 **NO_GO** and XERJ publication **HOLD**.
+
+The latest [PR #282 physical PG16 witness run #42159092287](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42159092287) passed its actual scripted assertions, **including explicit NO_GO proofs**: the witness database owner could reset the witness epoch, and the privileged old primary remained writable after a stale-epoch read denial. The independent-resource fencing vulnerability remains unresolved. The [source-only checks in #281](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42156885665) also passed, but do not certify a deployed network. Details: [dated E-series / S0 checkpoint](../runtime/roadmap-current-e3-through-e9-20261025.md).
+
+The original Platform 34/34 repository-blueprint completion statement is retained. S-B62-A (proposed security ADR work package) is **not** the historical Platform B62-A JWT temporal stage or a new E-series stage. This update is a review-only append on an unmerged Runtime draft, not a protected-main change.

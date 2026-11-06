@@ -64,6 +64,17 @@ That SHA is a **certification checkpoint**, not a claim that runtime development
 
 See [reconciled E3–E9 roadmap](docs/runtime/roadmap-current-e3-through-e9-20261025.md), [nine security release gates](docs/security/aetheris-nine-release-gates-20261021.md), and [cinematic standards](docs/runtime/syntra-aetheris-cinematic-website-standards-20261025.md). These documents are source-of-truth engineering checklists, not permissions to run external sites or deploy.
 
+## 6 November 2026 — verified cross-repository continuation checkpoint (DRAFT)
+
+This is an **unmerged, review-only branch checkpoint**. The original Aetheris/Syntra stage names and owners remain unchanged. The 34/34 historical platform blueprint is not a production release. Enterprise E3.9G, E3.9H and E4–E9, Security S0/B62, Stage45 and Execution Phase A are **distinct, overlapping tracks**, never an additive "steps remaining" count.
+
+- **Current security dependency:** [Runtime PR #257](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/257) and [witness experiment PR #282](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/282) are draft/unmerged. PR #282 at aeee6710e14f01c231cff63272ced3018d3b2fe4 passed [real disposable PostgreSQL16 CI #42159092287](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42159092287). The witness resisted the coordinator owner's **logical** reset under test-role separation, **but its own privileged owner reset its epoch and an old primary remained writable**. Those are explicit NO_GO counterexamples, not resolved defects.
+- **Other review work:** [Runtime PR #281](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/281) source-only Compose checks [passed #42156885665](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42156885665); [Platform PR #321](https://github.com/teldigi5-wq/aetheris-platform/pull/321) is a separate draft synthetic emergency-writer/revocation study. None represents deployed independent fencing.
+- **Enterprise remains separate:** [E5 PR #231](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/231) → [E6 PR #232](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/232) → [#233](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/233) → [#234](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/234) are **open drafts**; the E6 roadmap's original eight internal follow-up tasks and E4–E9 acceptance requirements remain intact.
+- **Open blockers:** [Runtime issue #23](https://github.com/teldigi5-wq/aetheris-ai-runtime/issues/23), [Platform issue #251](https://github.com/teldigi5-wq/aetheris-platform/issues/251), nine uncertified Stage45 gates, and owner hardware [Execution Phase A](https://github.com/teldigi5-wq/aetheris-platform/issues/49) **BLOCKED_PENDING_HARDWARE**. Stage45 **NO_GO**; XERJ publication **HOLD**. Protected main and the platform-certified Runtime reference are unchanged.
+
+The detailed checkpoint and next existing security acceptance milestone are recorded in the [E-series roadmap](docs/runtime/roadmap-current-e3-through-e9-20261025.md) and [release gate tracker](docs/security/aetheris-nine-release-gates-20261021.md). **This review text is not part of main until independently reviewed and merged.**
+
 ## Certification and truth boundaries
 
 The certified checkpoint `68af39a1115a7330020c18b6e2cb601e66b8f22f` completed the applicable canonical runtime certification suite. The platform certification reference records that checkpoint as `6_OF_6_SUCCESS`.
