@@ -60,3 +60,8 @@ To run these tests, first obtain explicit **infrastructure owner approval** for 
 **Decision to review:** adopt candidate A only as a documented development availability trade-off; evaluate candidates B/C for real HA, with no automatic promotion or production trust until all physical negative tests pass. **This text is a proposal, not owner consent or reviewer approval.**
 
 **Release boundary:** Runtime S-B62-A **IN PROGRESS**; S-B62-B through S-B62-E **not advanced**; nine release gates **NOT CERTIFIED**; Stage45 **NO_GO**; XERJ **HOLD**; Execution Phase A **BLOCKED_PENDING_HARDWARE**. No protected-main merge, real deployment, Runtime Task/Mission/SSE unquarantine, client permission grant or external publication.
+
+
+### Owner-machine tools only — non-attesting readiness check
+
+`scripts/security/runtime_b62a_owner_machine_readiness.py` is a safe owner-PC/WSL command-presence preflight. It is deliberately **not** a Docker/host scanner and cannot establish separate hardware or administrative authorities. Run from the Runtime checkout using `python3 scripts/security/runtime_b62a_owner_machine_readiness.py` and expect exit code 1 and JSON `STAGE45_NO_GO`. Do not supply flags, tokens, credentials or host details; the output contains only Booleans. Later physical testing still requires separate owner/operator approval and authorized isolated hardware. Do not treat this as a stage exit criterion.
