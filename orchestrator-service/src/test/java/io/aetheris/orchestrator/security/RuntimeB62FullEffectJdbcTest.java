@@ -513,6 +513,22 @@ class RuntimeB62FullEffectJdbcTest {
         }
     }
 
+
+    @Test
+    void restrictedWorkerDirectTableInsertBypassesSyntheticJavaAuthorizationNoGo()
+            throws Exception {
+        // Negative, isolated evidence: this role currently has INSERT so
+        // an actor holding its DB credential can bypass every Java predicate.
+        try (Connection c = worker(); Statement sql = c.createStatement()) {
+            assertEquals(1, sql.executeUpdate(
+                "INSERT INTO synthetic_guarded_task_effects(effect_id,task_id,fence_term,workload_subject)"
+                    + " VALUES ('" + UUID.randomUUID() + "','" + OWNERLESS_TASK
+                    + "',2,'untrusted-direct-db-write')"));
+        }
+        assertEquals(1L, countEffects(),
+            "NO_GO: database insert privilege bypasses signer, membership and fence guards");
+    }
+
     @AfterAll
     static void dropDisposableFixtureAndAssertCleanup() throws Exception {
         if (schema == null) return;
