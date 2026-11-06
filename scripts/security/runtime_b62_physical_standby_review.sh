@@ -1399,6 +1399,8 @@ coord_write "BEGIN;
   GRANT USAGE ON SCHEMA public TO b62_ack_exec_owner;
   GRANT SELECT ON public.b62_independent_ack_issued TO b62_ack_exec_owner;
   GRANT INSERT ON public.b62_independent_ack_consumed TO b62_ack_exec_owner;
+  -- PostgreSQL RETURNING challenge_id needs a limited SELECT grant.
+  GRANT SELECT(challenge_id) ON public.b62_independent_ack_consumed TO b62_ack_exec_owner;
   CREATE FUNCTION public.b62_consume_independent_ack(
     p_challenge uuid,p_receipt uuid,p_node text,p_term bigint)
   RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER
