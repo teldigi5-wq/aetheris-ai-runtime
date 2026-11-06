@@ -556,6 +556,78 @@ class RuntimeB62TicketAuthorityJdbcTest {
         assertEquals(0L, countEffects());
     }
 
+
+    @Test
+    void ticketExpiresWhileTransactionIsPendingYetEffectCommitsNoGo() throws Exception {
+        // Negative evidence: checking clock_timestamp() on INSERT is not a
+        // transaction-COMMIT deadline. Keep this counterexample as NO_GO.
+        UUID id = UUID.randomUUID();
+        issue(workerRole, alice, "tenant-a", "project-a", ALICE_TASK, id, 5);
+        try (Connection pending = worker()) {
+            pending.setAutoCommit(false);
+            assertTrue(effect(pending, alice, "tenant-a", "project-a", ALICE_TASK, id));
+            try (Statement delay = pending.createStatement()) {
+                delay.execute("SELECT pg_sleep(6.25)");
+            }
+            try (Connection observer = owner(); PreparedStatement check =
+                     observer.prepareStatement(
+                         "SELECT expires_at < clock_timestamp() FROM b62_effect_tickets "
+                             + "WHERE ticket_id=?")) {
+                check.setObject(1, id);
+                try (var row = check.executeQuery()) {
+                    assertTrue(row.next());
+                    assertTrue(row.getBoolean(1), "Ticket expiry must precede commit");
+                }
+            }
+            pending.commit();
+        }
+        assertEquals("CONSUMED", state(id));
+        assertEquals(1L, countEffects(),
+            "NO_GO: transaction committed an effect after its ticket expired");
+    }
+
+    @Test
+    void misissuedTicketPermitsDirectSqlToBypassJavaWriteScopeNoGo() throws Exception {
+        // Trusted issuer incorrectly creates a ticket for a genuinely signed
+        // read-only principal. The Java API rejects it, but the SQL function
+        // cannot infer scopes from unverified caller parameters or a DB row.
+        var reader = principal(42L, List.of("orchestrator:read"));
+        try (Connection admin = owner()) {
+            register(admin, reader);
+        }
+        UUID id = UUID.randomUUID();
+        issue(workerRole, reader, "tenant-a", "project-a", ALICE_TASK, id, 40);
+        var signed = reader.requireRevocationFacts();
+        try (Connection c = worker()) {
+            c.setAutoCommit(false);
+            assertFalse(effect(c, reader, "tenant-a", "project-a", ALICE_TASK, id),
+                "Java entry point correctly denies the signed read-only principal");
+            try (PreparedStatement bypass = c.prepareStatement(
+                    "SELECT b62_record_ticket_effect(?,?,?,?,?,?,?,?,?,?,?,?)")) {
+                bypass.setString(1, lease.endpoint());
+                bypass.setLong(2, lease.term());
+                bypass.setObject(3, ALICE_TASK);
+                bypass.setLong(4, signed.signedIdentityUid());
+                bypass.setString(5, "tenant-a");
+                bypass.setString(6, "project-a");
+                bypass.setString(7, signed.verifiedIssuer());
+                bypass.setString(8, signed.verifiedKeyId());
+                bypass.setString(9, signed.signedTokenId());
+                bypass.setLong(10, signed.signedIssuedAt().getEpochSecond());
+                bypass.setObject(11, id);
+                bypass.setString(12, workload.subject());
+                try (var row = bypass.executeQuery()) {
+                    assertTrue(row.next());
+                    assertTrue(row.getBoolean(1),
+                        "NO_GO: improperly issued ticket bypasses Java-only write scope");
+                }
+            }
+            c.commit();
+        }
+        assertEquals("CONSUMED", state(id));
+        assertEquals(1L, countEffects());
+    }
+
     @AfterAll
     static void eraseDisposableObjects() throws Exception {
         if (schema == null) return;
