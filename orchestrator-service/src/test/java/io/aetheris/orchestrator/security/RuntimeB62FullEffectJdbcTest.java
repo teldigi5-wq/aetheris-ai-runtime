@@ -175,6 +175,14 @@ class RuntimeB62FullEffectJdbcTest {
             s.execute("CREATE TABLE signer_authorizations(issuer text,kid text,state text NOT NULL CHECK(state IN ('ACTIVE','REVOKED')),lock_guard smallint NOT NULL DEFAULT 0 CHECK(lock_guard=0),PRIMARY KEY(issuer,kid))");
             s.execute("CREATE TABLE principal_epochs(principal_id bigint PRIMARY KEY,reject_issued_at_or_before_epoch bigint NOT NULL CHECK(reject_issued_at_or_before_epoch>=0),lock_guard smallint NOT NULL DEFAULT 0 CHECK(lock_guard=0))");
             s.execute("CREATE TABLE synthetic_guarded_task_effects(effect_id uuid PRIMARY KEY,task_id uuid NOT NULL,fence_term bigint NOT NULL,workload_subject text NOT NULL)");
+            // CI-only monotonic write policy. Deliberately does not
+            // prevent a privileged PostgreSQL owner disabling triggers.
+            s.execute("CREATE FUNCTION b62_deny_signer_reopen() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $ BEGIN IF OLD.state='REVOKED' AND NEW.state<>'REVOKED' THEN RAISE EXCEPTION 'B62_SIGNER_REOPEN_FORBIDDEN' USING ERRCODE='23514'; END IF; RETURN NEW; END $");
+            s.execute("CREATE TRIGGER b62_signer_monotonic BEFORE UPDATE OF state ON signer_authorizations FOR EACH ROW EXECUTE FUNCTION b62_deny_signer_reopen()");
+            s.execute("CREATE FUNCTION b62_deny_epoch_rollback() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $ BEGIN IF NEW.reject_issued_at_or_before_epoch<OLD.reject_issued_at_or_before_epoch THEN RAISE EXCEPTION 'B62_EPOCH_ROLLBACK_FORBIDDEN' USING ERRCODE='23514'; END IF; RETURN NEW; END $");
+            s.execute("CREATE TRIGGER b62_epoch_monotonic BEFORE UPDATE OF reject_issued_at_or_before_epoch ON principal_epochs FOR EACH ROW EXECUTE FUNCTION b62_deny_epoch_rollback()");
+            s.execute("REVOKE ALL ON FUNCTION b62_deny_signer_reopen() FROM PUBLIC");
+            s.execute("REVOKE ALL ON FUNCTION b62_deny_epoch_rollback() FROM PUBLIC");
             s.execute("REVOKE CREATE ON SCHEMA " + schema + " FROM PUBLIC");
             s.execute("GRANT USAGE ON SCHEMA " + schema + " TO " + workerName + "," + revokerName);
             s.execute("GRANT SELECT ON ALL TABLES IN SCHEMA " + schema + " TO " + workerName);
@@ -279,34 +287,80 @@ class RuntimeB62FullEffectJdbcTest {
     }
 
     @Test
-    void signedRevocationAndLocalFenceDenialAreEnforcedByActualSql() throws Exception {
-        try (Connection admin = owner(); Statement s = admin.createStatement()) {
-            s.execute("UPDATE signer_authorizations SET state='REVOKED' WHERE kid='effect-identity-key'");
+    void committedSignerRevocationDeniesActualSql() throws Exception {
+        try (Connection admin = owner(); Statement sql = admin.createStatement()) {
+            assertEquals(1, sql.executeUpdate(
+                "UPDATE signer_authorizations SET state='REVOKED' WHERE kid='effect-identity-key'"));
         }
-        try (Connection c = worker()) {
-            c.setAutoCommit(false);
-            assertFalse(effect(c, alice, "tenant-a", "project-a", ALICE_TASK, UUID.randomUUID()));
-            c.rollback();
+        try (Connection executing = worker()) {
+            executing.setAutoCommit(false);
+            assertFalse(effect(executing, alice, "tenant-a", "project-a", ALICE_TASK, UUID.randomUUID()));
+            executing.rollback();
         }
-        try (Connection admin = owner(); Statement s = admin.createStatement()) {
-            s.execute("UPDATE signer_authorizations SET state='ACTIVE'");
-            s.execute("UPDATE principal_epochs SET reject_issued_at_or_before_epoch=9999999999 WHERE principal_id=42");
+        assertEquals(0, countEffects());
+    }
+
+    @Test
+    void committedPrincipalEpochCutoffDeniesActualSql() throws Exception {
+        try (Connection admin = owner(); Statement sql = admin.createStatement()) {
+            assertEquals(1, sql.executeUpdate(
+                "UPDATE principal_epochs SET reject_issued_at_or_before_epoch=9999999999 WHERE principal_id=42"));
         }
-        try (Connection c = worker()) {
-            c.setAutoCommit(false);
-            assertFalse(effect(c, alice, "tenant-a", "project-a", ALICE_TASK, UUID.randomUUID()));
-            c.rollback();
+        try (Connection executing = worker()) {
+            executing.setAutoCommit(false);
+            assertFalse(effect(executing, alice, "tenant-a", "project-a", ALICE_TASK, UUID.randomUUID()));
+            assertTrue(effect(executing, bob, "tenant-b", "project-b", BOB_TASK, UUID.randomUUID()));
+            executing.rollback();
         }
-        try (Connection admin = owner(); Statement s = admin.createStatement()) {
-            s.execute("UPDATE principal_epochs SET reject_issued_at_or_before_epoch=0 WHERE principal_id=42");
-            s.execute("UPDATE b62_local_resource_fence SET state='CLOSED'");
+        assertEquals(0, countEffects());
+    }
+
+    @Test
+    void localFenceClosureDeniesActualSql() throws Exception {
+        try (Connection admin = owner(); Statement sql = admin.createStatement()) {
+            sql.execute("UPDATE b62_local_resource_fence SET state='CLOSED'");
         }
-        try (Connection c = worker()) {
-            c.setAutoCommit(false);
-            assertFalse(effect(c, alice, "tenant-a", "project-a", ALICE_TASK, UUID.randomUUID()));
-            c.rollback();
+        try (Connection executing = worker()) {
+            executing.setAutoCommit(false);
+            assertFalse(effect(executing, alice, "tenant-a", "project-a", ALICE_TASK, UUID.randomUUID()));
+            executing.rollback();
         }
-        assertEquals(0L, countEffects());
+        assertEquals(0, countEffects());
+    }
+
+    @Test
+    void restrictedRevokerCannotRestoreRevokedSigner() throws Exception {
+        try (Connection revoking = revoker(); Statement sql = revoking.createStatement()) {
+            assertEquals(1, sql.executeUpdate(
+                "UPDATE signer_authorizations SET state='REVOKED' WHERE kid='effect-identity-key'"));
+            SQLException denied = assertThrows(SQLException.class, () ->
+                sql.executeUpdate(
+                    "UPDATE signer_authorizations SET state='ACTIVE' WHERE kid='effect-identity-key'"));
+            assertEquals("23514", denied.getSQLState());
+        }
+        try (Connection admin = owner(); Statement sql = admin.createStatement();
+             var row = sql.executeQuery("SELECT state FROM signer_authorizations WHERE kid='effect-identity-key'")) {
+            assertTrue(row.next());
+            assertEquals("REVOKED", row.getString(1));
+        }
+    }
+
+    @Test
+    void restrictedRevokerCannotLowerPrincipalEpochCutoff() throws Exception {
+        try (Connection revoking = revoker(); Statement sql = revoking.createStatement()) {
+            assertEquals(1, sql.executeUpdate(
+                "UPDATE principal_epochs SET reject_issued_at_or_before_epoch=9999999999 WHERE principal_id=42"));
+            SQLException denied = assertThrows(SQLException.class, () ->
+                sql.executeUpdate(
+                    "UPDATE principal_epochs SET reject_issued_at_or_before_epoch=0 WHERE principal_id=42"));
+            assertEquals("23514", denied.getSQLState());
+        }
+        try (Connection admin = owner(); Statement sql = admin.createStatement();
+             var row = sql.executeQuery(
+                 "SELECT reject_issued_at_or_before_epoch FROM principal_epochs WHERE principal_id=42")) {
+            assertTrue(row.next());
+            assertEquals(9999999999L, row.getLong(1));
+        }
     }
 
     @Test

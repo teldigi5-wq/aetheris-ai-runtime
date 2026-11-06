@@ -426,7 +426,7 @@ jobs:
               "TEST-io.aetheris.orchestrator.security.RuntimeB62FullEffectJdbcTest.xml"))
           assert len(reports)==1, "Required REAL Java JDBC test not executed"
           root=ET.parse(reports[0]).getroot()
-          assert int(root.get("tests", "0")) >= 9
+          assert int(root.get("tests", "0")) >= 13
           assert int(root.get("failures", "1")) == 0
           assert int(root.get("errors", "1")) == 0
           assert int(root.get("skipped", "1")) == 0
