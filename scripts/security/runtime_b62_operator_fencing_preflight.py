@@ -6,8 +6,10 @@ An unsigned manifest is a CLAIM, not independent verification.
 """
 import argparse
 import json
+import os
 from pathlib import Path
 import re
+import stat
 import sys
 
 SCHEMA = "aetheris.s-b62-a.operator-inventory.v1"
@@ -42,13 +44,36 @@ def _fields(value, expected, where):
         raise InventoryError("unexpected or missing fields at " + where)
 
 
+MAX_MANIFEST_BYTES = 16_384
+
+
 def parse_manifest(path):
-    if not path.is_file() or path.is_symlink():
+    """Read only the same bounded regular file that passed the open checks.
+
+    O_NOFOLLOW/O_NONBLOCK protect POSIX file swaps; fstat plus descriptor-
+    bounded reads provide defense in depth on other supported systems.
+    This never turns an operator self-report into release evidence.
+    """
+    metadata = path.lstat()  # Do not follow a symlink during precheck.
+    if not stat.S_ISREG(metadata.st_mode):
         raise InventoryError("manifest must be a regular file, not a symlink")
-    if path.stat().st_size > 16_384:
+    if metadata.st_size > MAX_MANIFEST_BYTES:
+        raise InventoryError("manifest exceeds 16 KiB")
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    with os.fdopen(os.open(path, flags), "rb") as stream:
+        opened = os.fstat(stream.fileno())
+        if (not stat.S_ISREG(opened.st_mode)
+                or (opened.st_dev, opened.st_ino) !=
+                   (metadata.st_dev, metadata.st_ino)):
+            raise InventoryError("manifest changed during open or is not regular")
+        if opened.st_size > MAX_MANIFEST_BYTES:
+            raise InventoryError("manifest exceeds 16 KiB")
+        raw = stream.read(MAX_MANIFEST_BYTES + 1)
+    if len(raw) > MAX_MANIFEST_BYTES:
         raise InventoryError("manifest exceeds 16 KiB")
     try:
-        return json.loads(path.read_text(encoding="utf-8"),
+        return json.loads(raw.decode("utf-8"),
                           object_pairs_hook=_strict_object,
                           parse_constant=lambda _: (_ for _ in ()).throw(
                               InventoryError("non-JSON numeric constant")))

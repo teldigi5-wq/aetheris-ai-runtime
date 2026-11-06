@@ -1,6 +1,7 @@
 """Offline fail-closed adversarial tests for S-B62-A inventory structure."""
 import importlib.util
 import json
+import os
 import contextlib
 import io
 from unittest.mock import patch
@@ -127,6 +128,49 @@ class S_B62_A_Preflight(unittest.TestCase):
             link.symlink_to(src)
             with self.assertRaises(m.InventoryError):
                 m.parse_manifest(link)
+
+    def test_regular_file_swap_between_check_and_open_is_denied(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "inventory.json"
+            replacement = Path(tmp) / "replacement.json"
+            src.write_text(json.dumps(template()), encoding="utf-8")
+            replacement.write_text(json.dumps(template()), encoding="utf-8")
+            original_open = os.open
+
+            def swapped_open(path, flags):
+                os.replace(replacement, src)
+                return original_open(path, flags)
+
+            with patch.object(m.os, "open", side_effect=swapped_open):
+                with self.assertRaisesRegex(m.InventoryError, "manifest changed"):
+                    m.parse_manifest(src)
+
+    @unittest.skipUnless(os.name == "posix" and hasattr(os, "O_NOFOLLOW"),
+                         "POSIX no-follow flag required")
+    def test_symlink_swap_after_check_is_denied(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "inventory.json"
+            target = Path(tmp) / "target.json"
+            src.write_text(json.dumps(template()), encoding="utf-8")
+            target.write_text(json.dumps(template()), encoding="utf-8")
+            original_open = os.open
+
+            def swapped_open(path, flags):
+                src.unlink()
+                src.symlink_to(target)
+                return original_open(path, flags)
+
+            with patch.object(m.os, "open", side_effect=swapped_open):
+                with self.assertRaises((m.InventoryError, OSError)):
+                    m.parse_manifest(src)
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "requires POSIX FIFO")
+    def test_special_fifo_manifest_is_denied_without_open(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "inventory.json"
+            os.mkfifo(src)
+            with self.assertRaises(m.InventoryError):
+                m.parse_manifest(src)
 
     def test_valid_json_local_read_does_not_echo_values(self):
         with tempfile.TemporaryDirectory() as tmp:
