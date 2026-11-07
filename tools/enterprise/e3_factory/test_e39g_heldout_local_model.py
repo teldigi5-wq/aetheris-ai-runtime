@@ -28,6 +28,7 @@ class MockOllama:
             body = json.loads(request.data)
             assert body["model"] == MODEL
             assert body["stream"] is False
+            assert body["format"] == "json"
             assert "reference.html" not in body["prompt"]
             assert "referenceSha256" not in body["prompt"]
             value = {"model": MODEL, "response": json.dumps({"operation":"abstain"}),

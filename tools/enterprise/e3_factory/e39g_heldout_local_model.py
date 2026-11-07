@@ -141,6 +141,7 @@ def infer(bundle: Path, output: Path, model: str, digest: str, opener=None):
     for row in cases:
         result = api(client, "POST", "/api/generate", {
             "model": model, "prompt": prompt(row), "stream": False,
+            "format": "json",
             "keep_alive": "0s", "options": {"temperature": 0, "num_predict": 256}
         })
         if (type(result) is not dict or result.get("model") != model

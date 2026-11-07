@@ -62,3 +62,9 @@ licensed human curation, private solution secrecy, owner-reviewed
 site-specific typed patch policies and real two-viewport browser scoring.
 The historical 1/2 public B4L score remains unchanged. Stage45 NO_GO,
 S-B62-A HOLD, XERJ HOLD; no protected-main merge or deployment.
+
+## 7 November 2026 — single-variable JSON generation treatment
+
+The first exact-head real-model public run [#42327626109](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42327626109) **PASSED 5/5 jobs**: four actual Qwen2.5-Coder 7B responses with full digest `dae161e27b0e90dd1856c8bb3209201fd6736d8eb66298e75ed87571486f4364` from a no-checkout, bounded, loopback model runner, followed by independent static evaluation. **All four were SCHEMA_REJECTED; 0/4 quote-eligible, 0 applied and 0 browser verified.** The raw model replies were surrounded by Markdown fences and two used JSON arrays, despite the six-string-field instruction. A focused inspection also found `top:0` in the focus answer (previous Chromium evidence shows clipping) and the wrong animation target in the reduced-motion answer. No reformatting/stripping of raw model receipts is permitted.
+
+The next pre-registered comparison changes only the Ollama `/api/generate` request field **`format: "json"`** while preserving the four pinned source files, prompt text, model name and full digest, temperature, token limit, B4H static admission, no-checkout model role and zero applied patches. Mocked model-call tests now require this JSON-format flag. Do not treat a JSON-eligible quote as a validated CSS/HTML repair: independent typed policies and real Chromium remain mandatory. There is no independently private held-out corpus. Stage45 NO_GO / XERJ HOLD.
