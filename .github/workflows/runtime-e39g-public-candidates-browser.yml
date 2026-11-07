@@ -1,0 +1,36 @@
+name: E3.9G Qwen public candidates independent browser after-state
+on:
+  pull_request:
+    branches: [test/e39g12b4n-safe-focus-alternatives-20261025]
+    paths:
+      - 'tools/enterprise/e3_factory/e39g_public_model_candidate_browser.mjs'
+      - '.github/workflows/runtime-e39g-public-candidates-browser.yml'
+permissions:
+  contents: read
+jobs:
+  source-pinned-chromium-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with: {node-version: '22'}
+      - name: Verify exact locked public-source browser reviewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tools/enterprise/e3_factory/e39g_public_model_candidate_browser.mjs
+          test "$(grep -Fc 'heldOut:false' tools/enterprise/e3_factory/e39g_public_model_candidate_browser.mjs)" -eq 1
+          test "$(grep -Fc "modelCallsPerformed:0" tools/enterprise/e3_factory/e39g_public_model_candidate_browser.mjs)" -eq 1
+      - name: Install pinned Playwright Chromium for trusted source-only review
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix tools/enterprise/e3_factory --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e3_factory/node_modules/.bin/playwright install --with-deps chromium
+      - name: Measure one exact Qwen public edit per site, mobile and desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/enterprise/e3_factory/e39g_public_model_candidate_browser.mjs
