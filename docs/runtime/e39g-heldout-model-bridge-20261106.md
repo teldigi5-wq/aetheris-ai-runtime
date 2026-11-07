@@ -82,3 +82,113 @@ This dated addendum updates the evidence trail; it does not overwrite the earlie
 **Unfinished existing E3.9G acceptance, in order:** obtain independently human-curated *licensed* private defects spanning distinct sites with proof of defects before repair; keep solutions/expected patches, private salts and evaluator sources inaccessible to the model worker; run a digest-pinned genuine model with bounded OS/network rights and one raw recorded attempt per case; bind each receipt to exact broken-source and model digests; independently admit only narrowly typed patches (never arbitrary scripts/shell); verify before/after behavior at mobile and desktop Chromium including accessibility, reduced-motion and injection negatives; count rejections/abstentions/failures and retain immutable artifacts for an external reviewer. Neither these public cases nor a newly invented local fixture can substitute for independently hidden challenges.
 
 **Decision:** E3.9G HELD-OUT ACCEPTANCE NOT MET. No E4/E6 promotion from these results; S-B62-A physical fencing BLOCKED; Stage45 NO_GO; XERJ HOLD; Runtime #23 and Platform #251 remain open. This is documentation-only reconciliation with no model-policy weakening, new model claim, merge, deployment, or XERJ submission.
+
+
+## 7 November 2026 — latest exact-head CI closure and independent-curator handoff
+
+**This section supersedes the older, time-local claim above that the browser
+reviewer does not bind the frozen model receipt.** Do not rewrite the older
+run's evidence or treat its independent/public-only scope as changed.
+
+The exact-head draft [PR #283](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/283)
+at \`54b55830fe1a317ed85aec622c1b465fabdcd21e\` has now passed
+**both** required workflows:
+
+- [Full model bridge #42371847547](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42371847547):
+  **SUCCESS, 5/5 jobs**. Linux and Windows contract tests, public source
+  packaging, four actual resource-bounded Qwen2.5-Coder 7B model calls under
+  the pinned digest, and separate static intake all passed. Static receipt
+  classification is **3 \`QUOTE_MATCH_REVIEW_REQUIRED\`, 1
+  \`LITERAL_BOUNDARY_REJECTED\`, 0 browser repairs credited**. This is
+  genuine inference but on *already known public developer-authored* cases.
+- [Receipt-bound Chromium #42371847549](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42371847549):
+  **SUCCESS, 1/1 job**, including **6/6 negative/provenance unit tests**.
+  The separate reviewer validates exact frozen raw public model-receipt bytes
+  (SHA-256 \`a8a2dc8c8aaee525551b7dabda645b1ac3654144ba3d307ec4d4e846612eec54\`)
+  from [historical public model run #42329086279](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42329086279)
+  before applying the two frozen, narrowly reviewed edits. Chromium at
+  390px and 1280px demonstrated the *broken* CityLine injection behavior
+  and the *fixed* text-only behavior; StudyNest's original mobile overflow
+  and fixed responsive layout passed. No network requests or page errors.
+  The other two public proposals remain rejected. The browser job made
+  **zero new model calls** and is **not evidence that the latest model
+  bridge receipts were the browser-test inputs**.
+
+The first preview browser run
+[#42371654067](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42371654067)
+**FAILED** due to an unreliable SVG onload probe and same-document script
+redeclaration. That failure is not erased: the final commit uses a
+network-free SVG animation callback and fresh document navigation. Only
+[#42371847549](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42371847549)
+is the accepted browser-test evidence at the latest exact head.
+
+### Independent human curator: action needed outside this repository
+
+Use the already-reviewed
+[B4G curation protocol](e39g12b4g-independent-curation-protocol-20261025.md)
+and [B4H evaluator admission](e39g12b4h-private-evaluator-admission-20261025.md).
+**No independently human-curated private corpus, external reviewer acceptance,
+or genuine blind score is presently evidenced.** Do not fabricate the missing
+cases, rename the four public tests, or upload reference files, salts, private
+receipts, identities or customer website content.
+
+Before any model inference on private challenges, a genuinely separate human
+curator/evaluator should:
+
+1. **Document authorization, originality and provenance offline.** Obtain
+   unambiguous usage/reproduction rights for **4–12 previously unseen**
+   disposable website defects spanning **at least 2 independent websites**.
+   Keep the URL/source-license evidence, human reviewer decision, authored
+   dates and pre-registration timestamp in *private* custody. The existing
+   \`sourceLicense\` manifest field is only a **claim**, not a verified license.
+   Do not use real users, live customer accounts, third-party cookies,
+   unknown copyrighted code, credentials or private data.
+2. **Pre-register objective negative and reference tests before inference.**
+   Independently observe each broken source's defect with a disposable,
+   offline Chromium reproduction at **390px and 1280px where applicable**,
+   including keyboard focus geometry, reduced motion, layout and injection
+   negatives appropriate to the domain. Approve independently repaired
+   reference behavior and its acceptance tests. Fix/freeze prompts, sites,
+   cases, test assertions, expected policy and scoring before making model
+   calls; timestamp/hashes alone do not prove human independence.
+3. **Enforce true custody separation.** Keep
+   \`manifest.json\`, \`cases/<id>/broken.html\`,
+   \`cases/<id>/reference.html\` and B4G's private evaluator seal in an
+   isolated curator-owned directory **outside Git and the model worker's
+   filesystem and identity**. Stage and verify the *broken-only* ZIP using
+   B4G. Do not let \`reference.html\`, reference digests, secret salt, grader
+   code, or hidden scoring rules cross into the model worker. The current
+   B4G/B4H scripts do **not** prove OS isolation or independent authorship.
+4. **Run one frozen, bounded real model attempt per case.** The digest-pinned
+   local Ollama worker must receive only the B4G broken-only ZIP and required
+   minimal runner. Independently enforce OS/network egress restrictions,
+   no checkout, no privileged API, no credentials, resource budgets, and
+   full digest verification. Preserve every raw answer, abstention, timeout,
+   malformed result, attempted source digest and model/cost/time record.
+   Native Windows model receipt handling is refused by the current runner:
+   use an independently checked Linux private filesystem/isolation boundary.
+5. **Evaluate only in the separately trusted evaluator.** Verify the private
+   seal with B4G and classify model receipts through B4H. Review *new*
+   site/fault-specific typed patch policies and negative/malicious-edit
+   tests **before** authorizing any disposable patch application. Quote
+   matching is NOT semantic acceptance. Execute only the reviewed fixed
+   one-literal operation in a no-network, no-new-privileges test site;
+   never shell/JS/model tool requests. Independently confirm source-to-after
+   hashes and actual mobile/desktop Chromium behavior, accessibility,
+   security and regression assertions, then report **all** attempts.
+6. **Obtain external sign-off on the private evidence, not just checksums.**
+   The trusted report must distinguish \`attempted\`, \`abstained\`,
+   \`schema denied\`, \`quote eligible\`, \`typed-policy admitted\`,
+   \`browser verified\` and \`regressed\`. Count every case in the
+   denominator; keep origin/timestamps, immutable raw artifacts and all
+   failures. Independent human reviewers must verify custody, license
+   scope, before behavior, reference correctness and case secrecy.
+
+**Exact existing gate remains:** E3.9G **HELD-OUT ACCEPTANCE NOT MET**.
+The public browser result is **2/4 known-public case edits** (an older
+separate model receipt), not new hidden accuracy. The latest full-bridge
+static result is **3 review-required / 1 rejected / 0 browser-credited**.
+Do not combine those two runs as if they scored the same live inference.
+Runtime security #23 OPEN, Platform #251 OPEN, S-B62-A physical fencing
+BLOCKED, Stage 45 NO_GO and XERJ HOLD. No protected-main merge, deployment,
+owner API authorization, stage renumbering or source contribution.
