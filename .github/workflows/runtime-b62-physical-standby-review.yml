@@ -2,7 +2,7 @@ name: Runtime B62 real physical-standby stale-read denial (review only)
 # Tests only; no production service, endpoint or real customer database.
 on:
   push:
-    branches: [security/runtime-quarantine-pathinfo-boundary-20261101]
+    branches: [security/runtime-quarantine-pathinfo-boundary-20261101, test/b62-replay-forward-port-20261105]
 permissions:
   contents: read
 jobs:
@@ -168,6 +168,78 @@ jobs:
           assert "SELECT public.b62_local_try_effect(5,'post-cutover-direct-sql-bypass')" in script
           assert "WHERE request_id='post-cutover-direct-sql-bypass'" in script
           assert 'AETHERIS_B62_CUTOVER_DIRECT_SQL_BYPASS_OUTAGE_NO_GO_PASS' in script
+          # Review-forward-port module checks; preserve baseline guards.
+          assert 'source scripts/security/runtime_b62_pg16_revocation_continuity_review.sh' in script
+          continuity = Path('scripts/security/runtime_b62_pg16_revocation_continuity_review.sh').read_text()
+          for marker in (
+              'AETHERIS_B62_PG16_SEPARATE_RESOURCE_GAPLESS_REPLAY_GUARD_PASS',
+              'AETHERIS_B62_PG16_SOURCE_ADVANCE_BEFORE_RESOURCE_BARRIER_UNSAFE_ALLOW_NO_GO_PASS',
+              'AETHERIS_B62_PG16_SEPARATE_DB_WATERMARK_BARRIER_REPLAY_NO_GO_PASS',
+              'AETHERIS_B62_PG16_REPLAY_SOURCE_UID_PROVENANCE_MISSING_NO_GO_PASS',
+          ):
+              assert marker in continuity
+          provenance=Path('scripts/security/runtime_b62_pg16_provenance_authenticity_review.sh').read_text()
+          for marker in (
+              'AETHERIS_B62_PG16_PROVENANCE_MISMATCH_FORGED_OUT_OF_ORDER_DENIED_PASS',
+              'AETHERIS_B62_PG16_AUTHENTICATED_EVENT_REPLAY_TEST_ONLY_PASS',
+              'REVOKE ALL ON public.b62_provenance_verify_key',
+              'session_user',
+          ):
+              assert marker in provenance
+          assert 'source scripts/security/runtime_b62_pg16_provenance_authenticity_review.sh' in script
+          inflight=Path('scripts/security/runtime_b62_pg16_inflight_commit_revocation_review.sh').read_text()
+          assert 'AETHERIS_B62_PG16_INFLIGHT_EFFECT_COMMITS_AFTER_SOURCE_REVOCATION_NO_GO_PASS' in inflight
+          assert 'pg_stat_activity' in inflight and 'wait_event=\'PgSleep\'' in inflight
+          assert 'source scripts/security/runtime_b62_pg16_inflight_commit_revocation_review.sh' in script
+          barrier=Path('scripts/security/runtime_b62_pg16_reachable_prepublication_barrier_review.sh').read_text()
+          for mark in (
+              'AETHERIS_B62_PG16_RESOURCE_BARRIER_DRAINS_INFLIGHT_TRANSACTION_PASS',
+              'AETHERIS_B62_PG16_REACHABLE_FENCE_BEFORE_SOURCE_PUBLISH_TEST_ONLY_PASS',
+              'wait_event_type=\'Lock\'',
+          ):
+              assert mark in barrier
+          assert 'source scripts/security/runtime_b62_pg16_reachable_prepublication_barrier_review.sh' in script
+          crash=Path('scripts/security/runtime_b62_pg16_source_crash_recovery_review.sh').read_text()
+          for token in (
+              'AETHERIS_B62_PG16_SOURCE_OUTAGE_AFTER_BARRIER_FAIL_CLOSED_PASS',
+              'AETHERIS_B62_PG16_RESTART_REPLAY_BEFORE_READMISSION_TEST_ONLY_PASS',
+              'docker stop "$authority"',
+              'docker start "$authority"',
+          ):
+              assert token in crash
+          assert 'source scripts/security/runtime_b62_pg16_source_crash_recovery_review.sh' in script
+          prebarrier=Path('scripts/security/runtime_b62_pg16_prebarrier_coordinator_loss_review.sh').read_text()
+          for mark in (
+              'AETHERIS_B62_PG16_COORDINATOR_LOST_BEFORE_RESOURCE_BARRIER_UNSAFE_ALLOW_NO_GO_PASS',
+              'AETHERIS_B62_PG16_LATE_DENY_BARRIER_CANNOT_REVERSE_STALE_EFFECT_PASS',
+              'AETHERIS_B62_PG16_PREBARRIER_PARTITION_RECOVERY_WITH_IRREVERSIBLE_EFFECT_NO_GO_PASS',
+              'docker stop "$authority"',
+          ):
+              assert mark in prebarrier
+          assert 'source scripts/security/runtime_b62_pg16_prebarrier_coordinator_loss_review.sh' in script
+          deadline=Path('scripts/security/runtime_b62_pg16_local_permit_expiry_review.sh').read_text()
+          for marker in (
+              'AETHERIS_B62_PG16_SHORT_LOCAL_PERMIT_STILL_ALLOWS_UNKNOWN_SOURCE_REVOKE_NO_GO_PASS',
+              'AETHERIS_B62_PG16_INFLIGHT_EFFECT_COMMITS_AFTER_LOCAL_PERMIT_EXPIRY_NO_GO_PASS',
+              'AETHERIS_B62_PG16_EXPIRED_LOCAL_PERMIT_DENIES_NEW_EFFECTS_ON_OUTAGE_PASS',
+              'AETHERIS_B62_PG16_PERMIT_RENEWAL_REQUIRES_REPLAY_BUT_NOT_REAL_AUTHORITY_NO_GO_PASS',
+              'REVOKE EXECUTE ON FUNCTION public.b62_try_guarded_revocation_effect',
+              'GRANT UPDATE(lock_guard)',
+          ):
+              assert marker in deadline
+          assert 'source scripts/security/runtime_b62_pg16_local_permit_expiry_review.sh' in script
+          deferred=Path('scripts/security/runtime_b62_pg16_deferred_commit_guard_review.sh').read_text()
+          for marker in (
+              'AETHERIS_B62_PG16_DEFERRED_COMMIT_EXPIRED_PERMIT_ROLLS_BACK_EFFECT_PASS',
+              'AETHERIS_B62_PG16_DEFERRED_COMMIT_FRESH_PERMIT_PRESERVES_DENIAL_PASS',
+              'AETHERIS_B62_PG16_DEFERRED_COMMIT_CANNOT_DETECT_UNREPLAYED_SOURCE_NO_GO_PASS',
+              'AETHERIS_B62_PG16_DEFERRED_COMMIT_REPLAY_RECOVERY_ONLY_TEST_PASS',
+              'DEFERRABLE INITIALLY DEFERRED',
+              'B62_COMMIT_GUARD_DENY',
+              'REVOKE ALL ON FUNCTION public.b62_check_effect_at_deferred_commit()',
+          ):
+              assert marker in deferred
+          assert 'source scripts/security/runtime_b62_pg16_deferred_commit_guard_review.sh' in script
           # The protected SQL function, not an optional client gate, must
           # check a resource-owned write state under the same transaction.
           assert "g.state='OPEN'" in script
@@ -264,6 +336,14 @@ jobs:
           assert "GRANT DELETE ON public.b62_independent_ack_consumed" not in script
           PY
           bash -n scripts/security/runtime_b62_physical_standby_review.sh
+          bash -n scripts/security/runtime_b62_pg16_revocation_continuity_review.sh
+          bash -n scripts/security/runtime_b62_pg16_provenance_authenticity_review.sh
+          bash -n scripts/security/runtime_b62_pg16_inflight_commit_revocation_review.sh
+          bash -n scripts/security/runtime_b62_pg16_reachable_prepublication_barrier_review.sh
+          bash -n scripts/security/runtime_b62_pg16_source_crash_recovery_review.sh
+          bash -n scripts/security/runtime_b62_pg16_prebarrier_coordinator_loss_review.sh
+          bash -n scripts/security/runtime_b62_pg16_local_permit_expiry_review.sh
+          bash -n scripts/security/runtime_b62_pg16_deferred_commit_guard_review.sh
           echo AETHERIS_B62_STANDBY_SOURCE_DENY_ONLY_GATES_PASS
       - name: Real physical standby, stale WAL, deliberate isolated dual-primary and old-primary fencing
         shell: bash
