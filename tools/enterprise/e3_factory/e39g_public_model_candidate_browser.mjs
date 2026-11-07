@@ -59,8 +59,8 @@ try{
     await page.goto('about:blank');
     let beforeDefectObserved = null;
     if(c.id==='cityline-public'){
-     // Self-contained script-injection proof: SVG onload needs no network.
-     const attack='<svg onload="window.__injected=true"></svg>';
+     // Self-contained script-injection proof: SVG SMIL onbegin needs no network.
+     const attack='<svg><animate onbegin="window.__injected=true" attributeName="x" dur="1s"/></svg>';
      const enter=value=>{const input=document.querySelector('#station');
       input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));};
      // First prove the pinned BROKEN page executes untrusted markup.
@@ -73,8 +73,9 @@ try{
      assert.deepEqual(before,{svg:true,injected:true},
       'known-public CityLine injection defect must be present before repair');
      beforeDefectObserved=true;
-     // Reload the patched source; reset the probe because setContent may
-     // retain window properties across document writes.
+     // Navigate to an entirely fresh document: setContent alone retains
+     // earlier const declarations and can prevent fixed-page scripts running.
+     await page.goto('about:blank');
      await page.setContent(fixed,{waitUntil:'load'});
      await page.evaluate(value=>{window.__injected=false;
       const input=document.querySelector('#station');
