@@ -32,7 +32,12 @@ def path_check(path: Path, output=False):
     return resolved
 
 def read_bundle(path: Path):
-    raw = path_check(path).read_bytes()
+    # The path check enforces bundle scope; the bytes must be read from the
+    # already-hardened bounded descriptor, not reopened by a pathname. A
+    # symlink swap after path_check must never redirect this read to a
+    # private reference or another file.
+    path_check(path)
+    raw = b4g.checked(path, b4g.MAX_TOTAL)
     try:
         with ZipFile(io.BytesIO(raw)) as archive:
             parts = archive.infolist()

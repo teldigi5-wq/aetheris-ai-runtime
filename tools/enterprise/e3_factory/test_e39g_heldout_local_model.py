@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import e39g12b4g_curator_boundary as b4g
 import e39g12b4h_proposal_admission as b4h
 import e39g_heldout_local_model as bridge
@@ -98,6 +99,35 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"INCOMPLETE"):
             bridge.infer(self.bundle,self.out,MODEL,DIGEST,MockOllama(failure=True))
         self.assertFalse(self.out.exists())
+
+    def test_bundle_path_swapped_after_scope_check_is_denied(self):
+        # A malicious local actor replaces the ZIP after the scope/size
+        # preflight, before the actual byte read. No private bytes may escape.
+        with tempfile.TemporaryDirectory() as d:
+            private = Path(d) / "private-reference.html"
+            private.write_bytes(b"PRIVATE_REFERENCE_MUST_STAY_SECRET")
+            saved_bundle = Path(d) / "original-model.zip"
+            real_check = bridge.path_check
+            swapped = [False]
+
+            def swap_after_check(path, output=False):
+                checked_path = real_check(path, output=output)
+                if Path(path) == self.bundle and not swapped[0]:
+                    swapped[0] = True
+                    self.bundle.rename(saved_bundle)
+                    try:
+                        self.bundle.symlink_to(private)
+                    except (OSError, NotImplementedError):
+                        self.bundle.unlink(missing_ok=True)
+                        self.bundle.write_bytes(saved_bundle.read_bytes())
+                        self.skipTest("Host does not permit symlinks")
+                return checked_path
+
+            with patch.object(bridge, "path_check", side_effect=swap_after_check):
+                with self.assertRaisesRegex(ValueError, "B4G_UNSAFE_OR_MISSING_FILE"):
+                    bridge.read_bundle(self.bundle)
+            self.assertTrue(swapped[0])
+            self.assertEqual(private.read_bytes(), b"PRIVATE_REFERENCE_MUST_STAY_SECRET")
 
     def test_reference_field_leakage_denied(self):
         bad=packet()
