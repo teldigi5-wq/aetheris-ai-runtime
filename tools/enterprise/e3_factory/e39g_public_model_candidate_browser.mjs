@@ -8,6 +8,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright';
+import {verifyFrozenPublicModelReceipt} from './e39g_public_candidate_receipt.mjs';
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const sha=v=>createHash('sha256').update(v).digest('hex');
@@ -28,6 +29,13 @@ const report={evidenceClass:'E39G_PUBLIC_QWEN7B_TYPED_AND_REAL_CHROMIUM_TWO_REPA
  independentCuratorVerified:false,heldOut:false,ownerApproval:false,
  productionAuthorized:false,considered:4,declined,admitted:[],verified:[],observations:[]};
 assert.equal(candidates.length+declined.length,4);
+// Verify all four original public model attempts and exact untrusted receipt bytes
+// before loading Chromium or applying either narrowly pre-reviewed literal edit.
+const receiptEvidence=verifyFrozenPublicModelReceipt(
+ await fs.readFile(path.join(here,'fixtures/e39g_public_model_receipt_42329086279.json')),
+ candidates);
+assert.equal(receiptEvidence.modelRunId,report.modelRun);
+report.publicModelReceiptLink=receiptEvidence; // still NOT held-out or signed model provenance
 const browser=await chromium.launch({headless:true});
 try{
  for(const c of candidates){
