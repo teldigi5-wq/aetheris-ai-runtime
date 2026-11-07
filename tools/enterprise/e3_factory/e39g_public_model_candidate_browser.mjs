@@ -57,10 +57,27 @@ try{
    page.on('pageerror',e=>errors.push(e.message));
    try{
     await page.goto('about:blank');
+    let beforeDefectObserved = null;
     if(c.id==='cityline-public'){
-     const attack='<img src=x onerror="window.__injected=true">';
+     // Self-contained script-injection proof: SVG onload needs no network.
+     const attack='<svg onload="window.__injected=true"></svg>';
+     const enter=value=>{const input=document.querySelector('#station');
+      input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));};
+     // First prove the pinned BROKEN page executes untrusted markup.
+     await page.setContent(original,{waitUntil:'load'});
+     await page.evaluate(enter,attack);
+     await page.waitForFunction(()=>window.__injected===true,undefined,{timeout:3000});
+     const before=await page.evaluate(()=>({
+      svg:document.querySelector('#query-output svg')!==null,
+      injected:window.__injected===true}));
+     assert.deepEqual(before,{svg:true,injected:true},
+      'known-public CityLine injection defect must be present before repair');
+     beforeDefectObserved=true;
+     // Reload the patched source; reset the probe because setContent may
+     // retain window properties across document writes.
      await page.setContent(fixed,{waitUntil:'load'});
-     await page.evaluate(value=>{const input=document.querySelector('#station');
+     await page.evaluate(value=>{window.__injected=false;
+      const input=document.querySelector('#station');
       input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));},attack);
      const observed=await page.evaluate(()=>({
       output:document.querySelector('#query-output').textContent,
@@ -77,14 +94,17 @@ try{
       overflow:document.documentElement.scrollWidth>innerWidth+1,
       columns:getComputedStyle(document.querySelector('.schedule-grid')).gridTemplateColumns.split(' ').length,
       cards:document.querySelectorAll('.schedule-grid article').length}));
-     if(width===390)assert.equal(previous,true,'public source must reproduce mobile overflow');
+     if(width===390){
+      assert.equal(previous,true,'public source must reproduce mobile overflow');
+      beforeDefectObserved=true;
+     }
      assert.equal(current.overflow,false);
      assert.equal(current.columns,width===390?1:3);
      assert.equal(current.cards,3);
     }
     assert.equal(outgoing,0);assert.deepEqual(errors,[]);
     report.observations.push({caseId:c.id,width,originalSha256:c.digest,
-     afterSha256:sha(fixed),networkRequests:0,passed:true});
+     afterSha256:sha(fixed),beforeDefectObserved,networkRequests:0,passed:true});
    }finally{await context.close()}
   }
   report.verified.push(c.id);
