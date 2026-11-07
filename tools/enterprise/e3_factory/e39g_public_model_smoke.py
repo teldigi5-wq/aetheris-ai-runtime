@@ -80,7 +80,7 @@ def score():
     original=packet()
     cases={x["id"]:x for x in original["cases"]}
     if (set(receipt)!=b4h.RECEIPT_FIELDS
-        or receipt["evidenceClass"]!=b4h.RECEIPT_CLASS
+        or receipt["evidenceClass"]!="E39G12B4H_UNTRUSTED_MODEL_PROPOSALS"
         or receipt["sourceBundleSha256"]!=b4g.digest(ZIP.read_bytes())
         or receipt["ownerApprovalGranted"] is not False
         or receipt["goldenReferenceAvailable"] is not False
