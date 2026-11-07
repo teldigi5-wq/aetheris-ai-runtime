@@ -69,10 +69,16 @@ def checked(path: Path, limit: int) -> bytes:
         fd = os.open(path, flags)
     except OSError:
         raise ValueError("B4G_UNSAFE_OR_MISSING_FILE") from None
-    with os.fdopen(fd, "rb") as opened:
-        before = os.fstat(opened.fileno())
+    # On POSIX a directory can open successfully as an fd but fdopen()
+    # raises IsADirectoryError. Validate it first and close on denial.
+    try:
+        before = os.fstat(fd)
         if not stat.S_ISREG(before.st_mode):
             raise ValueError("B4G_UNSAFE_OR_MISSING_FILE")
+    except BaseException:
+        os.close(fd)
+        raise
+    with os.fdopen(fd, "rb") as opened:
         if not 0 < before.st_size <= limit:
             raise ValueError("B4G_FILE_SIZE")
         try:
