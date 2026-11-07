@@ -91,20 +91,20 @@ reviewer does not bind the frozen model receipt.** Do not rewrite the older
 run's evidence or treat its independent/public-only scope as changed.
 
 The exact-head draft [PR #283](https://github.com/teldigi5-wq/aetheris-ai-runtime/pull/283)
-at \`54b55830fe1a317ed85aec622c1b465fabdcd21e\` has now passed
+at `54b55830fe1a317ed85aec622c1b465fabdcd21e` has now passed
 **both** required workflows:
 
 - [Full model bridge #42371847547](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42371847547):
   **SUCCESS, 5/5 jobs**. Linux and Windows contract tests, public source
   packaging, four actual resource-bounded Qwen2.5-Coder 7B model calls under
   the pinned digest, and separate static intake all passed. Static receipt
-  classification is **3 \`QUOTE_MATCH_REVIEW_REQUIRED\`, 1
-  \`LITERAL_BOUNDARY_REJECTED\`, 0 browser repairs credited**. This is
+  classification is **3 `QUOTE_MATCH_REVIEW_REQUIRED`, 1
+  `LITERAL_BOUNDARY_REJECTED`, 0 browser repairs credited**. This is
   genuine inference but on *already known public developer-authored* cases.
 - [Receipt-bound Chromium #42371847549](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42371847549):
   **SUCCESS, 1/1 job**, including **6/6 negative/provenance unit tests**.
   The separate reviewer validates exact frozen raw public model-receipt bytes
-  (SHA-256 \`a8a2dc8c8aaee525551b7dabda645b1ac3654144ba3d307ec4d4e846612eec54\`)
+  (SHA-256 `a8a2dc8c8aaee525551b7dabda645b1ac3654144ba3d307ec4d4e846612eec54`)
   from [historical public model run #42329086279](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42329086279)
   before applying the two frozen, narrowly reviewed edits. Chromium at
   390px and 1280px demonstrated the *broken* CityLine injection behavior
@@ -140,7 +140,7 @@ curator/evaluator should:
    disposable website defects spanning **at least 2 independent websites**.
    Keep the URL/source-license evidence, human reviewer decision, authored
    dates and pre-registration timestamp in *private* custody. The existing
-   \`sourceLicense\` manifest field is only a **claim**, not a verified license.
+   `sourceLicense` manifest field is only a **claim**, not a verified license.
    Do not use real users, live customer accounts, third-party cookies,
    unknown copyrighted code, credentials or private data.
 2. **Pre-register objective negative and reference tests before inference.**
@@ -152,11 +152,11 @@ curator/evaluator should:
    cases, test assertions, expected policy and scoring before making model
    calls; timestamp/hashes alone do not prove human independence.
 3. **Enforce true custody separation.** Keep
-   \`manifest.json\`, \`cases/<id>/broken.html\`,
-   \`cases/<id>/reference.html\` and B4G's private evaluator seal in an
+   `manifest.json`, `cases/<id>/broken.html`,
+   `cases/<id>/reference.html` and B4G's private evaluator seal in an
    isolated curator-owned directory **outside Git and the model worker's
    filesystem and identity**. Stage and verify the *broken-only* ZIP using
-   B4G. Do not let \`reference.html\`, reference digests, secret salt, grader
+   B4G. Do not let `reference.html`, reference digests, secret salt, grader
    code, or hidden scoring rules cross into the model worker. The current
    B4G/B4H scripts do **not** prove OS isolation or independent authorship.
 4. **Run one frozen, bounded real model attempt per case.** The digest-pinned
@@ -177,9 +177,9 @@ curator/evaluator should:
    hashes and actual mobile/desktop Chromium behavior, accessibility,
    security and regression assertions, then report **all** attempts.
 6. **Obtain external sign-off on the private evidence, not just checksums.**
-   The trusted report must distinguish \`attempted\`, \`abstained\`,
-   \`schema denied\`, \`quote eligible\`, \`typed-policy admitted\`,
-   \`browser verified\` and \`regressed\`. Count every case in the
+   The trusted report must distinguish `attempted`, `abstained`,
+   `schema denied`, `quote eligible`, `typed-policy admitted`,
+   `browser verified` and `regressed`. Count every case in the
    denominator; keep origin/timestamps, immutable raw artifacts and all
    failures. Independent human reviewers must verify custody, license
    scope, before behavior, reference correctness and case secrecy.
