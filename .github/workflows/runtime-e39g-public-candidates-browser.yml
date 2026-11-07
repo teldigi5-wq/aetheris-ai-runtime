@@ -4,6 +4,9 @@ on:
     branches: [test/e39g12b4n-safe-focus-alternatives-20261025]
     paths:
       - 'tools/enterprise/e3_factory/e39g_public_model_candidate_browser.mjs'
+      - 'tools/enterprise/e3_factory/e39g_public_candidate_receipt.mjs'
+      - 'tools/enterprise/e3_factory/test_e39g_public_candidate_receipt.mjs'
+      - 'tools/enterprise/e3_factory/fixtures/e39g_public_model_receipt_42329086279.json'
       - '.github/workflows/runtime-e39g-public-candidates-browser.yml'
 permissions:
   contents: read
@@ -23,6 +26,12 @@ jobs:
           node --check tools/enterprise/e3_factory/e39g_public_model_candidate_browser.mjs
           test "$(grep -Fc 'heldOut:false' tools/enterprise/e3_factory/e39g_public_model_candidate_browser.mjs)" -eq 1
           test "$(grep -Fc "modelCallsPerformed:0" tools/enterprise/e3_factory/e39g_public_model_candidate_browser.mjs)" -eq 1
+      - name: Fail-closed public model receipt linkage and adversarial unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tools/enterprise/e3_factory/e39g_public_candidate_receipt.mjs
+          node --test tools/enterprise/e3_factory/test_e39g_public_candidate_receipt.mjs
       - name: Install pinned Playwright Chromium for trusted source-only review
         shell: bash
         run: |
