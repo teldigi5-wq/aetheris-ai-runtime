@@ -4,7 +4,7 @@ name: Runtime consolidated deny-only HTTP and owner JDBC regression (review only
 # Reverify every commit on this exact draft branch, including workflow edits.
 on:
   push:
-    branches: [security/runtime-quarantine-pathinfo-boundary-20261101]
+    branches: [security/runtime-quarantine-pathinfo-boundary-20261101, test/b62-effect-write-scope-20261105]
 permissions:
   contents: read
 jobs:
@@ -199,6 +199,11 @@ jobs:
               if marker == "read.setQueryTimeout(2)":
                   marker = "stmt.setQueryTimeout(2)"
               assert marker in effect, marker
+          assert '!principal.hasScope("orchestrator:write")' in effect
+          assert '!principal.hasScope("orchestrator:read")' not in effect
+          assert 'Read-only signed JTI must never insert a protected effect' in regression
+          assert 'Read-only owner must produce zero synthetic effects' in regression
+          assert 'List.of("orchestrator:read", "orchestrator:write")' in regression
           for forbidden in ("@Component", "@Bean", "@RestController",
                             "System.getenv(", "http", "HttpServletRequest"):
               assert forbidden not in effect, forbidden
