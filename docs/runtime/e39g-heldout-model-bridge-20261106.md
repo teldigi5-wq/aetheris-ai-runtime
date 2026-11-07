@@ -33,3 +33,32 @@ Stage45 release approval are claimed. E3.9G remains NOT ACCEPTED; Stage45 NO_GO;
 S-B62-A physical fencing remains blocked; XERJ HOLD.
 
 Native Windows receipt protection: POSIX 0600 does not enforce a Windows DACL. The CLI explicitly refuses to generate private model-output receipts under native Windows. Use WSL2 Ubuntu/Linux with a verified private filesystem and separate OS sandbox, or design and independently test a Windows ACL mechanism before native execution. Cross-platform CI asserts Windows refusal, not a successful private write. The CI steps use bash with set -euo pipefail to propagate every test failure; a previous Windows test failed although GitHub marked the multi-command job successful at Actions #42259732689. That initial green result is NOT valid cross-platform acceptance.
+
+
+## 7 November 2026 — functional real-model four-case public smoke (not held-out)
+
+A new PR job runs the actual pinned Apache-2.0 Qwen2.5-Coder 7B against
+**four known/public developer-authored sources** spanning three research sites:
+B4I keyboard focus, B4I reduced motion, CityLine station query HTML injection,
+and StudyNest responsive grid overflow. Source bytes are fixed to repository
+Git blob hashes. The source-packet builder intentionally uses a PUBLIC dummy
+commitment, not B4G's private evaluator seal. The model-only job has NO
+checkout and receives only the broken-source bundle plus the model runner.
+It starts a pinned, resource-restricted Ollama container on loopback and
+verifies the full model digest before four actual generation calls.
+
+A third, separate GitHub job independently reconstructs each public input
+and reads the model's untrusted B4H-format receipt. It classifies every reply
+with the previously reviewed B4H static quote-intake policy. **No model
+patch is applied, no HTML executed, no Chromium after-state credited and
+no held-out inference claimed.** The model claim is backed by that CI job's
+runtime logs but lacks independent signed model provenance. The public
+corpus is NOT an independently curated private challenge, and B4H's
+curator-seal-verified 'admit' command is intentionally not invoked.
+
+This demonstrates genuine model-generation pipeline integration, not
+the E3.9G independent held-out acceptance that still requires external
+licensed human curation, private solution secrecy, owner-reviewed
+site-specific typed patch policies and real two-viewport browser scoring.
+The historical 1/2 public B4L score remains unchanged. Stage45 NO_GO,
+S-B62-A HOLD, XERJ HOLD; no protected-main merge or deployment.
