@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import stat
 import sys
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
@@ -53,12 +54,48 @@ def parse(raw: bytes) -> dict:
 
 
 def checked(path: Path, limit: int) -> bytes:
-    if path.is_symlink() or not path.is_file():
+    """Bounded descriptor read; never trust a pathname check before reopening.
+
+    O_NOFOLLOW prevents final-component symlink swaps on POSIX. The opened
+    inode is compared with a no-follow pathname stat on other hosts as well.
+    The entire curator directory still requires independent OS-level custody.
+    """
+    if path.is_symlink():
         raise ValueError("B4G_UNSAFE_OR_MISSING_FILE")
-    size = path.stat().st_size
-    if not 0 < size <= limit:
-        raise ValueError("B4G_FILE_SIZE")
-    return path.read_bytes()
+    flags = (os.O_RDONLY | getattr(os, "O_BINARY", 0)
+             | getattr(os, "O_CLOEXEC", 0)
+             | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        fd = os.open(path, flags)
+    except OSError:
+        raise ValueError("B4G_UNSAFE_OR_MISSING_FILE") from None
+    # On POSIX a directory can open successfully as an fd but fdopen()
+    # raises IsADirectoryError. Validate it first and close on denial.
+    try:
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode):
+            raise ValueError("B4G_UNSAFE_OR_MISSING_FILE")
+    except BaseException:
+        os.close(fd)
+        raise
+    with os.fdopen(fd, "rb") as opened:
+        if not 0 < before.st_size <= limit:
+            raise ValueError("B4G_FILE_SIZE")
+        try:
+            name_stat = os.stat(path, follow_symlinks=False)
+        except OSError:
+            raise ValueError("B4G_UNSAFE_OR_MISSING_FILE") from None
+        if (not stat.S_ISREG(name_stat.st_mode)
+            or (name_stat.st_dev, name_stat.st_ino)
+               != (before.st_dev, before.st_ino)):
+            raise ValueError("B4G_UNSAFE_OR_MISSING_FILE")
+        raw = opened.read(limit + 1)
+        after = os.fstat(opened.fileno())
+        if (len(raw) != before.st_size
+            or (after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+               != (before.st_size, before.st_mtime_ns, before.st_ctime_ns)):
+            raise ValueError("B4G_FILE_CHANGED_DURING_READ")
+        return raw
 
 
 def root_check(root: Path) -> Path:

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -187,6 +188,65 @@ class CuratorBoundaryTest(unittest.TestCase):
             fixture(root)
             with self.assertRaisesRegex(ValueError, "B4G_NO_MODEL_ZIP_INSIDE_CURATOR"):
                 b4g.stage(root, root / "public.zip")
+
+    def test_checked_file_read_stays_bounded_and_regular(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            source = root / "source.html"
+            source.write_bytes(b"short")
+            self.assertEqual(b4g.checked(source, 5), b"short")
+            with self.assertRaisesRegex(ValueError, "B4G_FILE_SIZE"):
+                b4g.checked(source, 4)
+            with self.assertRaisesRegex(ValueError, "B4G_UNSAFE_OR_MISSING_FILE"):
+                b4g.checked(root, 100)
+            with self.assertRaisesRegex(ValueError, "B4G_UNSAFE_OR_MISSING_FILE"):
+                b4g.checked(root / "missing.html", 100)
+
+    @unittest.skipUnless(hasattr(os, "O_NOFOLLOW"), "requires final-component nofollow")
+    def test_checked_refuses_source_swapped_to_reference_symlink_at_open(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            broken = root / "broken.html"
+            reference = root / "reference.html"
+            broken.write_bytes(b"BROKEN_ONLY")
+            reference.write_bytes(b"PRIVATE_REFERENCE_NEVER_EXPOSE")
+            actual_open = os.open
+            swapped = [False]
+
+            def malicious_swap(path, flags, *args, **kwargs):
+                if Path(path) == broken and not swapped[0]:
+                    swapped[0] = True
+                    broken.rename(root / "saved-broken.html")
+                    broken.symlink_to(reference)
+                return actual_open(path, flags, *args, **kwargs)
+
+            # The lstat-style precheck happens on the original regular file.
+            # An adversary swaps it immediately before the descriptor opens.
+            with patch.object(b4g.os, "open", side_effect=malicious_swap):
+                with self.assertRaisesRegex(ValueError, "B4G_UNSAFE_OR_MISSING_FILE"):
+                    b4g.checked(broken, 100)
+            self.assertTrue(swapped[0])
+            self.assertEqual(reference.read_bytes(), b"PRIVATE_REFERENCE_NEVER_EXPOSE")
+
+    @unittest.skipIf(os.name == "nt", "Windows may deny writes to an open handle")
+    def test_checked_detects_growth_between_initial_fstat_and_read(self):
+        with tempfile.TemporaryDirectory() as d:
+            source = Path(d) / "broken.html"
+            source.write_bytes(b"ORIGINAL")
+            actual_fstat = os.fstat
+            call_count = [0]
+
+            def mutate_after_initial_stat(fd):
+                info = actual_fstat(fd)
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    source.write_bytes(b"MODIFIED_WHILE_READING")
+                return info
+
+            with patch.object(b4g.os, "fstat", side_effect=mutate_after_initial_stat):
+                with self.assertRaisesRegex(ValueError, "B4G_FILE_CHANGED_DURING_READ"):
+                    b4g.checked(source, 100)
+            self.assertGreaterEqual(call_count[0], 2)
 
     def test_duplicate_json_keys_denied(self):
         with self.assertRaisesRegex(ValueError, "B4G_DUPLICATE_JSON_KEY"):
