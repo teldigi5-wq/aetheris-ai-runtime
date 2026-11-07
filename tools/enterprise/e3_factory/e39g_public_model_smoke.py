@@ -40,7 +40,11 @@ def packet():
     entries=[]
     for cid,site,fault,description,file,expected in CASES:
         p=HERE/file
-        source=b4g.checked(p,b4g.MAX_HTML)
+        # Windows Git checkout may convert LF to CRLF even though the
+        # immutable repository blob is LF. Canonicalize text then insist
+        # the canonical bytes match the exact original Git object SHA-1.
+        # This does NOT permit any other source or semantic change.
+        source=b4g.checked(p,b4g.MAX_HTML).replace(b"\r\n",b"\n")
         if sha_git_blob(source)!=expected:
             raise ValueError("PUBLIC_SMOKE_PINNED_FIXTURE_DRIFT")
         text=source.decode("utf-8","strict")

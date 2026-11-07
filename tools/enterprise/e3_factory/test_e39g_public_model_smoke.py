@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import e39g12b4g_curator_boundary as b4g
 import e39g_public_model_smoke as public
 
@@ -22,10 +23,12 @@ class PublicCorpusTests(unittest.TestCase):
         self.assertNotIn("referenceSha256",body)
         self.assertNotIn("privateSeal",body)
     def test_score_counts_all_attempts_without_browser_credit(self):
-        original=public.ROOT
         with tempfile.TemporaryDirectory() as folder:
-            public.ROOT=Path(folder)
-            try:
+            root=Path(folder)
+            with patch.object(public,"ROOT",root), \
+                 patch.object(public,"ZIP",root/"model.zip"), \
+                 patch.object(public,"RECEIPT",root/"model-receipt.json"), \
+                 patch.object(public,"SCORE",root/"public-score.json"):
                 public.pack()
                 result=public.packet()
                 rows=[]
@@ -47,8 +50,6 @@ class PublicCorpusTests(unittest.TestCase):
                 self.assertEqual(report["categories"],{"MODEL_ABSTAINED":4})
                 self.assertEqual(report["browserVerifiedRepairs"],0)
                 self.assertFalse(report["genuinelyHeldOut"])
-            finally:
-                public.ROOT=original
 
 if __name__=="__main__":
     unittest.main()
