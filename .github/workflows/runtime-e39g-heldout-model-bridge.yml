@@ -9,6 +9,7 @@ on:
       - 'docs/runtime/e39g-heldout-model-bridge-20261106.md'
       - 'tools/enterprise/e3_factory/e39g_public_model_smoke.py'
       - 'tools/enterprise/e3_factory/test_e39g_public_model_smoke.py'
+      - 'tools/enterprise/e3_factory/test_e39g_workflow_model_digest.py'
 permissions:
   contents: read
 jobs:
@@ -40,6 +41,7 @@ jobs:
           python tools/enterprise/e39g2_scoped_skill_advice.py check
           python tools/enterprise/e39g3_validate_java_skill_manifest.py verify
           python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g_public_model_smoke.py' -v
+          python -m unittest discover -s tools/enterprise/e3_factory -p 'test_e39g_workflow_model_digest.py' -v
           python -m py_compile tools/enterprise/e3_factory/e39g_public_model_smoke.py
 
 
@@ -73,6 +75,7 @@ jobs:
     timeout-minutes: 75
     env:
       MODEL: qwen2.5-coder:7b
+      MODEL_SHA256: 'dae161e27b0e90dd1856c8bb3209201fd6736d8eb66298e75ed87571486f4364'
       IMAGE: 'ollama/ollama:0.12.10@sha256:e8c3d1f6ad16323bc40dc63eff0701d4fc32113f75a86b54b3e836eef8290de6'
     steps:
       # NO checkout, golden source, model prompt policy, customer data or credentials.
@@ -126,10 +129,11 @@ jobs:
           assert len(matches)==1
           entry=matches[0]
           digest=entry['digest'].removeprefix('sha256:')
-          assert len(digest)==64 and digest.startswith('dae161e27b0e')
+          if digest != os.environ['MODEL_SHA256']:
+              raise ValueError('E39G_FULL_MODEL_SHA256_MISMATCH')
           assert 4000000000 <= entry['size'] <= 5300000000
           with open(os.environ['GITHUB_ENV'],'a') as f:
-              f.write('PINNED_MODEL_SHA256='+digest+'\n')
+              f.write('PINNED_MODEL_SHA256='+os.environ['MODEL_SHA256']+'\n')
           print("E39G_GENUINE_QWEN7B_FULL_DIGEST_PINNED")
           PY
       - name: Make four actual model calls, no private references or evaluator
