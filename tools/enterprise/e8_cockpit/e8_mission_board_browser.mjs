@@ -71,7 +71,12 @@ try{
       await page.locator('#search').fill('');
       await page.locator('button[data-filter="all"]').click();
       assert.equal(await page.locator('#items button').count(),2);
-      await page.locator('#items button').last().click();
+      // Exercise real keyboard selection, not only pointer clicks. The
+      // selected case button is recreated by render() and must retain focus.
+      await page.locator('#items button').last().focus();
+      await page.keyboard.press('Enter');
+      assert.equal(await page.evaluate(()=>document.activeElement?.matches(
+        '#items button.item[aria-pressed="true"]')),true);
       assert.equal(await page.locator('#detail .timeline li').count(),4);
       const width=await page.evaluate(()=>({
         content:document.documentElement.scrollWidth,viewport:innerWidth
