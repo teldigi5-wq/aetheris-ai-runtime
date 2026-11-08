@@ -376,6 +376,10 @@ class RuntimeVerifiedTaskSessionCreationJdbcTest {
             var readonly=identity(42,"orchestrator:read");register(c,readonly);
             assertThrows(SecurityException.class,
                 ()->create(c,readonly,"tenant-alpha","red"));
+            // PostgreSQL disallows changing transaction isolation once the
+            // transaction has executed a statement. Start a clean transaction
+            // before checking that the probe itself denies REPEATABLE_READ.
+            c.rollback();
             c.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
             var write=identity(42,"orchestrator:write");
             assertThrows(IllegalStateException.class,
