@@ -46,13 +46,28 @@ async function loadWorkspace(folder){
   const input={}, digests=[];let total=0;
   for(const name of FILES){
     const target=path.join(folder,name);
+    // Node's O_NOFOLLOW is ineffective on Windows. Explicitly reject reparse
+    // targets on BOTH platforms before opening, then check file identity
+    // again after reading. This is a local-review defense, not proof against
+    // a malicious same-account actor racing arbitrary Windows reparse points.
+    const prior=await fs.lstat(target);
+    if(!prior.isFile()||prior.isSymbolicLink()||prior.nlink!==1)
+      fail('UNSAFE_INPUT_FILE');
+    const real=await fs.realpath(target);
+    const norm=s=>process.platform==='win32'
+      ?path.resolve(s).toLowerCase():path.resolve(s);
+    if(norm(real)!==norm(target))fail('UNSAFE_INPUT_FILE');
     const f=await fs.open(target,FS.O_RDONLY|(FS.O_NOFOLLOW||0));
     try{
       const meta=await f.stat();
-      if(!meta.isFile()||meta.nlink!==1||meta.size<1||meta.size>MAX_TOTAL)
+      if(!meta.isFile()||meta.nlink!==1||meta.size<1||meta.size>MAX_TOTAL||
+         meta.dev!==prior.dev||meta.ino!==prior.ino)
         fail('UNSAFE_INPUT_FILE');
       const data=await f.readFile();
-      if(data.length!==meta.size)fail('INPUT_RACE_DENIED');
+      const after=await fs.lstat(target);
+      if(data.length!==meta.size||!after.isFile()||after.isSymbolicLink()||
+         after.dev!==prior.dev||after.ino!==prior.ino||
+         after.size!==meta.size)fail('INPUT_RACE_DENIED');
       total+=data.length;
       if(total>MAX_TOTAL)fail('INPUT_BUDGET_EXCEEDED');
       // Disallow malformed replacement sequences, not instructions in text.
