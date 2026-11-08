@@ -15,6 +15,7 @@ from typing import Sequence
 import e36_free_model_router as e36
 import e4_free_route_admission as e4
 from e4_local_proposal_session import LOCAL_EXPERIMENT_OPT_IN, LocalProposalSession
+from e4_local_quota import (MAX_DAILY_ATTEMPTS, QuotaUnavailable, QuotaExhausted)
 
 
 def cli(argv: Sequence[str] | None = None) -> int:
@@ -47,7 +48,8 @@ def cli(argv: Sequence[str] | None = None) -> int:
             "sourceTreeWritten":False,
             "ownerApprovalGranted":False,
             "stage45Go":False,
-            "runRequires":"--run-local plus two explicit local environment opt-ins",
+            "runRequires":"--run-local, two local opt-ins, and private operator quota directory",
+            "sharedLocalDailyAttemptLimit":MAX_DAILY_ATTEMPTS,
         },sort_keys=True))
         return 0
 
@@ -61,6 +63,18 @@ def cli(argv: Sequence[str] | None = None) -> int:
         return 2
     try:
         result=LocalProposalSession().propose(args.model,args.task)
+    except (QuotaUnavailable, QuotaExhausted) as denied:
+        status = (
+            "DENIED_SHARED_LOCAL_DAILY_BUDGET_EXHAUSTED"
+            if isinstance(denied, QuotaExhausted)
+            else "DENIED_SHARED_LOCAL_QUOTA_UNAVAILABLE"
+        )
+        print(json.dumps({
+            "status":status,"cloudFallbackPermitted":False,
+            "sourceTreeWritten":False,"ownerApprovalGranted":False,
+            "stage45Go":False,
+        },sort_keys=True))
+        return 2
     except (ValueError,TimeoutError,OSError):
         # Do not print provider response, credentials, stack traces or host data
         # when a local request is refused or Ollama is not running.

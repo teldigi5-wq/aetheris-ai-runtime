@@ -27,6 +27,33 @@ def proposed(model="qwen2.5-coder:1.5b",task="scroll"):
 
 
 class E4LocalProposal(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        import e4_local_quota as quota
+        self._quota_dir = tempfile.TemporaryDirectory()
+        Path(self._quota_dir.name).chmod(0o700)
+        self.addCleanup(self._quota_dir.cleanup)
+        self._quota_env = mock.patch.dict(
+            os.environ, {quota.ROOT_ENV: self._quota_dir.name})
+        self._quota_env.start()
+        self.addCleanup(self._quota_env.stop)
+
+    def test_durable_daily_limit_denies_fourth_separate_session_before_provider(self):
+        import e4_local_quota as quota
+        with (mock.patch.dict(os.environ,signed_off()),
+              mock.patch.object(e36,"send",return_value=(
+                  {"models":[{"name":"qwen2.5-coder:1.5b"}]},2)) as lookup,
+              mock.patch.object(e36,"request_advice",return_value=proposed()) as model):
+            for attempt in range(1,quota.MAX_DAILY_ATTEMPTS+1):
+                result=e4.LocalProposalSession().propose("qwen2.5-coder:1.5b","scroll")
+                self.assertEqual(result["sharedLocalDailyAttemptNumber"],attempt)
+                self.assertFalse(result["sharedQuotaIsSecurityAuthority"])
+            with self.assertRaisesRegex(quota.QuotaExhausted,"EXHAUSTED"):
+                e4.LocalProposalSession().propose("qwen2.5-coder:1.5b","scroll")
+            self.assertEqual(lookup.call_count,quota.MAX_DAILY_ATTEMPTS)
+            self.assertEqual(model.call_count,quota.MAX_DAILY_ATTEMPTS)
+
     def test_missing_opt_in_never_contacts_even_local_provider(self):
         for change in (
             {e4.LOCAL_EXPERIMENT_OPT_IN:"no",e36.OPT_LOCAL:"yes"},
