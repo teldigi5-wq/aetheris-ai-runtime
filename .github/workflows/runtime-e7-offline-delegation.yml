@@ -1,0 +1,62 @@
+name: E7 Real Offline Specialist Delegation and Signed Evidence Gate
+on:
+  push:
+    branches: [feat/e7-offline-delegation-20261108]
+  pull_request:
+    branches: [feat/e6-w5j-optin-heldout-cpu-trial-20261102]
+permissions:
+  contents: read
+jobs:
+  offline-specialists-and-approval:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 18
+    steps:
+      - name: Exact reviewed E7 head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Exact checkout and source boundary assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          node --check tools/enterprise/e7_agents/e7_specialist_worker.mjs
+          node --check tools/enterprise/e7_agents/e7_offline_delegation.mjs
+          node --check tools/enterprise/e7_agents/e7_offline_cli.mjs
+          node --check tools/enterprise/e7_agents/test_e7_offline_delegation.mjs
+          ! grep -Eq 'node:net|node:http|node:https|child_process|node:fs' tools/enterprise/e7_agents/e7_specialist_worker.mjs
+      - name: Actual two-process specialist and signed approval-gate tests
+        shell: bash
+        env:
+          AETHERIS_E7_OFFLINE_DELEGATION_OPT_IN: 'no'
+          AETHERIS_E7_TRUSTED_APPROVER_PUBLIC_KEY_SHA256: ''
+        run: |
+          set -euo pipefail
+          node --test tools/enterprise/e7_agents/test_e7_offline_delegation.mjs
+      - name: Inherited E6 owner-approval policy regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tools/enterprise/e6_studio/next-studio/test_w5l_owner_cpu_gate.mjs tools/enterprise/e6_studio/next-studio/test_w5l_request_approval.mjs
+      - name: Real no-file default CLI plan-only process
+        shell: bash
+        env:
+          AETHERIS_E7_OFFLINE_DELEGATION_OPT_IN: 'no'
+        run: |
+          set -euo pipefail
+          node tools/enterprise/e7_agents/e7_offline_cli.mjs --workspace /intentionally-nonexistent/aetheris-e7 |
+            node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const o=JSON.parse(s);if(o.status!=="PLAN_ONLY_NO_FILES_OR_AGENTS_ACCESSED"||o.modelCalls!==0||o.ownerApproved!==false)process.exit(1);console.log("E7_INERT_PLAN_ZERO_FS_ZERO_AGENT_PASS")})'
+      - name: Retain explicit review-only NO_GO boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'Stage45 NO_GO' docs/runtime/E7_OFFLINE_DELEGATION_FIRST_20261108.md
+          echo E7_LOCAL_WORKER_PROOF_NO_PRODUCTION_APPROVAL_STAGE45_NO_GO
