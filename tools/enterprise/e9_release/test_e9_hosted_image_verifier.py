@@ -100,6 +100,72 @@ class HostedImagePreflightTests(unittest.TestCase):
         self.assertFalse(result["independentVulnerabilityScanPerformed"])
         self.assertTrue(result["selfReportedOriginIsNotCryptographicAttestation"])
 
+    def _oci_fixture(self, *, corrupt_blob=False, wrong_source_size=False):
+        # Match actual Docker 28+ export: config and layer are addressed as
+        # blobs/sha256/<digest>, with LayerSources and OCI metadata present.
+        config = _blob({"config": {
+            "User": "10001:10001",
+            "Labels": {
+                "org.opencontainers.image.revision": SHA,
+                "org.opencontainers.image.source":
+                    "https://github.com/" + e9.REPOSITORY,
+                "io.aetheris.evidence-class": "HOSTED_RUNTIME_ARTIFACT",
+            }
+        }})
+        config_hash = hashlib.sha256(config).hexdigest()
+        layer = b"original OCI test layer payload"
+        layer_hash = hashlib.sha256(layer).hexdigest()
+        config_name = "blobs/sha256/" + config_hash
+        layer_name = "blobs/sha256/" + layer_hash
+        manifest = _blob([{
+            "Config": config_name, "RepoTags": [TAG],
+            "Layers": [layer_name],
+            "LayerSources": {
+                "sha256:" + layer_hash: {
+                    "digest": "sha256:" + layer_hash,
+                    "mediaType": "application/vnd.oci.image.layer.v1.tar",
+                    "size": len(layer) + int(wrong_source_size)
+                }
+            }
+        }])
+        with tarfile.open(self.root / ARCHIVE, "w:gz") as tf:
+            for name, body in [
+                ("manifest.json", manifest),
+                ("oci-layout", b'{"imageLayoutVersion":"1.0.0"}'),
+                (config_name, config),
+                (layer_name, layer + (b"bad" if corrupt_blob else b""))
+            ]:
+                info = tarfile.TarInfo(name)
+                info.size = len(body)
+                info.mode = 0o600
+                tf.addfile(info, io.BytesIO(body))
+        digest = hashlib.sha256((self.root / ARCHIVE).read_bytes()).hexdigest()
+        (self.root / (ARCHIVE + ".sha256")).write_text(
+            digest + "  " + ARCHIVE + "\n", encoding="ascii")
+        image_id = "sha256:" + config_hash
+        (self.root / "runtime-image-id.txt").write_text(image_id + "\n",
+                                                        encoding="ascii")
+        self.report = {**self.report, "image_id": image_id,
+                       "archive_sha256": digest}
+        self._write_meta(self.report)
+
+    def test_modern_oci_content_addressed_docker_save_passes(self):
+        self._oci_fixture()
+        result = e9.verify(str(self.root), SHA)
+        self.assertEqual(result["status"],
+                         "HOSTED_IMAGE_INTEGRITY_VERIFIED_RELEASE_NO_GO")
+        self.assertEqual(result["checks"]["layerCount"], 1)
+        self.assertTrue(result["checks"]["imageConfigDigestMatched"])
+        self.assertFalse(result["releaseAuthorized"])
+
+    def test_oci_blob_content_tampering_and_wrong_layer_sizes_fail(self):
+        self._oci_fixture(corrupt_blob=True)
+        with self.assertRaisesRegex(e9.Denied, "OCI_BLOB_DIGEST_MISMATCH"):
+            e9.verify(str(self.root), SHA)
+        self._oci_fixture(wrong_source_size=True)
+        with self.assertRaisesRegex(e9.Denied, "OCI_LAYER_SOURCE_INVALID"):
+            e9.verify(str(self.root), SHA)
+
     def test_default_is_plan_only_and_never_reads_missing_files(self):
         cli = Path(e9.__file__)
         result = subprocess.run([sys.executable, str(cli),
