@@ -254,6 +254,10 @@ class RuntimeVerifiedTaskCreationJdbcTest {
     void principalCannotBeForgedAndSignedJtiAndWriteScopeAreMandatory()
             throws Exception {
         try (Connection c=connection()) {
+            // Other tests may commit a synthetic task to prove a real
+            // cross-session revocation race; deny paths must add ZERO rows
+            // regardless of their independent JUnit execution order.
+            long baseline = count(c);
             var onlyRead=signed(42,"DEVELOPER",List.of("orchestrator:read"),true);
             assertThrows(SecurityException.class,
                 () -> insert(c,onlyRead,"tenant-alpha","project-red"));
@@ -269,7 +273,7 @@ class RuntimeVerifiedTaskCreationJdbcTest {
             assertThrows(IllegalArgumentException.class, () -> probe.create(c,
                 allowed,"tenant-alpha","project-red","safe title","bad\ncommand",
                 OperationMode.PRIVATE));
-            assertEquals(0,count(c));
+            assertEquals(baseline,count(c));
             c.rollback();
         }
         KeyPairGenerator g=KeyPairGenerator.getInstance("RSA");
