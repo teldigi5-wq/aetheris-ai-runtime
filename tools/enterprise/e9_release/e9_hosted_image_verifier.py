@@ -115,6 +115,7 @@ def _safe_archive_name(name: str) -> None:
 
 def _docker_archive(path: Path, revision: str, image_id: str) -> dict:
     text_json = {}
+    blob_sizes = {}
     seen = set()
     files = set()
     count = 0
@@ -155,6 +156,7 @@ def _docker_archive(path: Path, revision: str, image_id: str) -> dict:
                                 buffer.extend(chunk)
                         if digest.hexdigest() != blob_name.group(1):
                             deny("OCI_BLOB_DIGEST_MISMATCH")
+                        blob_sizes[normalized] = entry.size
                         if buffer is not None:
                             text_json[normalized] = bytes(buffer)
                     elif normalized == "manifest.json" or normalized.endswith(".json"):
@@ -207,7 +209,9 @@ def _docker_archive(path: Path, revision: str, image_id: str) -> dict:
                 if (not isinstance(source_info, dict) or
                         source_info.get("digest") != digest_name or
                         not isinstance(source_info.get("size"), int) or
-                        source_info["size"] <= 0):
+                        source_info["size"] <= 0 or
+                        source_info["size"] != blob_sizes.get(
+                            "blobs/sha256/" + digest_name.removeprefix("sha256:"))):
                     deny("OCI_LAYER_SOURCE_INVALID")
     if config_name not in files:
         deny("MISSING_DOCKER_CONFIG")
