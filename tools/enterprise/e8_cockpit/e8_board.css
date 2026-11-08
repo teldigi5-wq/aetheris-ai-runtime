@@ -1,0 +1,57 @@
+/* Aetheris / offline Mission Review — original accessible editorial UI. */
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;min-width:320px;background:#101315;color:#f3f0e9;line-height:1.5}
+button,input{font:inherit}
+button{cursor:pointer}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #f2bd75;outline-offset:3px}
+.skip{position:absolute;top:-7rem;left:1rem;padding:.8rem;background:#f3f0e9;color:#101315;z-index:11}
+.skip:focus{top:1rem}
+.shell{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:100vh}
+.side{background:#1b1e20;border-right:1px solid #34383b;padding:32px 24px}
+.mark{display:inline-grid;width:35px;height:35px;place-items:center;background:#dfaa6e;border-radius:8px;color:#141819;font-size:21px;font-weight:800}
+.brand{font-size:18px;font-weight:730;letter-spacing:-.035em;margin:15px 0 0;display:block}
+.side-label{font-size:11px;letter-spacing:.17em;color:#c1c7c5;text-transform:uppercase;margin:42px 0 0}
+.capsule{display:block;margin-top:16px;border:1px solid #8d6b42;border-radius:7px;color:#f1c38e;padding:10px;font-size:12px}
+.side-note{color:#bfc7c8;font-size:12px;margin-top:30px;line-height:1.8}
+.main{min-width:0;padding:clamp(26px,5vw,68px);max-width:1550px;width:100%;margin:auto}
+.eyebrow{font-size:11px;color:#eac08c;letter-spacing:.17em;text-transform:uppercase;font-weight:750}
+h1{font-size:clamp(36px,5.4vw,68px);letter-spacing:-.06em;line-height:1.04;font-weight:700;margin:12px 0 20px}
+.intro{max-width:67ch;color:#c1c9c9;font-size:15px;margin:0}
+.warning{margin:25px 0 34px;background:#30291f;border-left:3px solid #e8b578;padding:16px 18px;color:#f3dfc7;font-size:13px}
+.stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.stat{min-width:0;background:#1d2224;border:1px solid #363d3e;border-radius:10px;padding:22px}
+.stat b{display:block;font-size:31px;line-height:1.1;letter-spacing:-.055em;font-variant-numeric:tabular-nums}
+.stat span{display:block;font-size:12px;color:#bdc5c6;margin-top:8px}
+.section-title{font-size:23px;letter-spacing:-.04em;margin:42px 0 15px}
+.toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:17px}
+.filter{background:#222829;color:#ecf1ee;border:1px solid #454d50;border-radius:7px;font-size:13px;padding:9px 15px}
+.filter[aria-pressed=true]{background:#edb578;border-color:#edb578;color:#161a1c}
+.toolbar label{font-size:12px;color:#d5d9d7}
+.search{flex:1;min-width:160px;background:#1a2022;color:#f9faf7;border:1px solid #545d60;border-radius:7px;padding:10px 14px}
+.caption{color:#c0c9c9;font-size:12px}
+.columns{display:grid;grid-template-columns:minmax(230px,36%) minmax(0,1fr);gap:15px;align-items:start}
+.items{display:grid;gap:11px}
+.item{width:100%;text-align:left;background:#1d2325;border:1px solid #3a4245;border-radius:11px;padding:20px;color:#eff2ed}
+.item[aria-pressed=true]{border-color:#f3be80;background:#292822}
+.item .id{display:block;overflow-wrap:anywhere;font-size:12px;font-weight:750}
+.item small{display:block;color:#c1cbcb;font-size:12px;margin:8px 0}
+.status{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:750;border-radius:5px;padding:6px 10px;background:#403322;color:#f4cb91}
+.status.deny{background:#502c2d;color:#ffc8bc}
+.detail{min-width:0;min-height:370px;border-radius:11px;border:1px solid #3b4547;background:#1b2022;padding:clamp(19px,3vw,34px);overflow-wrap:anywhere}
+.detail h3{font-size:22px;letter-spacing:-.035em;line-height:1.2;margin:8px 0}
+.detail h4{font-size:14px;letter-spacing:-.01em;margin:20px 0 12px}
+.mono{font:12px ui-monospace,SFMono-Regular,Consolas,monospace;word-break:break-all}
+.evidence{border-top:1px solid #343d3e;padding:14px 0}
+.evidence strong{font-size:12px;display:block;margin-bottom:7px}
+.checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.check{display:flex;align-items:center;gap:9px;padding:10px;border:1px solid #3e4749;border-radius:7px;font-size:12px;min-width:0}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:#89b6a6}
+.dot.bad{background:#ed9a86}
+.timeline{padding-left:22px;color:#d5dedb;font-size:12px}
+.timeline li{padding:4px 0 9px}
+.empty{color:#c8cfcd;border:1px dashed #4b5556;border-radius:8px;padding:20px;font-size:13px}
+footer{border-top:1px solid #30393a;margin-top:40px;padding-top:18px;color:#b8c1bf;font-size:12px}
+@media(max-width:860px){.shell{grid-template-columns:1fr}.side{padding:16px 24px;border:0;border-bottom:1px solid #34383b}.brand{display:inline-block;margin:0 0 0 12px;vertical-align:middle}.side-label,.capsule{display:none}.side-note{margin:8px 0 0}.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:570px){.main{padding:24px 17px}.columns{grid-template-columns:minmax(0,1fr)}.checks{grid-template-columns:minmax(0,1fr)}.stat-grid{gap:8px}.stat{padding:16px}.stat b{font-size:26px}.search{flex-basis:100%}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
