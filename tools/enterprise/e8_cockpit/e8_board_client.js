@@ -59,7 +59,18 @@ function render(){
     button.append(element("span","id",item.id),element("small","","Local E7 specialist evidence"));
     button.append(element("span","status"+(item.status==="STATIC_DENIAL"?" deny":""),
        item.status==="STATIC_DENIAL"?"Static denied":"Needs review"));
-    button.addEventListener("click",()=>{selected=item.id;render();});
+    button.addEventListener("click",()=>{
+      selected=item.id;
+      render();
+      // render() replaces case buttons; restore focus after the DOM swap so
+      // keyboard and assistive-technology users retain their place.
+      for(const next of list.querySelectorAll("button.item")){
+        if(next.getAttribute("aria-pressed")==="true"){
+          next.focus();
+          break;
+        }
+      }
+    });
     list.append(button);
   }
   empty.hidden=visible.length>0;
