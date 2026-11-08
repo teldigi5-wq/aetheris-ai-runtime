@@ -1,0 +1,177 @@
+name: E9 Hosted Image Integrity and Release NO_GO
+on:
+  push:
+    branches: [feat/e9-image-integrity-release-guard-20261108]
+  pull_request:
+    branches: [feat/e8-offline-mission-review-20261108]
+permissions:
+  contents: read
+jobs:
+  policy-and-negative-tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Exact head and no automatic GitHub release privilege
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          python -m py_compile tools/enterprise/e9_release/e9_hosted_image_verifier.py
+          ! grep -q 'gh release create' .github/workflows/ai-runtime-image-provenance.yml
+          ! grep -q 'contents: write' .github/workflows/ai-runtime-image-provenance.yml
+      - name: Python archive, negative security and release policy tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tools/enterprise/e9_release -p 'test_e9_*.py' -v
+      - name: Plan-only never accesses absent artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/enterprise/e9_release/e9_hosted_image_verifier.py \
+            --artifact-dir /nonexistent/e9-evidence --revision "${{ github.event.pull_request.head.sha || github.sha }}" |
+            python -c 'import sys,json; x=json.load(sys.stdin); assert x["status"]=="PLAN_ONLY_NO_FILES_OR_IMAGE_ACCESSED" and x["releaseAuthorized"] is False;print("E9_NO_FILES_READ_NO_RELEASE_PASS")'
+  real-docker-save-roundtrip:
+    runs-on: ubuntu-24.04
+    needs: policy-and-negative-tests
+    timeout-minutes: 23
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Build actual scratch Docker test fixture, no external base image
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          command -v go
+          command -v docker
+          mkdir -p target/e9/fixture/workspace target/e9/artifacts
+          echo no-real-user-data > target/e9/fixture/workspace/payload.txt
+          cat > target/e9/fixture/probe.go <<'GO'
+          package main
+          import "os"
+          func main() {
+            if os.Getuid()!=10001 || os.Getgid()!=10001 { os.Exit(6) }
+            const file="/app/workspace/.write-check"
+            if err:=os.WriteFile(file,[]byte("verified"),0600);err!=nil { os.Exit(7) }
+            if err:=os.Remove(file);err!=nil { os.Exit(8) }
+          }
+          GO
+          (cd target/e9/fixture && GO111MODULE=off CGO_ENABLED=0 GOPROXY=off GOTOOLCHAIN=local go build -trimpath -o fixture-probe probe.go)
+          cat > target/e9/fixture/Dockerfile <<'DOCKER'
+          FROM scratch
+          ARG REVISION
+          LABEL org.opencontainers.image.revision=$REVISION
+          LABEL org.opencontainers.image.source=https://github.com/teldigi5-wq/aetheris-ai-runtime
+          LABEL io.aetheris.evidence-class=HOSTED_RUNTIME_ARTIFACT
+          COPY --chown=10001:10001 --chmod=0755 fixture-probe /app/probe
+          COPY --chown=10001:10001 workspace/ /app/workspace/
+          USER 10001:10001
+          ENTRYPOINT ["/app/probe"]
+          DOCKER
+          docker build --network none --build-arg REVISION="$GITHUB_SHA" \
+            -t "aetheris-ai-runtime:$GITHUB_SHA" target/e9/fixture
+          docker run --rm --network none "aetheris-ai-runtime:$GITHUB_SHA"
+          docker image inspect "aetheris-ai-runtime:$GITHUB_SHA" \
+            --format '{{.Id}}' > target/e9/artifacts/runtime-image-id.txt
+          printf 'PASS\n' > target/e9/artifacts/runtime-workspace-write-probe.txt
+      - name: Actual Docker-save roundtrip and second nonroot write probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd target/e9/artifacts
+          image="aetheris-ai-runtime:$GITHUB_SHA"
+          archive="aetheris-ai-runtime-$GITHUB_SHA.tar.gz"
+          docker save "$image" | gzip -n > "$archive"
+          sha256sum "$archive" > "$archive.sha256"
+          before="$(cat runtime-image-id.txt)"
+          docker image rm "$image"
+          gzip -dc "$archive" | docker load
+          test "$(docker image inspect "$image" --format '{{.Id}}')" = "$before"
+          test "$(docker image inspect "$image" --format '{{.Config.User}}')" = 10001:10001
+          docker run --rm --network none "$image"
+          echo E9_REAL_DOCKER_SAVE_LOAD_AND_NONROOT_WORKSPACE_PASS
+      - name: Generate deliberately non-authoritative fixture provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          sha=os.environ["GITHUB_SHA"]
+          folder=Path("target/e9/artifacts")
+          name=f"aetheris-ai-runtime-{sha}.tar.gz"
+          report={
+            "schema_version":1,"status":"PASS","evidence_class":"HOSTED_RUNTIME_ARTIFACT",
+            "repository":"teldigi5-wq/aetheris-ai-runtime","revision":sha,
+            "image_tag":f"aetheris-ai-runtime:{sha}",
+            "image_id":(folder/"runtime-image-id.txt").read_text().strip(),
+            "archive":name,"archive_sha256":hashlib.sha256((folder/name).read_bytes()).hexdigest(),
+            "release_tag":f"runtime-{sha}",
+            "release_publication_expected":False,
+            "release_authorized":False,
+            "owner_release_authorization_verified":False,
+            "stage45Go":False,"runtime_user":"10001:10001",
+            "workspace_write_probe":True,
+            "registry_publication_claim":False,
+            "production_deployment_claim":False,
+            "physical_pc_validation":False,
+            "truth_boundary":"TEST FIXTURE: actual scratch Docker image, NOT the runtime service, independently signed build, production image, or owner release authority. Stage45 NO_GO."
+          }
+          (folder/"runtime-image-provenance.json").write_text(
+            json.dumps(report,sort_keys=True,indent=2)+"\n")
+          PY
+      - name: Independently parse Docker archive/config and emit NO_GO integrity finding
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tools/enterprise/e9_release python - <<'PY'
+          import json,os,tarfile
+          from pathlib import Path
+          import e9_hosted_image_verifier as e9
+          root=Path.cwd()/"target/e9/artifacts"
+          sha=os.environ["GITHUB_SHA"]
+          try:
+              outcome=e9.verify(str(root),sha)
+          except e9.Denied as error:
+              # Only this original synthetic scratch fixture is inspected.
+              # Do not print actual production archive file names.
+              with tarfile.open(root/f"aetheris-ai-runtime-{sha}.tar.gz","r:gz") as tf:
+                  print("E9_SYNTHETIC_ARCHIVE_MEMBER_TYPES",[
+                      (x.name,x.type.decode("latin-1")) for x in tf.getmembers()[:16]])
+                  try:
+                      item=tf.extractfile("manifest.json")
+                      if item:
+                          print("E9_SYNTHETIC_DOCKER_MANIFEST",item.read(5000).decode())
+                  except KeyError: pass
+              print("E9_SYNTHETIC_VERIFY_DENIED",str(error))
+              raise
+          assert outcome["status"]=="HOSTED_IMAGE_INTEGRITY_VERIFIED_RELEASE_NO_GO"
+          assert outcome["checks"]["imageConfigDigestMatched"]
+          assert outcome["releaseAuthorized"] is False and outcome["stage45Go"] is False
+          assert outcome["selfReportedOriginIsNotCryptographicAttestation"] is True
+          print("E9_REAL_DOCKER_INTEGRITY_PASS_RELEASE_NO_GO")
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: success()
+        with:
+          name: e9-real-docker-save-fixture-not-production-not-release-authorized
+          path: target/e9/artifacts/
+          if-no-files-found: error
+          retention-days: 7
