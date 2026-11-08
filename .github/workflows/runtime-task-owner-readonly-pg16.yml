@@ -1,0 +1,71 @@
+name: Runtime #23 Owner Metadata Readonly / Disposable PG16
+on:
+  push:
+    branches: [security/task-owner-readonly-binding-20261108]
+  pull_request:
+    branches: [security/interim-task-stream-containment-20261104]
+permissions:
+  contents: read
+jobs:
+  jpa-and-service-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Assert exact review HEAD and preserve task HTTP quarantine
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          grep -Fq 'HttpServletResponse.SC_NOT_FOUND' orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java
+          ! grep -Fq 'subscribeAll(' orchestrator-service/src/main/java/io/aetheris/orchestrator/task/TaskEventStreamService.java
+          grep -Fq 'spring.jpa.hibernate.ddl-auto=create-drop' orchestrator-service/src/test/resources/application.properties
+      - name: Compile and run complete orchestrator JUnit suite
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+
+  synthetic-postgres-owner-schema:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ownerlab_ci
+          POSTGRES_PASSWORD: disposable_ci_only_not_a_real_secret
+          POSTGRES_DB: ownerlab_disposable
+        ports: [ "5432:5432" ]
+        options: >-
+          --health-cmd "pg_isready -U ownerlab_ci -d ownerlab_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: '127.0.0.1'
+      PGPORT: '5432'
+      PGUSER: ownerlab_ci
+      PGDATABASE: ownerlab_disposable
+      PGPASSWORD: disposable_ci_only_not_a_real_secret
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - name: Run original reviewed additive ownership schema on disposable PG16
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = ownerlab_disposable
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+          psql -X -v ON_ERROR_STOP=1 -f tests/security/sql/disposable_task_owner_rehearsal.sql | tee /tmp/task-owner-schema-review.log
+          grep -Fq 'AETHERIS_DISPOSABLE_PG16_TASK_OWNER_QUARANTINE_AND_TENANT_DENIAL_PASS' /tmp/task-owner-schema-review.log
+          test "$(psql -X -A -t -v ON_ERROR_STOP=1 -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='aetheris_tasks' AND table_schema NOT LIKE 'pg_temp_%'")" = 0
+          echo AETHERIS_REVIEW_ONLY_POSTGRES_ROLLBACK_PROVED
