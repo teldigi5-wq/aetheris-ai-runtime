@@ -1,0 +1,131 @@
+name: E8 Offline Mission Review Board — Real Chromium and Trace Evidence
+on:
+  push:
+    branches: [feat/e8-offline-mission-review-20261108]
+  pull_request:
+    branches: [feat/e7-offline-delegation-20261108]
+permissions:
+  contents: read
+jobs:
+  offline-trace-integration:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Pin reviewed commit and parse sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          node --check tools/enterprise/e8_cockpit/e8_mission_board.mjs
+          node --check tools/enterprise/e8_cockpit/e8_board_client.js
+          node --check tools/enterprise/e8_cockpit/test_e8_mission_board.mjs
+          node --check tools/enterprise/e8_cockpit/e8_mission_board_browser.mjs
+      - name: Actual offline E8 caseboard, hostile evidence and file-boundary tests
+        shell: bash
+        env:
+          AETHERIS_E8_OFFLINE_DASHBOARD_OPT_IN: 'no'
+          AETHERIS_E7_OFFLINE_DELEGATION_OPT_IN: 'no'
+        run: |
+          set -euo pipefail
+          node --test tools/enterprise/e8_cockpit/test_e8_mission_board.mjs
+          node --test tools/enterprise/e7_agents/test_e7_offline_delegation.mjs
+      - name: Default plan-only without reading nonexistent mission files
+        shell: bash
+        env:
+          AETHERIS_E8_OFFLINE_DASHBOARD_OPT_IN: 'no'
+        run: |
+          set -euo pipefail
+          node tools/enterprise/e8_cockpit/e8_mission_board.mjs --source-dir /nonexistent-review-evidence |
+            node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const d=JSON.parse(s);if(d.status!=="PLAN_ONLY_NO_MISSION_DATA_READ"||d.authenticatedTenantAccess!==false||d.stage45Go!==false)process.exit(1);console.log("E8_NO_MISSION_READ_NO_MODEL_NO_AUTHORITY_PASS")})'
+      - name: Retain NO_GO release boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'Stage45 NO_GO' docs/runtime/E8_OFFLINE_MISSION_REVIEW_20261108.md
+          echo E8_OFFLINE_ONLY_TASK_API_QUARANTINE_INTACT
+  genuine-browser-review:
+    needs: offline-trace-integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22'
+      - name: Exact reviewed HEAD
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+      - name: Generate actual E7 specialist evidence and compile interactive E8 HTML
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs/promises';
+          import os from 'node:os';
+          import path from 'node:path';
+          import {review} from './tools/enterprise/e7_agents/e7_offline_delegation.mjs';
+          import {build} from './tools/enterprise/e8_cockpit/e8_mission_board.mjs';
+          const temp=await fs.mkdtemp(path.join(os.tmpdir(),'e8-genuine-e7-'));
+          try{
+            const ids=[
+              '984f254a-b4a7-4c4e-84ba-34056d28bb76',
+              'b74e3515-67aa-4d7b-8981-f4f150d10db0'
+            ];
+            const evidence=[];
+            for(let n=0;n<2;n++){
+              const dir=path.join(temp,'site-'+n);
+              await fs.mkdir(dir);
+              await fs.writeFile(path.join(dir,'index.html'),
+                '<!doctype html><html lang="en"><head><link rel="stylesheet" href="./styles.css"><script src="./scene.js" defer></script></head><body><a class="skip-link" href="#main">Skip</a><main id="main"><h1>Fictional operator fixture</h1></main></body></html>');
+              await fs.writeFile(path.join(dir,'styles.css'),
+                '@media(prefers-reduced-motion:reduce){*{animation:none}}');
+              await fs.writeFile(path.join(dir,'scene.js'),n===0?
+                "document.documentElement.dataset.test='offline';":
+                'fetch("https://denied.invalid/model");');
+              evidence.push(await review({workspace:dir,requestId:ids[n],operatorOptIn:'yes'}));
+            }
+            const {files,manifest}=await build(evidence);
+            const out='target/e8/review-board';
+            await fs.mkdir(out,{recursive:true});
+            for(const [name,bytes] of Object.entries(files))
+              await fs.writeFile(path.join(out,name),bytes,{flag:'wx',mode:0o600});
+            if(manifest.inputCaseCount!==2||manifest.ownerAuthenticated!==false||
+               manifest.stage45Go!==false)throw Error('E8_BAD_EVIDENCE_OR_RELEASE_CLAIM');
+            console.log('E8_REAL_E7_TWO_CASES_TO_OFFLINE_BOARD_PASS');
+          }finally{await fs.rm(temp,{recursive:true,force:true});}
+          NODE
+      - name: Install actual Chromium and pinned Playwright
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix tools/enterprise/e8_cockpit --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.55.0
+          tools/enterprise/e8_cockpit/node_modules/.bin/playwright install --with-deps chromium
+      - name: Test filters, search, case selection, keyboard, mobile and reduced motion
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/enterprise/e8_cockpit/e8_mission_board_browser.mjs
+          echo E8_REAL_OFFLINE_CHROMIUM_ACCEPTANCE_PASS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: success()
+        with:
+          name: e8-offline-synthetic-mission-review-no-owner-approval
+          path: target/e8/review-board/
+          if-no-files-found: error
+          retention-days: 7
