@@ -41,11 +41,20 @@ jobs:
         run: |
           set -euo pipefail
           node --test tools/enterprise/e7_agents/test_e7_offline_delegation.mjs
-      - name: Inherited E6 owner-approval policy regression
+      - name: Inherited E6 per-request owner-approval regression (both OS)
         shell: bash
         run: |
           set -euo pipefail
-          node --test tools/enterprise/e6_studio/next-studio/test_w5l_owner_cpu_gate.mjs tools/enterprise/e6_studio/next-studio/test_w5l_request_approval.mjs
+          node --test tools/enterprise/e6_studio/next-studio/test_w5l_request_approval.mjs
+      - name: Inherited E6 workflow-text source assertions (original Linux LF)
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This unchanged legacy test compares literal LF bytes in YAML.
+          # Windows checkout rewrites them to CRLF; do not weaken its asserts
+          # or rewrite the inherited source just for this E7 feature.
+          node --test tools/enterprise/e6_studio/next-studio/test_w5l_owner_cpu_gate.mjs
       - name: Real no-file default CLI plan-only process
         shell: bash
         env:
