@@ -135,8 +135,29 @@ def _docker_archive(path: Path, revision: str, image_id: str) -> dict:
                     if not entry.isfile() or entry.size < 0:
                         deny("TAR_UNSAFE_ENTRY_TYPE")
                     files.add(normalized)
-                    if (normalized == "manifest.json"
-                            or normalized.endswith(".json")):
+                    # Modern Docker 28+ uses an OCI-layout Docker save:
+                    # Config and layers are blobs/sha256/<digest>, NOT
+                    # legacy <digest>.json and <layer-id>/layer.tar. Verify
+                    # every OCI blob's actual content hash while streaming;
+                    # accepting the newer path without checking the digest
+                    # would substantially weaken artifact integrity.
+                    blob_name = re.fullmatch(r"blobs/sha256/([a-f0-9]{64})",
+                                             normalized)
+                    if blob_name:
+                        stream = source.extractfile(entry)
+                        if stream is None:
+                            deny("OCI_BLOB_UNREADABLE")
+                        digest = hashlib.sha256()
+                        buffer = bytearray() if entry.size <= MAX_JSON_BYTES else None
+                        for chunk in iter(lambda: stream.read(1 << 20), b""):
+                            digest.update(chunk)
+                            if buffer is not None:
+                                buffer.extend(chunk)
+                        if digest.hexdigest() != blob_name.group(1):
+                            deny("OCI_BLOB_DIGEST_MISMATCH")
+                        if buffer is not None:
+                            text_json[normalized] = bytes(buffer)
+                    elif normalized == "manifest.json" or normalized.endswith(".json"):
                         if entry.size > MAX_JSON_BYTES:
                             deny("TAR_JSON_TOO_LARGE")
                         member = source.extractfile(entry)
@@ -153,17 +174,41 @@ def _docker_archive(path: Path, revision: str, image_id: str) -> dict:
         deny("DOCKER_MANIFEST_INVALID")
     config_name = image.get("Config")
     tag = IMAGE + ":" + revision
-    if (not isinstance(config_name, str)
-            or not re.fullmatch(r"[a-f0-9]{64}\.json", config_name)
+    is_legacy_config = isinstance(config_name, str) and bool(
+        re.fullmatch(r"[a-f0-9]{64}\.json", config_name))
+    is_oci_config = isinstance(config_name, str) and bool(
+        re.fullmatch(r"blobs/sha256/[a-f0-9]{64}", config_name))
+    if (not (is_legacy_config or is_oci_config)
             or image.get("RepoTags") != [tag]
             or not isinstance(image.get("Layers"), list)
             or not image["Layers"]
             or len(image["Layers"]) > 1200
             or len(set(image["Layers"])) != len(image["Layers"])):
         deny("DOCKER_IMAGE_IDENTITY")
-    if any(not isinstance(x, str) or x not in files
-           or not x.endswith("/layer.tar") for x in image["Layers"]):
+    def valid_layer(item):
+        if not isinstance(item, str) or item not in files:
+            return False
+        if is_oci_config:
+            return bool(re.fullmatch(r"blobs/sha256/[a-f0-9]{64}", item))
+        return item.endswith("/layer.tar")
+    if not all(valid_layer(item) for item in image["Layers"]):
         deny("DOCKER_LAYER_REFERENCE")
+    if is_oci_config:
+        # OCI layout must not mix legacy and content-addressed layers.
+        sources = image.get("LayerSources")
+        if sources is not None:
+            if not isinstance(sources, dict):
+                deny("OCI_LAYER_SOURCES_INVALID")
+            expected = {"sha256:" + layer.rsplit("/", 1)[-1]
+                        for layer in image["Layers"]}
+            if set(sources) != expected:
+                deny("OCI_LAYER_SOURCES_MISMATCH")
+            for digest_name, source_info in sources.items():
+                if (not isinstance(source_info, dict) or
+                        source_info.get("digest") != digest_name or
+                        not isinstance(source_info.get("size"), int) or
+                        source_info["size"] <= 0):
+                    deny("OCI_LAYER_SOURCE_INVALID")
     if config_name not in files:
         deny("MISSING_DOCKER_CONFIG")
     cfg_bytes = text_json.get(config_name)
