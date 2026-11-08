@@ -41,6 +41,10 @@ async function loadWorkspace(folder){
   if(typeof folder!=='string'||!path.isAbsolute(folder))fail('ABSOLUTE_WORKSPACE_REQUIRED');
   const root=await fs.lstat(folder);
   if(!root.isDirectory()||root.isSymbolicLink())fail('UNSAFE_WORKSPACE_DIRECTORY');
+  // Resolve the trusted workspace once. Windows runner directories can have
+  // junction/canonical spelling differences; compare each child against this
+  // resolved root, not the caller's original path spelling.
+  const canonicalRoot=await fs.realpath(folder);
   const list=(await fs.readdir(folder)).sort();
   if(list.join('|')!==FILES.slice().sort().join('|'))fail('NON_ALLOWLISTED_INPUT_FILE');
   const input={}, digests=[];let total=0;
@@ -56,7 +60,7 @@ async function loadWorkspace(folder){
     const real=await fs.realpath(target);
     const norm=s=>process.platform==='win32'
       ?path.resolve(s).toLowerCase():path.resolve(s);
-    if(norm(real)!==norm(target))fail('UNSAFE_INPUT_FILE');
+    if(norm(real)!==norm(path.join(canonicalRoot,name)))fail('UNSAFE_INPUT_FILE');
     const f=await fs.open(target,FS.O_RDONLY|(FS.O_NOFOLLOW||0));
     try{
       const meta=await f.stat();
