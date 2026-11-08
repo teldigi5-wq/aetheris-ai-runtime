@@ -141,10 +141,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python tools/enterprise/e9_release/e9_hosted_image_verifier.py \
-            --verify-local --artifact-dir "$PWD/target/e9/artifacts" \
-            --revision "$GITHUB_SHA" |
-            python -c 'import json,sys; r=json.load(sys.stdin);assert r["status"]=="HOSTED_IMAGE_INTEGRITY_VERIFIED_RELEASE_NO_GO" and r["checks"]["imageConfigDigestMatched"] and r["releaseAuthorized"] is False and r["stage45Go"] is False and r["selfReportedOriginIsNotCryptographicAttestation"] is True;print("E9_REAL_DOCKER_INTEGRITY_PASS_RELEASE_NO_GO")'
+          PYTHONPATH=tools/enterprise/e9_release python - <<'PY'
+          import json,os,tarfile
+          from pathlib import Path
+          import e9_hosted_image_verifier as e9
+          root=Path.cwd()/"target/e9/artifacts"
+          sha=os.environ["GITHUB_SHA"]
+          try:
+              outcome=e9.verify(str(root),sha)
+          except e9.Denied as error:
+              # Only this original synthetic scratch fixture is inspected.
+              # Do not print actual production archive file names.
+              with tarfile.open(root/f"aetheris-ai-runtime-{sha}.tar.gz","r:gz") as tf:
+                  print("E9_SYNTHETIC_ARCHIVE_MEMBER_TYPES",[
+                      (x.name,x.type.decode("latin-1")) for x in tf.getmembers()[:16]])
+                  try:
+                      item=tf.extractfile("manifest.json")
+                      if item:
+                          print("E9_SYNTHETIC_DOCKER_MANIFEST",item.read(5000).decode())
+                  except KeyError: pass
+              print("E9_SYNTHETIC_VERIFY_DENIED",str(error))
+              raise
+          assert outcome["status"]=="HOSTED_IMAGE_INTEGRITY_VERIFIED_RELEASE_NO_GO"
+          assert outcome["checks"]["imageConfigDigestMatched"]
+          assert outcome["releaseAuthorized"] is False and outcome["stage45Go"] is False
+          assert outcome["selfReportedOriginIsNotCryptographicAttestation"] is True
+          print("E9_REAL_DOCKER_INTEGRITY_PASS_RELEASE_NO_GO")
+          PY
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: success()
         with:
