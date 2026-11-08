@@ -1,0 +1,82 @@
+name: Runtime #23 signed session fenced task creation (disposable PG16)
+on:
+  push:
+    branches: [security/task-session-fence-creation-20261108]
+  pull_request:
+    branches: [security/verified-task-creation-jdbc-20261108]
+permissions:
+  contents: read
+jobs:
+  full-java-and-http-quarantine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with: {distribution: temurin, java-version: '21.0.12', cache: maven}
+      - name: Verify source boundary stays unactivated
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          grep -Fq 'SC_NOT_FOUND' orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java
+          for file in RuntimeVerifiedTaskCreationProbe RuntimeVerifiedTaskSessionCreationProbe RuntimePinnedLocalFenceLeaseVerifier RuntimePinnedWorkloadIdentityVerifier; do
+            ! grep -Eq '@Component|@Service|@RestController|@Bean' "orchestrator-service/src/main/java/io/aetheris/orchestrator/security/${file}.java"
+          done
+          ! grep -q 'subscribeAll(' orchestrator-service/src/main/java/io/aetheris/orchestrator/task/TaskEventStreamService.java
+      - name: Full orchestrator Maven Java 21 tests
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+  real-disposable-session-fence-revocation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ownerlab_ci
+          POSTGRES_PASSWORD: disposable_ci_only_not_a_real_secret
+          POSTGRES_DB: ownerlab_disposable
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ownerlab_ci -d ownerlab_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      AETHERIS_SESSION_CREATE_JDBC_MUST_RUN: 'yes'
+      PGHOST: '127.0.0.1'
+      PGDATABASE: ownerlab_disposable
+      PGUSER: ownerlab_ci
+      PGPASSWORD: disposable_ci_only_not_a_real_secret
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with: {distribution: temurin, java-version: '21.0.12', cache: maven}
+      - name: Check local disposable database and exact head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$GITHUB_ACTIONS" = true
+          test "$PGHOST" = '127.0.0.1'
+          test "$PGDATABASE" = ownerlab_disposable
+          test "$PGUSER" = ownerlab_ci
+          test "$AETHERIS_SESSION_CREATE_JDBC_MUST_RUN" = yes
+      - name: Test real signed JWTs and PostgreSQL16 session/fence row locks
+        run: ./mvnw -B -f orchestrator-service/pom.xml -Dtest=RuntimeVerifiedTaskSessionCreationJdbcTest test
+      - name: Verify no-skip and schema cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+          path=Path('orchestrator-service/target/surefire-reports/TEST-io.aetheris.orchestrator.security.RuntimeVerifiedTaskSessionCreationJdbcTest.xml')
+          root=ET.parse(path).getroot()
+          assert int(root.attrib['tests']) >= 6,root.attrib
+          assert all(int(root.attrib.get(k,'0')) == 0 for k in ('errors','failures','skipped')),root.attrib
+          print('RUNTIME_REAL_SESSION_FENCE_CREATE_SIX_TESTS_NO_SKIPS_PASS')
+          PY
+          echo 'REVIEW_ONLY_NO_HTTP_OR_DEPLOYMENT_STAGE45_NO_GO'
