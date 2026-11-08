@@ -72,3 +72,9 @@ These are release **acceptance gates**, not 9 new sequential product stages; Sta
 4. Build E4 through E9 only behind identity, sandbox, capability and release policy gates; validate on owner PC during Execution Phase A.
 
 **Strict safety:** live trading, payouts, unrestricted shell, browser credentials, production deployments and customer website mutation remain disabled. This report changes only documentation/test fixtures, not runtime agent permissions.
+
+## E9 distinct preview checkpoint — 9 November 2026 (NOT CERTIFIED)
+
+An unmerged E9 draft based on E8 review PR #290 adds **actual hosted Docker-save artifact integrity verification** and removes **automatic GitHub prerelease publication** from the runtime image-provenance workflow on the preview branch. The build, upload-as-CI-artifact, non-root workspace and round-trip verification remain. Signed build provenance, real runtime acceptance, SBOM/security attestation, owner PC tests, Stage45 and external approval remain open. See [E9 guard and operator verifier](E9_HOSTED_RUNTIME_IMAGE_RELEASE_GUARD_20261109.md).
+
+This increment is not another E8 static dashboard. **Do not mark E9 complete or change the existing NO_GO release decision based on a verified hosted fixture.**
