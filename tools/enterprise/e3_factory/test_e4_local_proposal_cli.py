@@ -50,6 +50,21 @@ class LocalCliTests(unittest.TestCase):
         self.assertEqual(code,2)
         self.assertEqual(result["status"],"DENIED_EXPLICIT_DOUBLE_LOCAL_OPT_IN_REQUIRED")
 
+    def test_explicit_local_denies_missing_quota_store_before_provider(self):
+        import e4_local_quota as quota
+        with (mock.patch.dict(os.environ,{
+                cli.LOCAL_EXPERIMENT_OPT_IN:"yes",
+                e36.OPT_LOCAL:"yes",
+                quota.ROOT_ENV:""},clear=False),
+              mock.patch.object(e36,"send",
+                  side_effect=AssertionError("NO PROVIDER REQUEST")) as send):
+            code,result=run_cli("--model","qwen2.5-coder:1.5b",
+                                "--task","scroll","--run-local")
+            send.assert_not_called()
+        self.assertEqual(code,2)
+        self.assertEqual(result["status"],"DENIED_SHARED_LOCAL_QUOTA_UNAVAILABLE")
+        self.assertFalse(result["cloudFallbackPermitted"])
+
     def test_explicit_single_attempt_dispatch_is_never_an_owner_approval(self):
         payload={
             "evidenceClass":"E4_EXPLICIT_LOCAL_SINGLE_ATTEMPT_UNTRUSTED_PROPOSAL",

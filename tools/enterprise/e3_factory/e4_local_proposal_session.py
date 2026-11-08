@@ -13,6 +13,7 @@ from typing import Any
 
 import e36_free_model_router as e36
 import e4_free_route_admission as e4
+from e4_local_quota import MAX_DAILY_ATTEMPTS, reserve_local_attempt
 
 LOCAL_EXPERIMENT_OPT_IN = "AETHERIS_E4_EXPLICIT_LOCAL_SESSION_OPT_IN"
 
@@ -45,6 +46,8 @@ class LocalProposalSession:
             if self._attempted:
                 raise ValueError("E4_LOCAL_SESSION_BUDGET_EXHAUSTED")
             self._attempted = True  # Reserve BEFORE network or model attempt.
+        # Reserve durable daily slot BEFORE any local model/network request.
+        daily_attempt = reserve_local_attempt()
         tags, _ = e36.send("ollama", "GET", "/api/tags")
         models = tags.get("models")
         if (type(models) is not list or len(models) > 64 or
@@ -88,6 +91,9 @@ class LocalProposalSession:
             "task": task,
             "sessionAttemptBudget": 1,
             "sessionAttemptsConsumed": 1,
+            "sharedLocalDailyAttemptLimit": MAX_DAILY_ATTEMPTS,
+            "sharedLocalDailyAttemptNumber": daily_attempt,
+            "sharedQuotaIsSecurityAuthority": False,
             "localOllamaDelegationPerformed": True,
             "remoteProviderFallbackPermitted": False,
             "modelDownloadsPermitted": False,
