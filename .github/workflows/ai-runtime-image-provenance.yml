@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   IMAGE_NAME: aetheris-ai-runtime
@@ -121,7 +121,8 @@ jobs:
           workspace_probe = Path('runtime-workspace-write-probe.txt').read_text(encoding='utf-8').strip()
           if workspace_probe != 'PASS':
               raise SystemExit(f'unexpected workspace write probe result: {workspace_probe!r}')
-          canonical_main = os.environ.get('GITHUB_EVENT_NAME') == 'push' and os.environ.get('GITHUB_REF') == 'refs/heads/main'
+          # Hosted image proof is NOT approval to create a GitHub Release.
+          # Stage45 is NO_GO and owner release authorization is unverified.
           release_tag = f'runtime-{sha}'
           report = {
               'schema_version': 1,
@@ -134,13 +135,16 @@ jobs:
               'archive': archive.name,
               'archive_sha256': digest,
               'release_tag': release_tag,
-              'release_publication_expected': canonical_main,
+              'release_publication_expected': False,
+              'release_authorized': False,
+              'owner_release_authorization_verified': False,
+              'stage45Go': False,
               'runtime_user': '10001:10001',
               'workspace_write_probe': True,
               'registry_publication_claim': False,
               'production_deployment_claim': False,
               'physical_pc_validation': False,
-              'truth_boundary': 'Hosted GitHub Actions runtime image build, non-root workspace write probe, and archive round-trip proof. This does not claim container-registry publication, production deployment, or physical owner-PC validation.'
+              'truth_boundary': 'Hosted GitHub Actions runtime image build, non-root workspace write probe and archive round-trip proof only. Automatic GitHub Release publication is disabled while Stage45 NO_GO. This does not certify supply-chain origin, registry publication, owner approval, production deployment or physical owner-PC validation.'
           }
           Path('runtime-image-provenance.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n', encoding='utf-8')
           print(json.dumps(report, indent=2, sort_keys=True))
@@ -161,23 +165,3 @@ jobs:
             runtime-image-provenance.json
           if-no-files-found: error
 
-      - name: Publish canonical exact-revision release asset
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          tag="runtime-${GITHUB_SHA}"
-          archive="${IMAGE_NAME}-${GITHUB_SHA}.tar.gz"
-          gh release create "$tag" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "Aetheris AI Runtime ${GITHUB_SHA}" \
-            --notes "Hosted exact-revision AI runtime image artifact for ${GITHUB_REPOSITORY}@${GITHUB_SHA}. This is a GitHub Release asset, not a container-registry publication or production deployment." \
-            --prerelease \
-            "$archive" \
-            "${archive}.sha256" \
-            runtime-image-id.txt \
-            runtime-workspace-write-probe.txt \
-            runtime-image-provenance.json
