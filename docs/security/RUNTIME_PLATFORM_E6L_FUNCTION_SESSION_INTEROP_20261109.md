@@ -47,7 +47,7 @@ First successful integrated source/test checkpoint after correcting a mistaken f
 - **Full Runtime Java21 orchestrator regression**: **377/377**, zero failures/errors/skips, including prior 5/5 direct-port tests. Three separate Maven BUILD SUCCESS in total.
 - Source-contract, foreign SHA/blob pinning, report XML no-skip and test-fixture teardown checks passed.
 
-The subsequent tightening of 0600 file creation (test-only) and this documentation require **final-HEAD CI recheck**. Never conflate a previous green SHA with a later unverified SHA.
+**Complete implementation + 0600 file hardening + README/doc review checkpoint:** `fcd705e28ce5116cc17ceab8d13f1bdd77445b67` was independently rerun by both [push Actions #42579790541](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42579790541) and [PR Actions #42579874481](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42579874481), each **COMPLETED SUCCESS, 2/2 jobs**, with unchanged 1 real Platform producer + 7 real Runtime HTTP/PG16 + 377 Runtime Java regression results, zero failures/errors/skips. This runbook evidence update itself is documentation-only; consult the PR's latest exact-head CI for any later commit.
 
 ## Remaining real release blockers — do not retry finished E6L
 
