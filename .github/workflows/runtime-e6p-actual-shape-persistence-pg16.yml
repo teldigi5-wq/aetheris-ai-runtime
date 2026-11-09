@@ -178,12 +178,12 @@ jobs:
           DROP SCHEMA IF EXISTS e6p_review CASCADE;
           DROP TABLE IF EXISTS public.aetheris_mission_sessions CASCADE;
           DROP TABLE IF EXISTS public.aetheris_tasks CASCADE;
+          DROP SCHEMA IF EXISTS e6o_review CASCADE;
           DROP ROLE IF EXISTS e6p_writer_login;
           DROP ROLE IF EXISTS e6p_reader_login;
           DROP ROLE IF EXISTS e6p_writer;
           DROP ROLE IF EXISTS e6p_reader;
           DROP ROLE IF EXISTS e6p_exec_owner;
-          DROP SCHEMA IF EXISTS e6o_review CASCADE;
           DROP ROLE IF EXISTS e6o_object_reader;
           DROP ROLE IF EXISTS e6o_exec_owner;
           DROP SCHEMA IF EXISTS e6j_runtime_auth CASCADE;
