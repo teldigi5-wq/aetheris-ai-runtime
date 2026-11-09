@@ -61,6 +61,10 @@ Certification is intentionally narrower than a production claim:
 - there is **no live-money execution claim**;
 - CI and evidence gates must not be weakened or bypassed to advance a runtime reference.
 
+## Runtime Security #23 — owner-read implementation preview (9 November 2026)
+
+The separately stacked **review-only** candidate for authenticated task lookup, scoped recent listing, and paginated task-event headers is documented in [signed-session owner-read review](docs/security/RUNTIME_OWNER_TASK_READ_HISTORY_20261109.md). The code requires cryptographically verified signed Identity, registered session/JTI, signer/epoch, exact membership and fenced workload **in the same PostgreSQL authorization query**, but runs only against disposable CI registry fixtures. Existing Task/Mission HTTP routes remain fail-closed; global SSE stays disabled. No protected-main merge, production migration, authenticated client activation, deployment or release certification is implied. Platform historical Stage 34/34 remains unchanged; Stage 45 remains NO_GO.
+
 ## Governance principle
 
 Models and reasoning workers may propose actions, but deterministic policy, approval and verification boundaries remain authoritative. High-risk, destructive, privileged, public or financial actions require the appropriate policy path; an `ALLOW` decision means only that an action is eligible, not that it executed successfully.
