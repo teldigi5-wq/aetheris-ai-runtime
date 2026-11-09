@@ -1,9 +1,9 @@
 name: Runtime #23 signed session fenced task creation (disposable PG16)
 on:
   push:
-    branches: [security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109, security/task-session-owner-reads-20261109]
+    branches: [security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109, security/task-session-owner-reads-20261109, security/runtime-direct-http-admission-20261109]
   pull_request:
-    branches: [security/verified-task-creation-jdbc-20261108, security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109]
+    branches: [security/verified-task-creation-jdbc-20261108, security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109, security/task-session-owner-reads-20261109]
 permissions:
   contents: read
 jobs:
@@ -25,8 +25,25 @@ jobs:
             ! grep -Eq '@Component|@Service|@RestController|@Bean' "orchestrator-service/src/main/java/io/aetheris/orchestrator/security/${file}.java"
           done
           ! grep -q 'subscribeAll(' orchestrator-service/src/main/java/io/aetheris/orchestrator/task/TaskEventStreamService.java
+          # An unregistered filter is only a reviewable HTTP transport seam.
+          # No auto-registered authentication or public task-route activation.
+          ! grep -Eq '@Component|@Service|@RestController|@Bean|@Configuration' \
+            orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeSignedIdentityHttpFilter.java
       - name: Full orchestrator Maven Java 21 tests
         run: ./mvnw -B -f orchestrator-service/pom.xml test
+      - name: Require actual direct-port bearer socket tests without skips
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+          report=Path('orchestrator-service/target/surefire-reports/TEST-io.aetheris.orchestrator.security.RuntimeDirectPortBearerSocketTest.xml')
+          root=ET.parse(report).getroot()
+          assert int(root.attrib['tests']) >= 5,root.attrib
+          assert all(int(root.attrib.get(k,'0'))==0 for k in ('errors','failures','skipped')),root.attrib
+          print('RUNTIME_DIRECT_SOCKET_SIGNED_BEARER_FIVE_TESTS_NO_SKIPS_PASS')
+          PY
   real-disposable-session-fence-revocation:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
