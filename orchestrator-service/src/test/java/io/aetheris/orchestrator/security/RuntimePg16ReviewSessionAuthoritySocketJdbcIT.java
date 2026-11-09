@@ -229,7 +229,8 @@ class RuntimePg16ReviewSessionAuthoritySocketJdbcIT {
     private static void update(String sql) throws Exception {
         try(Connection c=admin();Statement s=c.createStatement()) {
             s.execute("SET search_path TO "+SCHEMA);
-            assertEquals(1,s.executeUpdate(sql));
+            int changed=s.executeUpdate(sql);
+            assertEquals(sql.startsWith("ALTER TABLE")?0:1,changed);
         }
     }
 
