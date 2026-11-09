@@ -1,9 +1,9 @@
 name: Runtime #23 signed session fenced task creation (disposable PG16)
 on:
   push:
-    branches: [security/task-session-fence-creation-20261108]
+    branches: [security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109]
   pull_request:
-    branches: [security/verified-task-creation-jdbc-20261108]
+    branches: [security/verified-task-creation-jdbc-20261108, security/task-session-fence-creation-20261108]
 permissions:
   contents: read
 jobs:
