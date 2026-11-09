@@ -6,9 +6,9 @@ CREATE ROLE e6p_exec_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
 CREATE ROLE e6p_writer NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
 CREATE ROLE e6p_reader NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
 GRANT e6j_reader TO e6p_exec_owner;
+-- The task writer is NOT granted raw table SELECT/UPDATE. It can call
+-- one narrow row-locking helper executed as the preexisting E6O table owner.
 GRANT USAGE ON SCHEMA e6o_review TO e6p_exec_owner;
-GRANT SELECT ON e6o_review.resource_memberships,
-                e6o_review.workload_fences TO e6p_exec_owner;
 CREATE SCHEMA e6p_review AUTHORIZATION e6p_exec_owner;
 REVOKE ALL ON SCHEMA e6p_review FROM PUBLIC;
 
@@ -118,8 +118,38 @@ CREATE TABLE e6p_review.fence_bindings(
   project_key varchar(96) NOT NULL,
   FOREIGN KEY(fence_id) REFERENCES e6o_review.workload_fences(fence_id)
 );
-ALTER TABLE e6p_review.fence_bindings OWNER TO e6p_exec_owner;
+ALTER TABLE e6p_review.fence_bindings OWNER TO e6o_exec_owner;
 REVOKE ALL ON e6p_review.fence_bindings FROM PUBLIC;
+-- e6o_exec_owner owns the membership/fence authority, and now also the
+-- operator-approved fence-to-tenant mapping. Only it may row-lock all three.
+GRANT USAGE ON SCHEMA e6p_review TO e6o_exec_owner;
+CREATE FUNCTION e6o_review.e6p_locked_membership(
+  p_uid bigint,p_tenant varchar,p_project varchar,p_fence uuid)
+RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path=pg_catalog,pg_temp
+AS $binding$
+DECLARE v_allowed boolean;
+BEGIN
+  SELECT TRUE INTO v_allowed
+  FROM e6o_review.resource_memberships m
+  JOIN e6p_review.fence_bindings b
+    ON b.tenant_key=m.tenant_key AND b.project_key=m.project_key
+    AND b.fence_id=p_fence
+  JOIN e6o_review.workload_fences f
+    ON f.fence_id=b.fence_id
+  WHERE m.uid=p_uid AND m.tenant_key=p_tenant
+    AND m.project_key=p_project AND m.active AND f.active
+  FOR SHARE OF m,b,f;
+  RETURN COALESCE(v_allowed,FALSE);
+END;
+$binding$;
+ALTER FUNCTION e6o_review.e6p_locked_membership(
+ bigint,varchar,varchar,uuid) OWNER TO e6o_exec_owner;
+REVOKE ALL ON FUNCTION e6o_review.e6p_locked_membership(
+ bigint,varchar,varchar,uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION e6o_review.e6p_locked_membership(
+ bigint,varchar,varchar,uuid) TO e6p_exec_owner;
 
 -- Trusted caller passes a *cryptographically verified* signed principal only.
 -- The SQL rechecks that exact enrolled JTI + signer + epoch and live
@@ -153,16 +183,8 @@ BEGIN
  SELECT e6j_runtime_auth.check_signed_session(
    p_issuer,p_kid,p_jti,p_uid,p_iat) INTO v_session;
  IF NOT COALESCE(v_session,FALSE) THEN RETURN FALSE; END IF;
- SELECT TRUE INTO v_membership
- FROM e6o_review.resource_memberships m
- JOIN e6p_review.fence_bindings b
-   ON b.tenant_key=m.tenant_key AND b.project_key=m.project_key
-   AND b.fence_id=p_fence
- JOIN e6o_review.workload_fences f
-   ON f.fence_id=b.fence_id
- WHERE m.uid=p_uid AND m.tenant_key=p_tenant
-   AND m.project_key=p_project AND m.active AND f.active
- FOR SHARE OF m,b,f;
+ SELECT e6o_review.e6p_locked_membership(
+     p_uid,p_tenant,p_project,p_fence) INTO v_membership;
  IF NOT COALESCE(v_membership,FALSE) THEN RETURN FALSE; END IF;
  IF p_kind='TASK' THEN
   INSERT INTO public.aetheris_tasks(
@@ -208,31 +230,21 @@ BEGIN
  IF p_kind='TASK' THEN
   SELECT t.title INTO v_label
   FROM public.aetheris_tasks t
-  JOIN e6o_review.resource_memberships m
-    ON m.uid=t.owner_identity_uid AND m.tenant_key=t.owner_tenant_key
-    AND m.project_key=t.owner_project_key
-  JOIN e6p_review.fence_bindings b
-    ON b.tenant_key=m.tenant_key AND b.project_key=m.project_key
-    AND b.fence_id=t.owner_workload_fence_id
-  JOIN e6o_review.workload_fences f ON f.fence_id=b.fence_id
-  WHERE t.id=p_id AND t.owner_identity_uid=p_uid AND m.active AND f.active
+  WHERE t.id=p_id AND t.owner_identity_uid=p_uid
     AND t.owner_verified_at IS NOT NULL AND t.owner_tenant_key=p_tenant
     AND t.owner_project_key=p_project
-  FOR SHARE OF t,m,b,f;
+    AND e6o_review.e6p_locked_membership(
+      p_uid,p_tenant,p_project,t.owner_workload_fence_id)
+  FOR SHARE OF t;
  ELSIF p_kind='MISSION' THEN
   SELECT t.title INTO v_label
   FROM public.aetheris_mission_sessions t
-  JOIN e6o_review.resource_memberships m
-    ON m.uid=t.owner_identity_uid AND m.tenant_key=t.owner_tenant_key
-    AND m.project_key=t.owner_project_key
-  JOIN e6p_review.fence_bindings b
-    ON b.tenant_key=m.tenant_key AND b.project_key=m.project_key
-    AND b.fence_id=t.owner_workload_fence_id
-  JOIN e6o_review.workload_fences f ON f.fence_id=b.fence_id
-  WHERE t.id=p_id AND t.owner_identity_uid=p_uid AND m.active AND f.active
+  WHERE t.id=p_id AND t.owner_identity_uid=p_uid
     AND t.owner_verified_at IS NOT NULL AND t.owner_tenant_key=p_tenant
     AND t.owner_project_key=p_project
-  FOR SHARE OF t,m,b,f;
+    AND e6o_review.e6p_locked_membership(
+      p_uid,p_tenant,p_project,t.owner_workload_fence_id)
+  FOR SHARE OF t;
  END IF;
  RETURN v_label;
 END;
