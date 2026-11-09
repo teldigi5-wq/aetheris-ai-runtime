@@ -14,7 +14,7 @@ A unique short-lived, explicit writable READ COMMITTED PostgreSQL transaction is
 
 The class has **no `@Component`/`@Bean` auto-registration**. No production database migration, identity writer, gateway change, controller, Task/Mission route, or SSE is activated. Despite real PostgreSQL, the referenced relations are **disposable synthetic review contracts**, not a certified production session registry. This component must not be wired to live product routes.
 
-## Required new executable evidence — pending exact-head CI
+## Required executable evidence — verified at code-and-test checkpoint
 
 The separate `RuntimePg16ReviewSessionAuthoritySocketJdbcIT` boots isolated embedded Tomcat on **real loopback TCP**, creates/drops a fresh random PostgreSQL16 review schema, uses ephemeral RS256 credentials, and connects the real servlet filter to the actual JDBC authority adapter *only* at `/__pg_review_bearer_probe`. Acceptance tests cover:
 
@@ -24,7 +24,7 @@ The separate `RuntimePg16ReviewSessionAuthoritySocketJdbcIT` boots isolated embe
 4. Deliberately unavailable registry yields generic 503 and recovery after restore.
 5. Concurrent uncommitted session-revocation UPDATE blocks the `FOR SHARE` preflight until bounded query timeout; never authorizes the stale ACTIVE row. Committed revocation subsequently returns 401.
 
-The workflow must run **all existing 11** disposable session/task PostgreSQL tests plus **at least 5** socket-to-real-PostgreSQL tests, with **zero failures/errors/skips**, while preserving the full Java 21 suite, its separate five in-memory direct-socket regressions, unconditional 404 Task/Mission quarantine and disabled global SSE. The integration class ends `JdbcIT` to avoid requiring a live database for default `mvn test`; it is explicitly selected in PG16 CI. **Do not claim PASS until exact-head CI reports are checked.**
+The workflow must run **all existing 11** disposable session/task PostgreSQL tests plus **at least 5** socket-to-real-PostgreSQL tests, with **zero failures/errors/skips**, while preserving the full Java 21 suite, its separate five in-memory direct-socket regressions, unconditional 404 Task/Mission quarantine and disabled global SSE. The integration class ends `JdbcIT` to avoid requiring a live database for default `mvn test`; it is explicitly selected in PG16 CI. **Verified code+test checkpoint** `9c974a070f23e212c20a671fba6bb1180da1bc56`: [GitHub Actions #42572189555](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42572189555) **COMPLETED SUCCESS 2/2 jobs**, 9 November 2026. Full orchestrator Java 21 **377/377**, including prior isolated direct-socket **5/5**; independent real disposable PG16 **16/16** comprising existing 11 task/session tests plus **5/5 actual loopback-TCP HTTP-to-PostgreSQL tests**. Every suite reported **zero failures, errors or skips**, with explicit no-skip XML guards and disposable review schema cleanup confirmed. Initial earlier CI failed because a Spring-managed DataSource auto-enabled unrelated JPA repositories; the isolated test was corrected without altering the application verifier, authority SQL, quarantined routes, dependencies, pinned actions or gate thresholds. This is real disposable PostgreSQL and Tomcat test evidence only—not an approved production session registry, Identity writer, external HTTPS, mTLS, or release activation.
 
 ## Explicit limitations / next stage
 
