@@ -65,6 +65,10 @@ Certification is intentionally narrower than a production claim:
 
 The separately stacked **review-only** candidate for authenticated task lookup, scoped recent listing, and paginated task-event headers is documented in [signed-session owner-read review](docs/security/RUNTIME_OWNER_TASK_READ_HISTORY_20261109.md). The code requires cryptographically verified signed Identity, registered session/JTI, signer/epoch, exact membership and fenced workload **in the same PostgreSQL authorization query**, but runs only against disposable CI registry fixtures. Existing Task/Mission HTTP routes remain fail-closed; global SSE stays disabled. No protected-main merge, production migration, authenticated client activation, deployment or release certification is implied. Platform historical Stage 34/34 remains unchanged; Stage 45 remains NO_GO.
 
+## Runtime Security #23 — direct-port bearer admission (9 November 2026)
+
+A subsequent stacked review-only change adds an **unregistered**, independent [Runtime signed-bearer servlet filter](docs/security/RUNTIME_DIRECT_HTTP_BEARER_20261109.md) and real loopback-TCP Tomcat tests. The filter requires pinned RS256 token verification, signed session provenance, an injected live-session authority decision and an appropriate read/write operation scope; without a separately registered authority, it denies all. This is **not** a production-authorized resource server: actual registry migrations/writers, gateway workload trust, direct-port HTTPS/mTLS and per-object admission are not yet approved. Existing Task/Mission HTTP quarantine and global SSE lockdown remain unchanged. Stage 45 remains NO_GO; Platform Stage 34/34 is historical and unchanged.
+
 ## Governance principle
 
 Models and reasoning workers may propose actions, but deterministic policy, approval and verification boundaries remain authoritative. High-risk, destructive, privileged, public or financial actions require the appropriate policy path; an `ALLOW` decision means only that an action is eligible, not that it executed successfully.
