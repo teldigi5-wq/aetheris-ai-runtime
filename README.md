@@ -73,6 +73,10 @@ A subsequent stacked review-only change adds an **unregistered**, independent [R
 
 The next stacked **draft-only** implementation connects the separately reviewed signed-bearer HTTP filter to an actual, short-transaction [PostgreSQL16 session/signer/epoch row-locked authority](docs/security/RUNTIME_PG16_HTTP_SESSION_AUTHORITY_20261109.md), proved only through disposable CI registry tables and loopback-TCP tests. This is a real JDBC review integration, **not** a registered production security filter, approved durable Identity session registry, or Task/Mission HTTP activation. Real enrollment/revocation writers, restricted DB roles, mTLS and direct-port acceptance remain pending; ownerless Task/Mission routes stay hard-404 and global SSE stays off. Stage 45 remains NO_GO.
 
+## Runtime Security #23 — real Platform-issued JWT → function-only Runtime HTTP session proof (S0-E6L, 9 November 2026)
+
+A new stacked **draft-only** [S0-E6L source-pinned interop review](docs/security/RUNTIME_PLATFORM_E6L_FUNCTION_SESSION_INTEROP_20261109.md) uses actual pinned Platform PR #415 RS256+JTI issuer and atomic refresh-session registration, real separate PostgreSQL16 function-only reader and revoker LOGINs, and real loopback-TCP embedded Tomcat with the *unchanged* Runtime bearer filter. It has executable two-user enrollment, scope, unregistered/legacy-token denial and live revocation tests. This is the first jointly verified **review registry** shared by both source checkouts; it is **NOT** a production registry migration, authorized Gateway-to-Runtime HTTPS/mTLS, object-ownership permission, customer API activation or Runtime certified-SHA promotion. Task/Mission requests stay hard-404, global SSE disabled, Stage45 NO_GO and owner-PC BLOCKED_PENDING_HARDWARE.
+
 ## Governance principle
 
 Models and reasoning workers may propose actions, but deterministic policy, approval and verification boundaries remain authoritative. High-risk, destructive, privileged, public or financial actions require the appropriate policy path; an `ALLOW` decision means only that an action is eligible, not that it executed successfully.
