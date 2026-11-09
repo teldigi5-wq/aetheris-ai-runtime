@@ -12,8 +12,14 @@
 **Phase A — Inventory (read-only):** confirm GitHub account/repo, default branch SHA, all open PRs, branch counts with pagination, feature branch lineage, issues, recent Actions, security alerts and existing project roadmap. Record missing access or pages; distinguish development branches from archives.
 
 **Phase B — Resume latest incomplete milestone:**
-1. **First pending checkpoint** — Inspect PR #303 and stacked PRs #294–302 at their exact commits and bases; preserve separated Runtime/Platform ownership.
-   - Gate: capture current branch and commit SHA; existing evidence links; a reproducible negative/positive test; risks; explicitly report blocked/unverified outcomes.
+1. **M1** — Inspect PR #303 and stacked PRs #294–302 at their exact commits and bases; preserve separated Runtime/Platform ownership.
+   - Gate: confirm active branch and exact source SHA, prior test provenance, relevant failure/negative tests, and explicit blocked state.
+2. **M2** — Run exact-head PostgreSQL 16 negative tenant/session/revocation/SQL bypass tests and verify all failures fail closed.
+   - Gate: confirm active branch and exact source SHA, prior test provenance, relevant failure/negative tests, and explicit blocked state.
+3. **M3** — Verify Platform RS256 JTI → Runtime HTTP integration with controlled operators and explicit deployment origins.
+   - Gate: confirm active branch and exact source SHA, prior test provenance, relevant failure/negative tests, and explicit blocked state.
+4. **M4** — Keep Stage 45 NO_GO until genuine multi-brief model results, hardware benchmarks, signed provenance, security and production gates are independently evidenced.
+   - Gate: confirm active branch and exact source SHA, prior test provenance, relevant failure/negative tests, and explicit blocked state.
 
 **Phase C — Consolidation:** only after Phase B gates, review a minimal integration branch/PR. Check independent CI, CodeQL, dependency and secret scanning, reversibility and whether a newer PR supersedes an older one. Never blindly merge a stacked chain, disable gates or force-push.
 
