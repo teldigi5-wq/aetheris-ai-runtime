@@ -69,6 +69,10 @@ The separately stacked **review-only** candidate for authenticated task lookup, 
 
 A subsequent stacked review-only change adds an **unregistered**, independent [Runtime signed-bearer servlet filter](docs/security/RUNTIME_DIRECT_HTTP_BEARER_20261109.md) and real loopback-TCP Tomcat tests. The filter requires pinned RS256 token verification, signed session provenance, an injected live-session authority decision and an appropriate read/write operation scope; without a separately registered authority, it denies all. This is **not** a production-authorized resource server: actual registry migrations/writers, gateway workload trust, direct-port HTTPS/mTLS and per-object admission are not yet approved. Existing Task/Mission HTTP quarantine and global SSE lockdown remain unchanged. Stage 45 remains NO_GO; Platform Stage 34/34 is historical and unchanged.
 
+## Runtime Security #23 — real PostgreSQL-backed HTTP session review (9 November 2026)
+
+The next stacked **draft-only** implementation connects the separately reviewed signed-bearer HTTP filter to an actual, short-transaction [PostgreSQL16 session/signer/epoch row-locked authority](docs/security/RUNTIME_PG16_HTTP_SESSION_AUTHORITY_20261109.md), proved only through disposable CI registry tables and loopback-TCP tests. This is a real JDBC review integration, **not** a registered production security filter, approved durable Identity session registry, or Task/Mission HTTP activation. Real enrollment/revocation writers, restricted DB roles, mTLS and direct-port acceptance remain pending; ownerless Task/Mission routes stay hard-404 and global SSE stays off. Stage 45 remains NO_GO.
+
 ## Governance principle
 
 Models and reasoning workers may propose actions, but deterministic policy, approval and verification boundaries remain authoritative. High-risk, destructive, privileged, public or financial actions require the appropriate policy path; an `ALLOW` decision means only that an action is eligible, not that it executed successfully.

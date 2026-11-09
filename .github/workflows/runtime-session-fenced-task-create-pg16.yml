@@ -1,7 +1,7 @@
 name: Runtime #23 signed session fenced task creation (disposable PG16)
 on:
   push:
-    branches: [security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109, security/task-session-owner-reads-20261109, security/runtime-direct-http-admission-20261109]
+    branches: [security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109, security/task-session-owner-reads-20261109, security/runtime-direct-http-admission-20261109, security/runtime-postgres-http-session-authority-20261109]
   pull_request:
     branches: [security/verified-task-creation-jdbc-20261108, security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109, security/task-session-owner-reads-20261109]
 permissions:
@@ -29,6 +29,8 @@ jobs:
           # No auto-registered authentication or public task-route activation.
           ! grep -Eq '@Component|@Service|@RestController|@Bean|@Configuration' \
             orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeSignedIdentityHttpFilter.java
+          ! grep -Eq '@Component|@Service|@RestController|@Bean|@Configuration' \
+            orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimePg16ReviewSessionAuthority.java
       - name: Full orchestrator Maven Java 21 tests
         run: ./mvnw -B -f orchestrator-service/pom.xml test
       - name: Require actual direct-port bearer socket tests without skips
@@ -82,7 +84,7 @@ jobs:
           test "$PGUSER" = ownerlab_ci
           test "$AETHERIS_SESSION_CREATE_JDBC_MUST_RUN" = yes
       - name: Test real signed JWTs and PostgreSQL16 session/fence row locks
-        run: ./mvnw -B -f orchestrator-service/pom.xml -Dtest=RuntimeVerifiedTaskSessionCreationJdbcTest test
+        run: ./mvnw -B -f orchestrator-service/pom.xml -Dtest=RuntimeVerifiedTaskSessionCreationJdbcTest,RuntimePg16ReviewSessionAuthoritySocketJdbcIT test
       - name: Verify no-skip and schema cleanup
         shell: bash
         run: |
@@ -97,5 +99,12 @@ jobs:
           assert int(root.attrib['tests']) >= 11,root.attrib
           assert all(int(root.attrib.get(k,'0')) == 0 for k in ('errors','failures','skipped')),root.attrib
           print('RUNTIME_OWNER_TASK_READ_HISTORY_ELEVEN_TESTS_NO_SKIPS_PASS')
+          # This second report MUST exist, and MUST contain real TCP/PG16 tests.
+          http=Path('orchestrator-service/target/surefire-reports/TEST-io.aetheris.orchestrator.security.RuntimePg16ReviewSessionAuthoritySocketJdbcIT.xml')
+          assert http.exists(), 'Missing real HTTP/PG16 integration report'
+          h=ET.parse(http).getroot()
+          assert int(h.attrib['tests']) >= 5,h.attrib
+          assert all(int(h.attrib.get(k,'0'))==0 for k in ('errors','failures','skipped')),h.attrib
+          print('RUNTIME_POSTGRES_HTTP_SIGNED_SESSION_FIVE_TESTS_NO_SKIPS_PASS')
           PY
           echo 'REVIEW_ONLY_NO_HTTP_OR_DEPLOYMENT_STAGE45_NO_GO'
