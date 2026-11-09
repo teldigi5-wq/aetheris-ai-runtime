@@ -53,17 +53,19 @@ ALTER TABLE public.aetheris_tasks
   ADD COLUMN owner_identity_uid bigint,
   ADD COLUMN owner_tenant_key varchar(96),
   ADD COLUMN owner_project_key varchar(96),
-  ADD COLUMN owner_verified_at timestamptz;
+  ADD COLUMN owner_verified_at timestamptz,
+  ADD COLUMN owner_workload_fence_id uuid;
 ALTER TABLE public.aetheris_mission_sessions
   ADD COLUMN owner_identity_uid bigint,
   ADD COLUMN owner_tenant_key varchar(96),
   ADD COLUMN owner_project_key varchar(96),
-  ADD COLUMN owner_verified_at timestamptz;
+  ADD COLUMN owner_verified_at timestamptz,
+  ADD COLUMN owner_workload_fence_id uuid;
 ALTER TABLE public.aetheris_tasks
   ADD CONSTRAINT e6p_task_owner_all_or_none CHECK (
-    num_nonnulls(owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at)=0
+    num_nonnulls(owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at,owner_workload_fence_id)=0
     OR (
-      num_nonnulls(owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at)=4
+      num_nonnulls(owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at,owner_workload_fence_id)=5
       AND owner_identity_uid>0
       AND length(btrim(owner_tenant_key))>0
       AND length(btrim(owner_project_key))>0
@@ -71,9 +73,9 @@ ALTER TABLE public.aetheris_tasks
   );
 ALTER TABLE public.aetheris_mission_sessions
   ADD CONSTRAINT e6p_mission_owner_all_or_none CHECK (
-    num_nonnulls(owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at)=0
+    num_nonnulls(owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at,owner_workload_fence_id)=0
     OR (
-      num_nonnulls(owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at)=4
+      num_nonnulls(owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at,owner_workload_fence_id)=5
       AND owner_identity_uid>0
       AND length(btrim(owner_tenant_key))>0
       AND length(btrim(owner_project_key))>0
@@ -88,10 +90,10 @@ SET search_path=pg_catalog,pg_temp
 AS $guard$
 BEGIN
   IF ROW(NEW.owner_identity_uid,NEW.owner_tenant_key,
-         NEW.owner_project_key,NEW.owner_verified_at)
+         NEW.owner_project_key,NEW.owner_verified_at,NEW.owner_workload_fence_id)
      IS DISTINCT FROM
      ROW(OLD.owner_identity_uid,OLD.owner_tenant_key,
-         OLD.owner_project_key,OLD.owner_verified_at)
+         OLD.owner_project_key,OLD.owner_verified_at,OLD.owner_workload_fence_id)
   THEN RAISE EXCEPTION 'Owner binding is immutable';
   END IF;
   RETURN NEW;
@@ -165,15 +167,15 @@ BEGIN
  IF p_kind='TASK' THEN
   INSERT INTO public.aetheris_tasks(
     id,title,command_text,state,mode,created_at,updated_at,version,
-    owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at)
+    owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at,owner_workload_fence_id)
   VALUES(p_id,p_title,p_description,'QUEUED','BALANCED',now(),now(),0,
-    p_uid,p_tenant,p_project,clock_timestamp());
+    p_uid,p_tenant,p_project,clock_timestamp(),p_fence);
  ELSE
   INSERT INTO public.aetheris_mission_sessions(
     id,title,objective,status,task_ids_csv,created_at,updated_at,version,
-    owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at)
+    owner_identity_uid,owner_tenant_key,owner_project_key,owner_verified_at,owner_workload_fence_id)
   VALUES(p_id,p_title,p_description,'ACTIVE','',now(),now(),0,
-    p_uid,p_tenant,p_project,clock_timestamp());
+    p_uid,p_tenant,p_project,clock_timestamp(),p_fence);
  END IF;
  RETURN TRUE;
 END;
@@ -211,6 +213,7 @@ BEGIN
     AND m.project_key=t.owner_project_key
   JOIN e6p_review.fence_bindings b
     ON b.tenant_key=m.tenant_key AND b.project_key=m.project_key
+    AND b.fence_id=t.owner_workload_fence_id
   JOIN e6o_review.workload_fences f ON f.fence_id=b.fence_id
   WHERE t.id=p_id AND t.owner_identity_uid=p_uid AND m.active AND f.active
     AND t.owner_verified_at IS NOT NULL AND t.owner_tenant_key=p_tenant
@@ -224,6 +227,7 @@ BEGIN
     AND m.project_key=t.owner_project_key
   JOIN e6p_review.fence_bindings b
     ON b.tenant_key=m.tenant_key AND b.project_key=m.project_key
+    AND b.fence_id=t.owner_workload_fence_id
   JOIN e6o_review.workload_fences f ON f.fence_id=b.fence_id
   WHERE t.id=p_id AND t.owner_identity_uid=p_uid AND m.active AND f.active
     AND t.owner_verified_at IS NOT NULL AND t.owner_tenant_key=p_tenant
@@ -234,13 +238,13 @@ BEGIN
 END;
 $read$;
 ALTER FUNCTION e6p_review.read_owned(
- varchar,varchar,varchar,bigint,bigint,uuid,varchar,varchar)
+ varchar,varchar,varchar,bigint,bigint,uuid,varchar,varchar,varchar)
  OWNER TO e6p_exec_owner;
 REVOKE ALL ON FUNCTION e6p_review.read_owned(
- varchar,varchar,varchar,bigint,bigint,uuid,varchar,varchar) FROM PUBLIC;
+ varchar,varchar,varchar,bigint,bigint,uuid,varchar,varchar,varchar) FROM PUBLIC;
 GRANT USAGE ON SCHEMA e6p_review TO e6p_reader;
 GRANT EXECUTE ON FUNCTION e6p_review.read_owned(
- varchar,varchar,varchar,bigint,bigint,uuid,varchar,varchar) TO e6p_reader;
+ varchar,varchar,varchar,bigint,bigint,uuid,varchar,varchar,varchar) TO e6p_reader;
 
 -- Required privilege boundaries never loosen original ownerless quarantine.
 COMMIT;
