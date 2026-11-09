@@ -72,7 +72,7 @@ public final class RuntimeVerifiedTaskReadProbe {
             AND tm.status='ACTIVE' AND tm.revoked_at IS NULL
             AND pm.status='ACTIVE' AND pm.revoked_at IS NULL
             AND tm.member_role IN ('OWNER','ADMIN','MEMBER')
-            AND pm.member_role IN ('ADMIN','MEMBER','VIEWER')
+            AND pm.member_role IN ('ADMIN','MEMBER')
             AND (tm.valid_until IS NULL OR tm.valid_until>clock_timestamp())
             AND (pm.valid_until IS NULL OR pm.valid_until>clock_timestamp())
             AND active.issuer=? AND active.kid=? AND active.jti=?
