@@ -75,7 +75,7 @@ class RuntimePg16ReviewSessionAuthoritySocketJdbcIT {
         .connectTimeout(Duration.ofSeconds(3)).build();
 
     @LocalServerPort int port;
-    @Autowired DataSource reviewDataSource;
+    private final DataSource reviewDataSource=newReviewDataSource();
 
     private record SignedToken(String bearer,String jti,long uid,long iat) {}
 
@@ -164,6 +164,15 @@ class RuntimePg16ReviewSessionAuthoritySocketJdbcIT {
             System.getenv("PGPASSWORD"));
     }
 
+    private static DataSource newReviewDataSource() {
+        var ds=new DriverManagerDataSource();
+        ds.setDriverClassName("org.postgresql.Driver");
+        ds.setUrl(DB+"?currentSchema="+SCHEMA);
+        ds.setUsername("ownerlab_ci");
+        ds.setPassword(System.getenv("PGPASSWORD"));
+        return ds;
+    }
+
     @SpringBootConfiguration
     @EnableAutoConfiguration(exclude={
         DataSourceAutoConfiguration.class,
@@ -171,21 +180,15 @@ class RuntimePg16ReviewSessionAuthoritySocketJdbcIT {
     })
     @Import({OwnerlessTaskMissionHttpFilter.class,ProbeRoutes.class})
     static class IsolatedApp {
-        @Bean DataSource reviewDataSource() {
-            var ds=new DriverManagerDataSource();
-            ds.setDriverClassName("org.postgresql.Driver");
-            ds.setUrl(DB+"?currentSchema="+SCHEMA);
-            ds.setUsername("ownerlab_ci");
-            ds.setPassword(System.getenv("PGPASSWORD"));
-            return ds;
-        }
+        // Not a Spring DataSource bean: this test must not initialize the
+        // orchestrator's unrelated JPA repository infrastructure.
         @Bean FilterRegistrationBean<RuntimeSignedIdentityHttpFilter>
-                isolatedPgHttpFilter(DataSource reviewDataSource) {
+                isolatedPgHttpFilter() {
             var verifier=new RuntimePinnedPrincipalVerifier(
                 pem(),KID,ISSUER,AUDIENCE,Clock.systemUTC());
             var bean=new FilterRegistrationBean<RuntimeSignedIdentityHttpFilter>();
             bean.setFilter(new RuntimeSignedIdentityHttpFilter(
-                verifier,new RuntimePg16ReviewSessionAuthority(reviewDataSource),
+                verifier,new RuntimePg16ReviewSessionAuthority(newReviewDataSource()),
                 "orchestrator:read"));
             // EXACT test-only path; real Task/Mission quarantine stays unconditional.
             bean.addUrlPatterns(PROBE);
