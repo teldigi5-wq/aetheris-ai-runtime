@@ -723,6 +723,18 @@ class RuntimeVerifiedTaskSessionCreationJdbcTest {
             }
             assertTrue(reader.findOne(c,read.principal(),
                 "tenant-alpha","red",task,lease,workload).isEmpty());
+            // VIEWER read grants are not approved by the security contract.
+            // Restore ACTIVE status, then prove the unapproved role still DENIES.
+            try(Statement q=c.createStatement()) {
+                q.execute("""
+                    UPDATE registry_project_memberships
+                    SET status='ACTIVE',member_role='VIEWER'
+                    WHERE tenant_key='tenant-alpha' AND project_key='red'
+                      AND identity_uid=42
+                    """);
+            }
+            assertTrue(reader.findOne(c,read.principal(),
+                "tenant-alpha","red",task,lease,workload).isEmpty());
             c.rollback();
         }
     }
