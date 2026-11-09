@@ -122,8 +122,9 @@ class RuntimeVerifiedTaskSessionCreationJdbcTest {
                     PRIMARY KEY(issuer,kid,jti))
                 """);
             sql.execute("""
-                CREATE TABLE blocked_signer_kids(
+                CREATE TABLE signer_key_states(
                     issuer varchar(255) NOT NULL,kid varchar(64) NOT NULL,
+                    state varchar(16) NOT NULL CHECK(state IN ('ACTIVE','REVOKED')),
                     PRIMARY KEY(issuer,kid))
                 """);
             sql.execute("""
@@ -176,6 +177,13 @@ class RuntimeVerifiedTaskSessionCreationJdbcTest {
             sql.execute("""
                 INSERT INTO b62_local_resource_fence VALUES
                     ('runtime','review-primary',7,'ACTIVE',now()+interval '1 day')
+                """);
+            sql.execute("""
+                INSERT INTO signer_key_states VALUES
+                    ('https://identity.aetheris.example.invalid','create-session-review-key','ACTIVE')
+                """);
+            sql.execute("""
+                INSERT INTO principal_epochs VALUES (42,0),(77,0)
                 """);
         }
     }
@@ -331,8 +339,11 @@ class RuntimeVerifiedTaskSessionCreationJdbcTest {
         try(Connection c=transaction()) {
             long before=count(c);
             var id=identity(42,"orchestrator:write");register(c,id);
-            try(Statement s=c.createStatement()){
-                s.execute("INSERT INTO blocked_signer_kids VALUES ('"+ISS+"','"+KID+"')");
+            try(var s=c.prepareStatement("""
+                UPDATE signer_key_states SET state='REVOKED'
+                  WHERE issuer=? AND kid=?""")) {
+                s.setString(1,ISS);s.setString(2,KID);
+                assertEquals(1,s.executeUpdate());
             }
             assertThrows(SecurityException.class,
                 ()->create(c,id,"tenant-alpha","red"));
@@ -341,9 +352,10 @@ class RuntimeVerifiedTaskSessionCreationJdbcTest {
         try(Connection c=transaction()) {
             var id=identity(42,"orchestrator:write");register(c,id);
             try(var s=c.prepareStatement("""
-                INSERT INTO principal_epochs VALUES (?,?)""")) {
-                s.setLong(1,42L);
-                s.setLong(2,id.signed().signedIssuedAt().getEpochSecond());
+                UPDATE principal_epochs SET reject_issued_at_or_before_epoch=?
+                  WHERE principal_id=?""")) {
+                s.setLong(1,id.signed().signedIssuedAt().getEpochSecond());
+                s.setLong(2,42L);
                 assertEquals(1,s.executeUpdate());
             }
             assertThrows(SecurityException.class,
@@ -429,6 +441,112 @@ class RuntimeVerifiedTaskSessionCreationJdbcTest {
                 }
             }
             revoker.rollback();
+        }
+    }
+
+    @Test
+    void missingSignerOrEpochAuthorityRowsDenyByDefault() throws Exception {
+        // Absent authority records are NOT equivalent to an unrevoked token.
+        // All deletes are rolled back; CI never alters an external registry.
+        try(Connection c=transaction()) {
+            var signed=identity(42,"orchestrator:write");
+            register(c,signed);
+            try(var q=c.prepareStatement("""
+                    DELETE FROM signer_key_states WHERE issuer=? AND kid=?""")) {
+                q.setString(1,ISS);q.setString(2,KID);
+                assertEquals(1,q.executeUpdate());
+            }
+            assertThrows(SecurityException.class,
+                ()->create(c,signed,"tenant-alpha","red"));
+            c.rollback();
+        }
+        try(Connection c=transaction()) {
+            var signed=identity(42,"orchestrator:write");
+            register(c,signed);
+            try(var q=c.prepareStatement("""
+                    DELETE FROM principal_epochs WHERE principal_id=?""")) {
+                q.setLong(1,42L);
+                assertEquals(1,q.executeUpdate());
+            }
+            assertThrows(SecurityException.class,
+                ()->create(c,signed,"tenant-alpha","red"));
+            c.rollback();
+        }
+    }
+
+    @Test
+    void signerAndPrincipalEpochRevocationUpdatesSerializeWithTaskCreate()
+            throws Exception {
+        // A WRITE committed before a REVOKE is allowed; after the revoke
+        // commits the same signed principal cannot write again.
+        // Critically, the revoke UPDATE cannot commit while task insertion
+        // holds the two authority rows (previous NOT EXISTS could not lock).
+        var signed=identity(42,"orchestrator:write");
+        try(Connection writer=transaction();Connection revoker=transaction()) {
+            register(writer,signed);
+            writer.commit();
+            UUID task=create(writer,signed,"tenant-alpha","red");
+            assertNotNull(task);
+
+            try(Statement stmt=revoker.createStatement()) {
+                stmt.execute("SET LOCAL statement_timeout = '750ms'");
+            }
+            SQLException blockedSigner=assertThrows(SQLException.class,()->{
+                try(var q=revoker.prepareStatement("""
+                     UPDATE signer_key_states SET state='REVOKED'
+                       WHERE issuer=? AND kid=?""")) {
+                    q.setString(1,ISS);q.setString(2,KID);
+                    q.executeUpdate();
+                }
+            });
+            assertEquals("57014",blockedSigner.getSQLState());
+            revoker.rollback();
+
+            try(Statement stmt=revoker.createStatement()) {
+                stmt.execute("SET LOCAL statement_timeout = '750ms'");
+            }
+            SQLException blockedEpoch=assertThrows(SQLException.class,()->{
+                try(var q=revoker.prepareStatement("""
+                     UPDATE principal_epochs
+                        SET reject_issued_at_or_before_epoch=?
+                       WHERE principal_id=?""")) {
+                    q.setLong(1,signed.signed().signedIssuedAt().getEpochSecond());
+                    q.setLong(2,42L);
+                    q.executeUpdate();
+                }
+            });
+            assertEquals("57014",blockedEpoch.getSQLState());
+            revoker.rollback();
+
+            writer.commit();
+            try(var q=revoker.prepareStatement("""
+                    UPDATE signer_key_states SET state='REVOKED'
+                      WHERE issuer=? AND kid=?""")) {
+                q.setString(1,ISS);q.setString(2,KID);
+                assertEquals(1,q.executeUpdate());
+            }
+            try(var q=revoker.prepareStatement("""
+                    UPDATE principal_epochs
+                       SET reject_issued_at_or_before_epoch=?
+                     WHERE principal_id=?""")) {
+                q.setLong(1,signed.signed().signedIssuedAt().getEpochSecond());
+                q.setLong(2,42L);
+                assertEquals(1,q.executeUpdate());
+            }
+            revoker.commit();
+
+            assertThrows(SecurityException.class,
+                ()->create(writer,signed,"tenant-alpha","red"));
+            writer.rollback();
+        } finally {
+            // Restore only these disposable test-only authority rows so the
+            // fixture remains order-independent across JUnit test methods.
+            try(Connection restorer=transaction();
+                Statement q=restorer.createStatement()) {
+                q.execute("UPDATE signer_key_states SET state='ACTIVE'");
+                q.execute("UPDATE principal_epochs SET reject_issued_at_or_before_epoch=0");
+                restorer.commit();
+            }
         }
     }
 

@@ -75,8 +75,10 @@ jobs:
           from xml.etree import ElementTree as ET
           path=Path('orchestrator-service/target/surefire-reports/TEST-io.aetheris.orchestrator.security.RuntimeVerifiedTaskSessionCreationJdbcTest.xml')
           root=ET.parse(path).getroot()
-          assert int(root.attrib['tests']) >= 6,root.attrib
+          # Six inherited signed-session/fence tests plus two new
+          # authority-row/fail-closed revocation race regressions.
+          assert int(root.attrib['tests']) >= 8,root.attrib
           assert all(int(root.attrib.get(k,'0')) == 0 for k in ('errors','failures','skipped')),root.attrib
-          print('RUNTIME_REAL_SESSION_FENCE_CREATE_SIX_TESTS_NO_SKIPS_PASS')
+          print('RUNTIME_SIGNER_EPOCH_ROWS_SERIALIZED_EIGHT_TESTS_NO_SKIPS_PASS')
           PY
           echo 'REVIEW_ONLY_NO_HTTP_OR_DEPLOYMENT_STAGE45_NO_GO'
