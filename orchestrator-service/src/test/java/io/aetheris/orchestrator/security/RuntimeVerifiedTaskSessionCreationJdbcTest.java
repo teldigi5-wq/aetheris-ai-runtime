@@ -153,6 +153,15 @@ class RuntimeVerifiedTaskSessionCreationJdbcTest {
                         tenant_key,project_key,identity_uid))
                 """);
             sql.execute("""
+                CREATE TABLE aetheris_task_events(
+                    id uuid PRIMARY KEY,
+                    task_id uuid NOT NULL REFERENCES aetheris_tasks(id),
+                    event_at timestamptz NOT NULL,
+                    state varchar(32) NOT NULL,
+                    message varchar(8000) NOT NULL,
+                    metadata_json varchar(16000) NOT NULL)
+                """);
+            sql.execute("""
                 INSERT INTO registry_tenants VALUES
                     ('tenant-alpha','ACTIVE'),('tenant-beta','ACTIVE')
                 """);
@@ -547,6 +556,236 @@ class RuntimeVerifiedTaskSessionCreationJdbcTest {
                 q.execute("UPDATE principal_epochs SET reject_issued_at_or_before_epoch=0");
                 restorer.commit();
             }
+        }
+    }
+
+    private final RuntimeVerifiedTaskReadProbe reader =
+        new RuntimeVerifiedTaskReadProbe();
+
+    private static UUID event(Connection c, UUID task, Instant timestamp)
+            throws SQLException {
+        UUID id=UUID.randomUUID();
+        try(var q=c.prepareStatement("""
+            INSERT INTO aetheris_task_events
+                (id,task_id,event_at,state,message,metadata_json)
+            VALUES (?,?,?,'QUEUED','private message','{"secret":"never-return"}')
+            """)) {
+            q.setObject(1,id);q.setObject(2,task);
+            q.setTimestamp(3,java.sql.Timestamp.from(timestamp));
+            assertEquals(1,q.executeUpdate());
+        }
+        return id;
+    }
+
+    @Test
+    void sessionBoundReadsIsolateSameProjectOwnersAndPaginateEventHeaders()
+            throws Exception {
+        try(Connection c=transaction()) {
+            // Two independent verified signed identities share ONE project.
+            try(Statement q=c.createStatement()) {
+                q.execute("""
+                    INSERT INTO registry_project_memberships
+                    VALUES ('tenant-alpha','red',77,'MEMBER','ACTIVE',NULL,
+                            now()+interval '1 day')
+                    """);
+            }
+            var aliceWrite=identity(42,"orchestrator:write");
+            var aliceRead=identity(42,"orchestrator:read");
+            var bobWrite=identity(77,"orchestrator:write");
+            var bobRead=identity(77,"orchestrator:read");
+            for(var id:List.of(aliceWrite,aliceRead,bobWrite,bobRead))
+                register(c,id);
+            UUID alice=create(c,aliceWrite,"tenant-alpha","red");
+            UUID aliceOtherTenant=create(c,aliceWrite,"tenant-beta","red");
+            UUID bob=create(c,bobWrite,"tenant-alpha","red");
+            UUID ownerless=UUID.randomUUID();
+            try(var q=c.prepareStatement("""
+                INSERT INTO aetheris_tasks
+                (id,title,command_text,state,mode,created_at,updated_at,version)
+                VALUES (?,'legacy ownerless','no execution','QUEUED','PRIVATE',
+                        now(),now(),0)
+                """)) {
+                q.setObject(1,ownerless);
+                assertEquals(1,q.executeUpdate());
+            }
+            Instant now=Instant.now();
+            UUID older=event(c,alice,now.minusSeconds(12));
+            UUID newer=event(c,alice,now.minusSeconds(6));
+            event(c,bob,now.minusSeconds(3));
+            var lease=lease(WORKER);
+            var workload=workload(WORKER);
+
+            assertEquals(alice,reader.findOne(c,aliceRead.principal(),
+                "tenant-alpha","red",alice,lease,workload).orElseThrow().id());
+            assertTrue(reader.findOne(c,bobRead.principal(),
+                "tenant-alpha","red",alice,lease,workload).isEmpty());
+            assertTrue(reader.findOne(c,aliceRead.principal(),
+                "tenant-alpha","red",bob,lease,workload).isEmpty());
+            assertTrue(reader.findOne(c,aliceRead.principal(),
+                "tenant-beta","red",alice,lease,workload).isEmpty());
+            assertTrue(reader.findOne(c,aliceRead.principal(),
+                "tenant-alpha","red",aliceOtherTenant,lease,workload).isEmpty());
+            assertTrue(reader.findOne(c,aliceRead.principal(),
+                "tenant-alpha","red",ownerless,lease,workload).isEmpty());
+
+            var recent=reader.recent(c,aliceRead.principal(),
+                "tenant-alpha","red",50,lease,workload);
+            assertTrue(recent.stream().anyMatch(t->t.id().equals(alice)));
+            assertTrue(recent.stream().noneMatch(t->t.id().equals(bob)
+                || t.id().equals(aliceOtherTenant) || t.id().equals(ownerless)));
+
+            var page1=reader.history(c,aliceRead.principal(),
+                "tenant-alpha","red",alice,null,null,1,lease,workload);
+            assertEquals(1,page1.size());assertEquals(newer,page1.get(0).eventId());
+            var page2=reader.history(c,aliceRead.principal(),
+                "tenant-alpha","red",alice,page1.get(0).eventAt(),
+                page1.get(0).eventId(),1,lease,workload);
+            assertEquals(1,page2.size());assertEquals(older,page2.get(0).eventId());
+            assertTrue(reader.history(c,aliceRead.principal(),
+                "tenant-alpha","red",alice,page2.get(0).eventAt(),
+                page2.get(0).eventId(),1,lease,workload).isEmpty());
+            assertTrue(reader.history(c,bobRead.principal(),
+                "tenant-alpha","red",alice,null,null,100,lease,workload).isEmpty());
+            assertFalse(page1.toString().contains("never-return"));
+            assertFalse(recent.toString().contains("no execution"));
+            c.rollback();
+        }
+    }
+
+    @Test
+    void readsDenyMissingOrRevokedSessionSignerEpochAndMembership()
+            throws Exception {
+        try(Connection c=transaction()) {
+            var write=identity(42,"orchestrator:write");
+            var read=identity(42,"orchestrator:read");
+            register(c,write);
+            UUID task=create(c,write,"tenant-alpha","red");
+            var lease=lease(WORKER);
+            var workload=workload(WORKER);
+            assertTrue(reader.findOne(c,read.principal(),
+                "tenant-alpha","red",task,lease,workload).isEmpty());
+            register(c,read);
+            assertTrue(reader.findOne(c,read.principal(),
+                "tenant-alpha","red",task,lease,workload).isPresent());
+            assertThrows(SecurityException.class,()->reader.findOne(
+                c,write.principal(),"tenant-alpha","red",task,lease,workload));
+            assertThrows(SecurityException.class,()->reader.findOne(
+                c,read.principal(),"tenant-alpha","red",task,lease,
+                workload("runtime-review-worker-b")));
+            assertThrows(IllegalArgumentException.class,()->reader.history(
+                c,read.principal(),"tenant-alpha","red",task,Instant.now(),
+                null,5,lease,workload));
+
+            try(var q=c.prepareStatement("""
+                UPDATE synthetic_session_registration SET state='REVOKED'
+                 WHERE issuer=? AND kid=? AND jti=?
+                """)) {
+                q.setString(1,ISS);q.setString(2,KID);
+                q.setString(3,read.signed().signedTokenId());
+                assertEquals(1,q.executeUpdate());
+            }
+            assertTrue(reader.findOne(c,read.principal(),
+                "tenant-alpha","red",task,lease,workload).isEmpty());
+            try(var q=c.prepareStatement("""
+                UPDATE synthetic_session_registration SET state='ACTIVE'
+                 WHERE issuer=? AND kid=? AND jti=?
+                """)) {
+                q.setString(1,ISS);q.setString(2,KID);
+                q.setString(3,read.signed().signedTokenId());q.executeUpdate();
+            }
+            try(Statement q=c.createStatement()) {
+                q.execute("UPDATE signer_key_states SET state='REVOKED'");
+            }
+            assertTrue(reader.findOne(c,read.principal(),
+                "tenant-alpha","red",task,lease,workload).isEmpty());
+            try(Statement q=c.createStatement()) {
+                q.execute("UPDATE signer_key_states SET state='ACTIVE'");
+            }
+            try(var q=c.prepareStatement("""
+                UPDATE principal_epochs
+                   SET reject_issued_at_or_before_epoch=?
+                 WHERE principal_id=42
+                """)) {
+                q.setLong(1,read.signed().signedIssuedAt().getEpochSecond());
+                assertEquals(1,q.executeUpdate());
+            }
+            assertTrue(reader.findOne(c,read.principal(),
+                "tenant-alpha","red",task,lease,workload).isEmpty());
+            try(Statement q=c.createStatement()) {
+                q.execute("UPDATE principal_epochs SET reject_issued_at_or_before_epoch=0");
+            }
+            try(Statement q=c.createStatement()) {
+                q.execute("""
+                    UPDATE registry_project_memberships SET status='REVOKED'
+                    WHERE tenant_key='tenant-alpha' AND project_key='red'
+                      AND identity_uid=42
+                    """);
+            }
+            assertTrue(reader.findOne(c,read.principal(),
+                "tenant-alpha","red",task,lease,workload).isEmpty());
+            // VIEWER read grants are not approved by the security contract.
+            // Restore ACTIVE status, then prove the unapproved role still DENIES.
+            try(Statement q=c.createStatement()) {
+                q.execute("""
+                    UPDATE registry_project_memberships
+                    SET status='ACTIVE',member_role='VIEWER'
+                    WHERE tenant_key='tenant-alpha' AND project_key='red'
+                      AND identity_uid=42
+                    """);
+            }
+            assertTrue(reader.findOne(c,read.principal(),
+                "tenant-alpha","red",task,lease,workload).isEmpty());
+            c.rollback();
+        }
+    }
+
+    @Test
+    void authorizedReadLocksSessionAgainstConcurrentRevocation()
+            throws Exception {
+        var write=identity(42,"orchestrator:write");
+        var read=identity(42,"orchestrator:read");
+        try(Connection setup=transaction();Connection readerTx=transaction();
+                Connection revoker=transaction()) {
+            register(setup,write);register(setup,read);
+            UUID task=create(setup,write,"tenant-alpha","red");
+            setup.commit();
+            var lease=lease(WORKER);
+            var workload=workload(WORKER);
+            assertTrue(reader.findOne(readerTx,read.principal(),
+                "tenant-alpha","red",task,lease,workload).isPresent());
+            try(Statement q=revoker.createStatement()) {
+                q.execute("SET LOCAL statement_timeout='750ms'");
+            }
+            SQLException blocked=assertThrows(SQLException.class,()->{
+                try(var q=revoker.prepareStatement("""
+                    UPDATE synthetic_session_registration SET state='REVOKED'
+                     WHERE issuer=? AND kid=? AND jti=?
+                    """)) {
+                    q.setString(1,ISS);q.setString(2,KID);
+                    q.setString(3,read.signed().signedTokenId());
+                    q.executeUpdate();
+                }
+            });
+            assertEquals("57014",blocked.getSQLState());
+            revoker.rollback();
+            readerTx.commit();
+            try(var q=revoker.prepareStatement("""
+                UPDATE synthetic_session_registration SET state='REVOKED'
+                 WHERE issuer=? AND kid=? AND jti=?
+                """)) {
+                q.setString(1,ISS);q.setString(2,KID);
+                q.setString(3,read.signed().signedTokenId());
+                assertEquals(1,q.executeUpdate());
+            }
+            revoker.commit();
+            assertTrue(reader.findOne(readerTx,read.principal(),
+                "tenant-alpha","red",task,lease,workload).isEmpty());
+            readerTx.rollback();
+            try(var q=setup.prepareStatement(
+                    "DELETE FROM aetheris_tasks WHERE id=?")) {
+                q.setObject(1,task);assertEquals(1,q.executeUpdate());
+            }
+            setup.commit();
         }
     }
 

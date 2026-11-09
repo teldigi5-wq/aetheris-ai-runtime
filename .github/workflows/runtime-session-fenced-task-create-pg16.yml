@@ -1,9 +1,9 @@
 name: Runtime #23 signed session fenced task creation (disposable PG16)
 on:
   push:
-    branches: [security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109]
+    branches: [security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109, security/task-session-owner-reads-20261109]
   pull_request:
-    branches: [security/verified-task-creation-jdbc-20261108, security/task-session-fence-creation-20261108]
+    branches: [security/verified-task-creation-jdbc-20261108, security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109]
 permissions:
   contents: read
 jobs:
@@ -21,7 +21,7 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           grep -Fq 'SC_NOT_FOUND' orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java
-          for file in RuntimeVerifiedTaskCreationProbe RuntimeVerifiedTaskSessionCreationProbe RuntimePinnedLocalFenceLeaseVerifier RuntimePinnedWorkloadIdentityVerifier; do
+          for file in RuntimeVerifiedTaskCreationProbe RuntimeVerifiedTaskSessionCreationProbe RuntimeVerifiedTaskReadProbe RuntimePinnedLocalFenceLeaseVerifier RuntimePinnedWorkloadIdentityVerifier; do
             ! grep -Eq '@Component|@Service|@RestController|@Bean' "orchestrator-service/src/main/java/io/aetheris/orchestrator/security/${file}.java"
           done
           ! grep -q 'subscribeAll(' orchestrator-service/src/main/java/io/aetheris/orchestrator/task/TaskEventStreamService.java
@@ -75,10 +75,10 @@ jobs:
           from xml.etree import ElementTree as ET
           path=Path('orchestrator-service/target/surefire-reports/TEST-io.aetheris.orchestrator.security.RuntimeVerifiedTaskSessionCreationJdbcTest.xml')
           root=ET.parse(path).getroot()
-          # Six inherited signed-session/fence tests plus two new
-          # authority-row/fail-closed revocation race regressions.
-          assert int(root.attrib['tests']) >= 8,root.attrib
+          # Eight completed task-create tests plus three new mandatory
+          # owner-read/event-history isolation and concurrent revoke tests.
+          assert int(root.attrib['tests']) >= 11,root.attrib
           assert all(int(root.attrib.get(k,'0')) == 0 for k in ('errors','failures','skipped')),root.attrib
-          print('RUNTIME_SIGNER_EPOCH_ROWS_SERIALIZED_EIGHT_TESTS_NO_SKIPS_PASS')
+          print('RUNTIME_OWNER_TASK_READ_HISTORY_ELEVEN_TESTS_NO_SKIPS_PASS')
           PY
           echo 'REVIEW_ONLY_NO_HTTP_OR_DEPLOYMENT_STAGE45_NO_GO'
