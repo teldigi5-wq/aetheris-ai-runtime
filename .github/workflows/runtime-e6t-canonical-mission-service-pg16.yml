@@ -86,8 +86,8 @@ jobs:
           test "$AETHERIS_E6T_MUST_RUN" = ONLY_DISPOSABLE_E6T_PG16
           test -s orchestrator-service/src/main/java/io/aetheris/orchestrator/mission/RuntimeE6TCanonicalMissionRepository.java
           test -s orchestrator-service/src/main/java/io/aetheris/orchestrator/mission/RuntimeE6TCanonicalMissionService.java
-          ! grep -Eq '@Component|@Service|@Repository|@Bean|@Configuration|@RestController|@Entity' orchestrator-service/src/main/java/io/aetheris/orchestrator/mission/RuntimeE6TCanonicalMissionRepository.java
-          ! grep -Eq '@Component|@Service|@Repository|@Bean|@Configuration|@RestController|@Entity' orchestrator-service/src/main/java/io/aetheris/orchestrator/mission/RuntimeE6TCanonicalMissionService.java
+          ! grep -Eq '^[[:space:]]*@(Component|Service|Repository|Bean|Configuration|RestController|Entity)([[:space:]]|\\(|$)' orchestrator-service/src/main/java/io/aetheris/orchestrator/mission/RuntimeE6TCanonicalMissionRepository.java
+          ! grep -Eq '^[[:space:]]*@(Component|Service|Repository|Bean|Configuration|RestController|Entity)([[:space:]]|\\(|$)' orchestrator-service/src/main/java/io/aetheris/orchestrator/mission/RuntimeE6TCanonicalMissionService.java
           test ! -f orchestrator-service/src/main/java/io/aetheris/orchestrator/api/RuntimeE6TMissionController.java
           test "$AETHERIS_E6S_MUST_RUN" = ONLY_DISPOSABLE_E6S_PG16
           ! grep -Eq '@Component|@Service|@Bean|@Configuration|@RestController' orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeE6SCanonicalMissionApplication.java
