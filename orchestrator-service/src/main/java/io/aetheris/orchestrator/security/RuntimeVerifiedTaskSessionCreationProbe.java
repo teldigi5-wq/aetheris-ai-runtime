@@ -21,8 +21,11 @@ import java.util.UUID;
  *
  * Caller owns the transaction and MUST roll back on failure. A return value
  * only identifies an UNCOMMITTED row until the caller commits. Since the
- * signing-key/epoch deny lists have absent-row races, a production design
- * must serialize revocation on an authoritative lock before granting writes.
+ * signer-key/epoch authority records are mandatory and lockable for
+ * every permitted signed principal. Concurrent in-place revocation UPDATEs
+ * are serialized against the task INSERT. No registry writer or production
+ * data migration is installed by this prototype; cross-primary and
+ * post-commit revocation remain outside this local transaction proof.
  */
 public final class RuntimeVerifiedTaskSessionCreationProbe {
     private static final String SELECTOR = "[a-z0-9][a-z0-9_-]{0,95}";
@@ -50,6 +53,10 @@ public final class RuntimeVerifiedTaskSessionCreationProbe {
            AND pm.identity_uid=tm.identity_uid
           JOIN synthetic_session_registration active
             ON active.uid=tm.identity_uid
+          JOIN signer_key_states signer
+            ON signer.issuer=active.issuer AND signer.kid=active.kid
+          JOIN principal_epochs epoch
+            ON epoch.principal_id=tm.identity_uid
           WHERE tm.identity_uid=?
             AND tenant.tenant_key=? AND project.project_key=?
             AND tenant.status='ACTIVE' AND project.status='ACTIVE'
@@ -61,16 +68,9 @@ public final class RuntimeVerifiedTaskSessionCreationProbe {
             AND (pm.valid_until IS NULL OR pm.valid_until>clock_timestamp())
             AND active.issuer=? AND active.kid=? AND active.jti=?
             AND active.uid=? AND active.iat_seconds=? AND active.state='ACTIVE'
-            AND NOT EXISTS (
-              SELECT 1 FROM blocked_signer_kids b
-              WHERE b.issuer=? AND b.kid=?
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM principal_epochs epoch
-              WHERE epoch.principal_id=?
-                AND ?<=epoch.reject_issued_at_or_before_epoch
-            )
-          FOR SHARE OF tenant, project, tm, pm, active
+            AND signer.state='ACTIVE'
+            AND active.iat_seconds>epoch.reject_issued_at_or_before_epoch
+          FOR SHARE OF tenant, project, tm, pm, active, signer, epoch
         )
         INSERT INTO aetheris_tasks (
           id,title,command_text,state,mode,created_at,updated_at,
@@ -125,14 +125,10 @@ public final class RuntimeVerifiedTaskSessionCreationProbe {
             sql.setString(8,signed.signedTokenId());
             sql.setLong(9,signed.signedIdentityUid());
             sql.setLong(10,issued);
-            sql.setString(11,signed.verifiedIssuer());
-            sql.setString(12,signed.verifiedKeyId());
-            sql.setLong(13,signed.signedIdentityUid());
-            sql.setLong(14,issued);
-            sql.setObject(15,id);
-            sql.setString(16,title);
-            sql.setString(17,command);
-            sql.setString(18,mode.name());
+            sql.setObject(11,id);
+            sql.setString(12,title);
+            sql.setString(13,command);
+            sql.setString(14,mode.name());
             try (ResultSet result=sql.executeQuery()) {
                 if (!result.next()) throw new SecurityException(
                     "No active signed session, membership or resource fence");
