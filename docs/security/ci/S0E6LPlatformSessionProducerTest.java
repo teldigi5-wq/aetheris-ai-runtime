@@ -180,16 +180,21 @@ class S0E6LPlatformSessionProducerTest {
         assertEquals(2,jdbc.queryForObject(
             "SELECT count(*) FROM e6j_runtime_auth.authority_audit",Integer.class));
 
-        // Actual legacy Platform JwtService HS256 is a strictly negative
+        // Actual legacy Platform JwtService HMAC is a strictly negative
         // interop fixture: Runtime RS256 verifier must reject it.
         String hs=new JwtService(
             "synthetic-legacy-only-hmac-secret-longer-than-32-characters",300)
             .issue(a);
-        assertEquals("HS256",Jwts.parser()
+        // JJWT chooses HS256/384/512 based on synthetic secret length.
+        // Runtime MUST reject every HS-family algorithm; requiring exactly
+        // HS256 would incorrectly fail when Platform emits stronger HS384.
+        String legacyAlg=Jwts.parser()
             .verifyWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(
                 "synthetic-legacy-only-hmac-secret-longer-than-32-characters"
                     .getBytes(StandardCharsets.UTF_8)))
-            .build().parseSignedClaims(hs).getHeader().getAlgorithm());
+            .build().parseSignedClaims(hs).getHeader().getAlgorithm();
+        assertTrue(java.util.Set.of("HS256","HS384","HS512").contains(legacyAlg));
+        assertNotEquals("RS256",legacyAlg);
 
         String pem="-----BEGIN PUBLIC KEY-----\n"+
             Base64.getMimeEncoder(64,new byte[]{'\n'})
