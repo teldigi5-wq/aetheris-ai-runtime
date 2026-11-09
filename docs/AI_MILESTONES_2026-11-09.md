@@ -10,10 +10,22 @@
 - [ ] Merge or production release accepted (NOT asserted).
 
 ## Milestones from the existing handoff
-- [ ] **M1 — pending verification:** Inspect PR #303 and stacked PRs #294–302 at their exact commits and bases; preserve separated Runtime/Platform ownership.
-  - Source branch/PR/commit: _to fill after live re-check_
-  - Result, negative cases and evidence: _not run as part of this docs update_
-  - Decision: **UNVERIFIED** until recorded; retain any applicable NO_GO.
+- [ ] **M1 — revalidate:** Inspect PR #303 and stacked PRs #294–302 at their exact commits and bases; preserve separated Runtime/Platform ownership.
+  - Source branch/commit: _check current GitHub_
+  - Results and evidence: _no new code tests in documentation-only PR_
+  - Decision: **NOT ACCEPTED** without exact-source evidence; preserve any NO_GO.
+- [ ] **M2 — revalidate:** Run exact-head PostgreSQL 16 negative tenant/session/revocation/SQL bypass tests and verify all failures fail closed.
+  - Source branch/commit: _check current GitHub_
+  - Results and evidence: _no new code tests in documentation-only PR_
+  - Decision: **NOT ACCEPTED** without exact-source evidence; preserve any NO_GO.
+- [ ] **M3 — revalidate:** Verify Platform RS256 JTI → Runtime HTTP integration with controlled operators and explicit deployment origins.
+  - Source branch/commit: _check current GitHub_
+  - Results and evidence: _no new code tests in documentation-only PR_
+  - Decision: **NOT ACCEPTED** without exact-source evidence; preserve any NO_GO.
+- [ ] **M4 — revalidate:** Keep Stage 45 NO_GO until genuine multi-brief model results, hardware benchmarks, signed provenance, security and production gates are independently evidenced.
+  - Source branch/commit: _check current GitHub_
+  - Results and evidence: _no new code tests in documentation-only PR_
+  - Decision: **NOT ACCEPTED** without exact-source evidence; preserve any NO_GO.
 
 ## Operator checklist
 - [ ] Re-read protected main, feature PR base/head, conflicts and review threads.
