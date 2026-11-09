@@ -133,10 +133,12 @@ class S0E6LPlatformSessionProducerTest {
         if(name.contains("/") || name.contains("\\") || value.isBlank())
             throw new IllegalArgumentException("Invalid disposable fixture");
         Path file=dir.resolve(name);
+        // Apply restrictive mode AT creation; never create a token with
+        // ambient permissions and only chmod after writing credential bytes.
+        Files.createFile(file,PosixFilePermissions.asFileAttribute(
+            PosixFilePermissions.fromString("rw-------")));
         Files.writeString(file,value,StandardCharsets.UTF_8,
-            StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE);
-        Files.setPosixFilePermissions(file,
-            PosixFilePermissions.fromString("rw-------"));
+            StandardOpenOption.WRITE,StandardOpenOption.TRUNCATE_EXISTING);
     }
 
     @Test
