@@ -41,3 +41,8 @@ Separate authoritative Runtime source; Stage 45 remains NO_GO, not hardware/GPU/
 
 ## Continuity note
 Hundreds of historical branches may exist. They are **not** all implementation targets. The active PR/branch DAG and protected default branch determine the next work; preserve history rather than mass-merging or rewriting every branch. Cross-repo status and full machine-readable inventory commands belong in the companion account-level handoff bundle.
+
+## Companion continuation planning files (9 November 2026)
+- [Non-repeating AI roadmap](AI_ROADMAP_2026-11-09.md) — scope, phases, next distinct milestones and release limits.
+- [Milestone evidence tracker](AI_MILESTONES_2026-11-09.md) — exact-SHA verification, blockers, and remaining decisions.
+- Original stage/engineering roadmaps remain authoritative. All docs are on draft PR #304 and NOT automatically in `main` or every historic branch.
