@@ -21,7 +21,7 @@ The `RuntimeSignedIdentityHttpFilter` is a real Jakarta Servlet `Filter` (not a 
 
 **Security limits:** successful HTTP *authentication preflight* is not object-level authorization, proof of current tenant/project membership, cross-primary fencing, or a durable revocation transaction held for the lifetime of execution. Resource operations must recheck session/membership/fence in the same database statement as access (the separate review-only task-read probe illustrates this but uses disposable registries). No async/SSE grant semantics are certified. The real Identity session authority and enrollment writers are **not connected** by this milestone.
 
-## Real HTTP test evidence / exact-head acceptance pending
+## Real HTTP test evidence — verified for code-and-test checkpoint
 
 `RuntimeDirectPortBearerSocketTest` boots actual embedded Tomcat on random loopback TCP port using an isolated Spring Boot test-only application. It registers this filter **only** on `/__runtime_auth_probe` (no product endpoint), with ephemeral RSA signers and a disposable in-memory test-only session stub. Tests cover:
 
@@ -31,7 +31,7 @@ The `RuntimeSignedIdentityHttpFilter` is a real Jakarta Servlet `Filter` (not a 
 4. Simulated session authority unavailable => fail closed; the unconfigured safe-default filter admits nothing.
 5. Duplicate HTTP Authorization headers denied.
 
-The existing dedicated real PostgreSQL16 signed session/owner test suite remains mandatory **11/11 without skips** (but the socket test is **not** a PG-backed HTTP end-to-end test). The full orchestrator tests and source-level HTTP/SSE quarantine checks remain mandatory. The CI workflow now requires at least five actual non-skipped socket tests at the exact HEAD. **Never report PASS until the completed run/job logs confirm those results.**
+The initial code-and-test checkpoint `7909c10d69e86b7ce3d1a50f6d1faf528dc61dbc` passed [GitHub Actions #42568779427](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions/runs/42568779427), **COMPLETED SUCCESS with both jobs** on 9 November 2026. Real loopback-TCP Tomcat **5/5** socket tests passed; the full Java 21 orchestrator suite reported **377/377** tests with zero failures/errors/skips. A separate real disposable PostgreSQL16 job reported **11/11** tests with zero failures/errors/skips and executed its mandatory no-skip and fixture cleanup checks. The source-level Task/Mission quarantine and global SSE checks remained green. These are **CI-tested** facts, not actual HTTPS, mTLS, PostgreSQL-backed HTTP authentication, deployed identity authority, hardware acceptance or production proof. Any new executable-code commit requires a fresh exact-head CI result.
 
 ## Next release-blocking work
 
