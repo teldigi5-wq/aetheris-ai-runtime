@@ -78,3 +78,7 @@ Licensing does not alter the runtime certification boundary: the platform-certif
 ## Related repository
 
 Platform repository: [`teldigi5-wq/aetheris-platform`](https://github.com/teldigi5-wq/aetheris-platform)
+
+## AI/developer continuation checkpoint — 9 November 2026
+
+The [verified-status handoff and next-milestone roadmap](docs/AI_CONTINUATION_2026-11-09.md) records the latest inspected draft PR, evidence boundaries, blockers, and safe recovery commands. This document is a **review proposal**, not a release approval. Re-check active PR heads before development; do not repeat completed stages or merge unverified security work.
