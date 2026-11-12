@@ -35,9 +35,9 @@ The runtime-owned source roots above should **not** be copied back into the plat
 
 ## Integration with `aetheris-platform`
 
-At the September 2026 platform promotion, the certified runtime checkpoint was:
+The platform-certified runtime checkpoint (verified October 11, 2026) is:
 
-`68af39a1115a7330020c18b6e2cb601e66b8f22f`
+`65a6262717adcd52ac8d8a16ed6f223e299fd74d`
 
 The platform records that checkpoint in `architecture/ai-runtime-certification-reference.json` and integrates the runtime through:
 
@@ -48,9 +48,17 @@ The platform records that checkpoint in `architecture/ai-runtime-certification-r
 
 That SHA is a **certification checkpoint**, not a claim that runtime development must remain permanently fixed there. A later runtime SHA should be promoted only after its applicable runtime suite and the platform integration suite are green and the platform certification reference is deliberately advanced.
 
+## Proposed Agent Skills and global extension research
+
+The proposed [Agent Skills catalog](skills/README.md) now contains **five TEMPLATE_ONLY read-only review skills** for GitHub checks, incidents, MCP extension discovery, license provenance and local model readiness. No autonomous tool execution or privilege grants were added.
+
+The new [global ecosystem research index](ecosystem/README.md) lists **14 external GitHub repositories** spanning MCP registries, browser automation, Ollama, ComfyUI, faster-whisper, Piper, Qdrant, Chroma, LangChain, LlamaIndex and n8n. References are **not installs or licenses**; candidate source revisions and dependency/model licenses need review.
+
+`scripts/search_extension_catalog.py` offers **offline catalog search**, while `scripts/review_external_skill_bundle.py` only statically quarantines pre-existing local Skill documents. All imports and runtime connections remain disabled, owner-controlled and pending hardware/compatibility verification. 
+
 ## Certification and truth boundaries
 
-The certified checkpoint `68af39a1115a7330020c18b6e2cb601e66b8f22f` completed the applicable canonical runtime certification suite. The platform certification reference records that checkpoint as `6_OF_6_SUCCESS`.
+The certified checkpoint `65a6262717adcd52ac8d8a16ed6f223e299fd74d` completed the applicable canonical runtime certification suite. The platform certification reference records that checkpoint as `6_OF_6_SUCCESS`.
 
 Certification is intentionally narrower than a production claim:
 
@@ -73,7 +81,7 @@ See [`README-EXTRACTION.md`](README-EXTRACTION.md) for the deterministic extract
 
 Aetheris AI Runtime is licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE) for the full terms. Third-party dependencies and incorporated third-party materials remain subject to their respective licenses.
 
-Licensing does not alter the runtime certification boundary: the platform-certified checkpoint remains `68af39a1115a7330020c18b6e2cb601e66b8f22f`, physical owner-PC validation remains `BLOCKED_PENDING_HARDWARE`, and no production-activation, registry-publication or live-money execution claim is implied.
+Licensing does not alter the runtime certification boundary: the platform-certified checkpoint remains `65a6262717adcd52ac8d8a16ed6f223e299fd74d`, physical owner-PC validation remains `BLOCKED_PENDING_HARDWARE`, and no production-activation, registry-publication or live-money execution claim is implied.
 
 ## Related repository
 
