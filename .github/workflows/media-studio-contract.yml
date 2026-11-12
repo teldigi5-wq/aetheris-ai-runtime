@@ -1,0 +1,36 @@
+name: Local Media Studio Contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'media_studio/**'
+      - '.github/workflows/media-studio-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'media_studio/**'
+      - '.github/workflows/media-studio-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  media-studio-unit:
+    name: media-studio-unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13.15'
+      - name: Reject surprise model/network permissions
+        run: |
+          python -m media_studio check
+          python -m compileall -q media_studio
+      - name: Local mock transport, safety and resource-boundary tests
+        run: python -m unittest discover -s media_studio/tests -p 'test_*.py' -v
