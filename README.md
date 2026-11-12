@@ -1,8 +1,40 @@
-# Aetheris AI Runtime
+<div align="center">
 
-Independent AI runtime for the Aetheris platform, including orchestration, reasoning, workstation-agent foundations and quantitative intelligence.
+# 🤖 Aetheris AI Runtime
 
-This repository is the **source owner** for runtime components that were extracted from `teldigi5-wq/aetheris-platform`. The platform repository consumes this runtime through explicit contracts and certification references rather than carrying duplicate runtime source.
+### Independent AI orchestration, reasoning and governed-agent runtime
+
+![Python](https://img.shields.io/badge/Python-Runtime-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Architecture](https://img.shields.io/badge/Architecture-Boundary--Driven-0F172A?style=for-the-badge)
+![Governance](https://img.shields.io/badge/Governance-Fail--Closed-0F172A?style=for-the-badge)
+![License](https://img.shields.io/badge/License-Apache--2.0-0F172A?style=for-the-badge)
+
+**Source owner for the Aetheris orchestration, reasoning, workstation-agent and quantitative-intelligence runtime.**
+
+[Platform repository](https://github.com/teldigi5-wq/aetheris-platform) · [CI](https://github.com/teldigi5-wq/aetheris-ai-runtime/actions)
+
+</div>
+
+---
+
+## Portfolio snapshot
+
+Aetheris AI Runtime is an independent runtime repository extracted from `teldigi5-wq/aetheris-platform` so AI/runtime responsibilities remain separated from the platform control plane.
+
+The project is designed around explicit contracts, deterministic policy boundaries, fail-closed behavior and evidence-driven certification rather than presenting model output as unrestricted authority.
+
+| Area | Engineering focus |
+|---|---|
+| **Orchestration** | Mission/tool coordination and bounded runtime execution |
+| **Reasoning** | Retrieval, verification and reasoning foundations |
+| **Agent runtime** | Workstation/browser integration behind explicit policy boundaries |
+| **Quantitative research** | Risk-aware quantitative intelligence with live-money authority disabled |
+| **Governance** | Deterministic policy, approvals and verification remain authoritative |
+| **Certification** | Runtime checkpoints advance only through applicable CI/evidence gates |
+
+> **Truth boundary:** repository certification is not a claim of production activation, physical owner-PC validation, registry publication or live-money execution.
+
+---
 
 ## Repository boundary
 
