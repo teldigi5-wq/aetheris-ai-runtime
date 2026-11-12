@@ -1,0 +1,42 @@
+name: Enterprise E0 Canonical Catalog Baseline
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'orchestrator-service/src/main/resources/application.yml'
+      - 'orchestrator-service/src/main/java/io/aetheris/orchestrator/agent/**'
+      - 'orchestrator-service/src/test/java/io/aetheris/orchestrator/agent/EnterpriseCatalogBaselineTest.java'
+      - 'orchestrator-service/src/test/resources/enterprise/canonical-main-specialists.json'
+      - '.github/workflows/runtime-enterprise-e0-baseline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  specialist-baseline:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Verify canonical identities and unchanged tool grants
+        if: runner.os == 'Linux'
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml -Dtest=EnterpriseCatalogBaselineTest test
+      - name: Verify canonical identities and unchanged tool grants
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\mvnw.cmd -B -ntp -f orchestrator-service/pom.xml -Dtest=EnterpriseCatalogBaselineTest test
+          if ($LASTEXITCODE -ne 0) { throw 'ENTERPRISE_E0_BASELINE_TEST_FAILED' }
