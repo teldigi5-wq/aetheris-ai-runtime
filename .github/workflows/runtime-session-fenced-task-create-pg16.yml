@@ -1,7 +1,7 @@
 name: Runtime #23 signed session fenced task creation (disposable PG16)
 on:
   push:
-    branches: [security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109, security/task-session-owner-reads-20261109, security/runtime-direct-http-admission-20261109, security/runtime-postgres-http-session-authority-20261109]
+    branches: [security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109, security/task-session-owner-reads-20261109, security/runtime-direct-http-admission-20261109, security/runtime-postgres-http-session-authority-20261109, ci/runtime-s0-e6t-stack-verify-20261114]
   pull_request:
     branches: [security/verified-task-creation-jdbc-20261108, security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109, security/task-session-owner-reads-20261109]
 permissions:

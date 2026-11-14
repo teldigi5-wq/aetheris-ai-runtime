@@ -1,7 +1,7 @@
 name: Runtime #23 Owner Metadata Readonly / Disposable PG16
 on:
   push:
-    branches: [security/task-owner-readonly-binding-20261108]
+    branches: [security/task-owner-readonly-binding-20261108, ci/runtime-s0-e6t-stack-verify-20261114]
   pull_request:
     branches: [security/interim-task-stream-containment-20261104]
 permissions:

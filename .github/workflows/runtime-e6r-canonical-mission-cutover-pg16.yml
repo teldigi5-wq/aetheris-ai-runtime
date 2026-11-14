@@ -1,7 +1,7 @@
 name: S0-E6R Canonical Mission Cutover and CSV Freeze PostgreSQL16 (review only)
 on:
   push:
-    branches: [security/runtime-e6r-mission-canonical-cutover-20261109]
+    branches: [security/runtime-e6r-mission-canonical-cutover-20261109, ci/runtime-s0-e6t-stack-verify-20261114]
   pull_request:
     branches: [security/runtime-e6q-owned-mission-task-event-20261109]
 

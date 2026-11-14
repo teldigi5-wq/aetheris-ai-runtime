@@ -1,7 +1,7 @@
 name: S0-E6P Actual-Shape Owned Task+Mission PostgreSQL16 Write Migration (review only)
 on:
   push:
-    branches: [security/runtime-e6p-owned-task-mission-persistence-20261109]
+    branches: [security/runtime-e6p-owned-task-mission-persistence-20261109, ci/runtime-s0-e6t-stack-verify-20261114]
   pull_request:
     branches: [security/runtime-e6o-atomic-owned-resource-read-20261109]
 

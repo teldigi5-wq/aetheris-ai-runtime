@@ -1,7 +1,7 @@
 name: S0-E6T Canonical Mission Repository and Service PostgreSQL16 (review only)
 on:
   push:
-    branches: [security/runtime-e6t-canonical-mission-service-preview-20261109]
+    branches: [security/runtime-e6t-canonical-mission-service-preview-20261109, ci/runtime-s0-e6t-stack-verify-20261114]
   pull_request:
     branches: [security/runtime-e6s-canonical-mission-app-boundary-20261109]
 

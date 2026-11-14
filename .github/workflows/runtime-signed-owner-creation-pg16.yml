@@ -1,7 +1,7 @@
 name: Runtime #23 signed task creation with disposable PostgreSQL16
 on:
   push:
-    branches: [security/verified-task-creation-jdbc-20261108]
+    branches: [security/verified-task-creation-jdbc-20261108, ci/runtime-s0-e6t-stack-verify-20261114]
   pull_request:
     branches: [security/task-owner-readonly-binding-20261108]
 permissions:
