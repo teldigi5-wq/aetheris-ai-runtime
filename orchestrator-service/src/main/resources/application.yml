@@ -9,7 +9,9 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus
+        # Deny by default: only health and info. Metrics are an explicit operator
+        # opt-in (AETHERIS_RUNTIME_ACTUATOR_EXPOSURE), never a default.
+        include: ${AETHERIS_RUNTIME_ACTUATOR_EXPOSURE:health,info}
   endpoint:
     health:
       probes:
