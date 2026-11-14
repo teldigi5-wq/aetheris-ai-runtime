@@ -1,0 +1,81 @@
+name: Runtime #23 signed task creation with disposable PostgreSQL16
+on:
+  push:
+    branches: [security/verified-task-creation-jdbc-20261108, ci/runtime-s0-e6t-stack-verify-20261114]
+  pull_request:
+    branches: [security/task-owner-readonly-binding-20261108]
+permissions:
+  contents: read
+jobs:
+  complete-orchestrator-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with: {distribution: temurin, java-version: '21.0.12', cache: maven}
+      - name: Require exact candidate and preserved task quarantine
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          grep -Fq 'SC_NOT_FOUND' orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java
+          ! grep -q 'subscribeAll(' orchestrator-service/src/main/java/io/aetheris/orchestrator/task/TaskEventStreamService.java
+          ! grep -q '@Component\|@Service\|@RestController' orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeVerifiedTaskCreationProbe.java
+      - name: Full Java 21 orchestrator JUnit regression
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+  signed-postgres-transaction-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ownerlab_ci
+          POSTGRES_PASSWORD: disposable_ci_only_not_a_real_secret
+          POSTGRES_DB: ownerlab_disposable
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ownerlab_ci -d ownerlab_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      GITHUB_ACTIONS: 'true'
+      AETHERIS_OWNER_CREATE_JDBC_MUST_RUN: 'yes'
+      PGHOST: '127.0.0.1'
+      PGDATABASE: ownerlab_disposable
+      PGUSER: ownerlab_ci
+      PGPASSWORD: disposable_ci_only_not_a_real_secret
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with: {distribution: temurin, java-version: '21.0.12', cache: maven}
+      - name: Assert disposable CI-only database and exact source head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$GITHUB_ACTIONS" = true
+          test "$PGHOST" = 127.0.0.1
+          test "$PGDATABASE" = ownerlab_disposable
+          test "$PGUSER" = ownerlab_ci
+          test "$AETHERIS_OWNER_CREATE_JDBC_MUST_RUN" = yes
+      - name: Real signed identity and transaction-bound PostgreSQL16 tests
+        run: ./mvnw -B -f orchestrator-service/pom.xml -Dtest=RuntimeVerifiedTaskCreationJdbcTest test
+      - name: Require non-skipped actual security tests and schema cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree as E
+          p=Path("orchestrator-service/target/surefire-reports/TEST-io.aetheris.orchestrator.security.RuntimeVerifiedTaskCreationJdbcTest.xml")
+          root=E.parse(p).getroot()
+          assert int(root.attrib["tests"]) >= 5, root.attrib
+          assert all(int(root.attrib.get(n,"0"))==0 for n in ("errors","failures","skipped")), root.attrib
+          print("RUNTIME_SIGNED_OWNER_CREATE_JDBC_TESTS_REAL_NO_SKIPS_PASS",root.attrib["tests"])
+          PY
+          echo 'RUNTIME_JDBC_CREATE_REVIEW_ONLY_NO_API_NO_STAGE45_PROMOTION'
