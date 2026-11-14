@@ -162,7 +162,7 @@ public final class RuntimePinnedLocalFenceLeaseVerifier {
             var key = KeyFactory.getInstance("RSA")
                 .generatePublic(new X509EncodedKeySpec(bytes));
             if (!(key instanceof RSAPublicKey rsa)
-                    || rsa.getModulus().bitLength() < 2048) {
+                    || rsa.getModulus().bitLength() < 3072) {
                 throw new IllegalArgumentException("Weak fence signing key");
             }
             return rsa;

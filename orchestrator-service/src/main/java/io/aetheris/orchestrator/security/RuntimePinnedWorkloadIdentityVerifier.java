@@ -127,7 +127,7 @@ public final class RuntimePinnedWorkloadIdentityVerifier {
             var key = KeyFactory.getInstance("RSA")
                 .generatePublic(new X509EncodedKeySpec(bytes));
             if (!(key instanceof RSAPublicKey rsa)
-                    || rsa.getModulus().bitLength() < 2048) {
+                    || rsa.getModulus().bitLength() < 3072) {
                 throw new IllegalArgumentException("Weak workload signing key");
             }
             return rsa;

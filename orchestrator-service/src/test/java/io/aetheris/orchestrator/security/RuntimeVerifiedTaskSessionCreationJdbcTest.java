@@ -63,7 +63,7 @@ class RuntimeVerifiedTaskSessionCreationJdbcTest {
         assertEquals("ownerlab_disposable",System.getenv("PGDATABASE"));
         assertEquals("ownerlab_ci",System.getenv("PGUSER"));
         assertNotNull(System.getenv("PGPASSWORD"));
-        var maker=KeyPairGenerator.getInstance("RSA"); maker.initialize(2048);
+        var maker=KeyPairGenerator.getInstance("RSA"); maker.initialize(3072);
         identityKey=maker.generateKeyPair();
         fenceKey=maker.generateKeyPair();
         workloadKey=maker.generateKeyPair();

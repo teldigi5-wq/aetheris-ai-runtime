@@ -35,7 +35,7 @@ class RuntimePinnedPrincipalVerifierTest {
     @BeforeAll
     static void keys() throws Exception {
         var generator = KeyPairGenerator.getInstance("RSA");
-        generator.initialize(2048);
+        generator.initialize(3072);
         identityKey = generator.generateKeyPair();
         unrelatedKey = generator.generateKeyPair();
         verifier = new RuntimePinnedPrincipalVerifier(
@@ -241,7 +241,9 @@ class RuntimePinnedPrincipalVerifierTest {
             () -> new RuntimePinnedPrincipalVerifier(
                 "not a PEM", KID, ISSUER, AUDIENCE, Clock.systemUTC()));
         var generator = KeyPairGenerator.getInstance("RSA");
-        generator.initialize(1024);
+        // Below the runtime's 3072-bit minimum (matches the platform Identity signer
+        // policy) but not a key size that is weak in itself.
+        generator.initialize(2048);
         var weak = generator.generateKeyPair();
         assertThrows(IllegalArgumentException.class,
             () -> new RuntimePinnedPrincipalVerifier(

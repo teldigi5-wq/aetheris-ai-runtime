@@ -106,7 +106,7 @@ class S0E6LPlatformSessionProducerTest {
     private static KeyPair ephemeralKey() {
         try {
             var generator=KeyPairGenerator.getInstance("RSA");
-            generator.initialize(2048);
+            generator.initialize(3072);
             return generator.generateKeyPair();
         }catch(Exception e) {
             throw new IllegalStateException("Cannot generate ephemeral issuer");

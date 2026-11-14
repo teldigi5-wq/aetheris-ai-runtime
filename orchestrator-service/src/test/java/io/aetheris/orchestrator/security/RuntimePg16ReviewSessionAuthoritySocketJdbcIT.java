@@ -82,7 +82,7 @@ class RuntimePg16ReviewSessionAuthoritySocketJdbcIT {
     private static KeyPair makeKey() {
         try {
             var gen=KeyPairGenerator.getInstance("RSA");
-            gen.initialize(2048);
+            gen.initialize(3072);
             return gen.generateKeyPair();
         } catch(Exception e) {
             throw new ExceptionInInitializerError(e);

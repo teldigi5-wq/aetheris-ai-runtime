@@ -73,7 +73,7 @@ class RuntimeDirectPortBearerSocketTest {
     private static KeyPair makeKey() {
         try {
             var generator=KeyPairGenerator.getInstance("RSA");
-            generator.initialize(2048);
+            generator.initialize(3072);
             return generator.generateKeyPair();
         } catch (Exception error) {
             throw new ExceptionInInitializerError(error);

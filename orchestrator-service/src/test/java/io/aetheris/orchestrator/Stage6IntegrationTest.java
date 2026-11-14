@@ -32,7 +32,7 @@ class Stage6IntegrationTest {
 
     @Test
     void hostPairingRequiresPrivateKeyProofAndRevocationBlocksExecution() throws Exception {
-        KeyPairGenerator generator=KeyPairGenerator.getInstance("RSA"); generator.initialize(2048); KeyPair pair=generator.generateKeyPair();
+        KeyPairGenerator generator=KeyPairGenerator.getInstance("RSA"); generator.initialize(3072); KeyPair pair=generator.generateKeyPair();
         String fingerprint=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(pair.getPublic().getEncoded()));
         String pem="-----BEGIN PUBLIC KEY-----\n"+Base64.getMimeEncoder(64,"\n".getBytes(StandardCharsets.UTF_8)).encodeToString(pair.getPublic().getEncoded())+"\n-----END PUBLIC KEY-----";
         HostNodeEntity host=hosts.register(new HostRegistrationRequest("stage6-"+UUID.randomUUID(),"Stage6 simulated Windows host","windows",Set.of("PC_TELEMETRY","APP_LAUNCH"),fingerprint));

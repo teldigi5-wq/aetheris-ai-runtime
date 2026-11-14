@@ -53,7 +53,7 @@ class RuntimeVerifiedTaskCreationJdbcTest {
         assertEquals("ownerlab_ci", System.getenv("PGUSER"));
         assertNotNull(System.getenv("PGPASSWORD"));
         var generator = KeyPairGenerator.getInstance("RSA");
-        generator.initialize(2048);
+        generator.initialize(3072);
         signer = generator.generateKeyPair();
         String pem = "-----BEGIN PUBLIC KEY-----\n" +
             Base64.getMimeEncoder(64, new byte[]{'\n'})
@@ -277,7 +277,7 @@ class RuntimeVerifiedTaskCreationJdbcTest {
             c.rollback();
         }
         KeyPairGenerator g=KeyPairGenerator.getInstance("RSA");
-        g.initialize(2048);
+        g.initialize(3072);
         var attacker=g.generateKeyPair();
         Instant now=Instant.now();
         String forged=Jwts.builder().header().keyId(KEY_ID).and()

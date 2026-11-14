@@ -260,8 +260,8 @@ public final class RuntimePinnedPrincipalVerifier {
             byte[] bytes = Base64.getDecoder().decode(base64);
             var key = KeyFactory.getInstance("RSA")
                 .generatePublic(new X509EncodedKeySpec(bytes));
-            if (!(key instanceof RSAPublicKey rsa) || rsa.getModulus().bitLength() < 2048) {
-                throw new IllegalArgumentException("Runtime RS256 signing key must be RSA 2048+");
+            if (!(key instanceof RSAPublicKey rsa) || rsa.getModulus().bitLength() < 3072) {
+                throw new IllegalArgumentException("Runtime RS256 signing key must be RSA 3072+");
             }
             return rsa;
         } catch (Exception invalid) {
