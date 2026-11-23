@@ -1,0 +1,259 @@
+name: S0-E6R Canonical Mission Cutover and CSV Freeze PostgreSQL16 (review only)
+on:
+  push:
+    branches: [security/runtime-e6r-mission-canonical-cutover-20261109, ci/runtime-s0-e6t-stack-verify-20261114]
+  pull_request:
+    branches: [security/runtime-e6q-owned-mission-task-event-20261109]
+
+permissions:
+  contents: read
+
+jobs:
+  actual-platform-runtime-http-jti:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: aetheris_e6j_disposable
+          POSTGRES_USER: e6j_test_only
+          POSTGRES_PASSWORD: e6j_disposable_ci_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U e6j_test_only -d aetheris_e6j_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: '127.0.0.1'
+      PGDATABASE: aetheris_e6j_disposable
+      PGUSER: e6j_test_only
+      PGPASSWORD: e6j_disposable_ci_only
+      AETHERIS_E6L_MUST_RUN: ONLY_DISPOSABLE_E6L_PG16
+      AETHERIS_E6L_READER_PASSWORD: e6l_disposable_reader_not_real
+      AETHERIS_E6L_REVOKER_PASSWORD: e6l_disposable_revoker_not_real
+      AETHERIS_E6L_PLATFORM_SHA: 53d55135181ef89d3ff402f46b835d4b3a0f8ac5
+      AETHERIS_E6P_MUST_RUN: ONLY_DISPOSABLE_E6P_PG16
+      AETHERIS_E6Q_MUST_RUN: ONLY_DISPOSABLE_E6Q_PG16
+      AETHERIS_E6R_MUST_RUN: ONLY_DISPOSABLE_E6R_PG16
+      AETHERIS_E6R_OPERATOR_PASSWORD: e6r_operator_disposable_no_real
+      AETHERIS_E6P_WRITER_PASSWORD: e6p_disposable_writer_not_real
+      AETHERIS_E6P_READER_PASSWORD: e6p_disposable_reader_not_real
+    steps:
+      - name: Checkout exact Runtime reviewed head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Checkout immutable real Platform RS256 issuer plus session ledger
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: teldigi5-wq/aetheris-platform
+          ref: 53d55135181ef89d3ff402f46b835d4b3a0f8ac5
+          path: _e6l_platform
+          persist-credentials: false
+      - name: Pinned Java21 toolchain
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Pin actual foreign source and quarantine all customer endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          test "$(git -C _e6l_platform rev-parse HEAD)" = "$AETHERIS_E6L_PLATFORM_SHA"
+          test "$(git hash-object _e6l_platform/identity-service/src/test/resources/security/e6j_runtime_session_ledger_pg16.sql)" = fcf0e61c24ab89b61f10b6d2e454742a4b0420b0
+          test "$GITHUB_ACTIONS" = true
+          test "$AETHERIS_E6L_MUST_RUN" = ONLY_DISPOSABLE_E6L_PG16
+          test "$PGDATABASE" = aetheris_e6j_disposable
+          test "$PGHOST" = 127.0.0.1
+          test "$PGUSER" = e6j_test_only
+          test -f _e6l_platform/identity-service/src/main/java/io/aetheris/identity/RuntimeAudienceAtomicRegistryExchange.java
+          test -f _e6l_platform/identity-service/src/main/java/io/aetheris/identity/RuntimeAudienceTokenIssuer.java
+          test -f orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimePinnedPrincipalVerifier.java
+          test -f orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeSignedIdentityHttpFilter.java
+          test -s orchestrator-service/src/test/resources/security/e6o_owned_resource_pg16.sql
+          test -s orchestrator-service/src/test/resources/security/e6p_real_shape_owner_migration_pg16.sql
+          test -s orchestrator-service/src/test/resources/security/e6q_owned_mission_link_history_pg16.sql
+          test -s orchestrator-service/src/test/resources/security/e6r_canonical_mission_cutover_pg16.sql
+          test "$AETHERIS_E6R_MUST_RUN" = ONLY_DISPOSABLE_E6R_PG16
+          ! grep -Eq '@Component|@Service|@Bean|@Configuration|@RestController' orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeE6RCanonicalMissionCutover.java
+          test ! -f orchestrator-service/src/main/java/io/aetheris/orchestrator/api/RuntimeE6RCanonicalCutoverController.java
+          test "$AETHERIS_E6Q_MUST_RUN" = ONLY_DISPOSABLE_E6Q_PG16
+          ! grep -Eq '@Component|@Service|@Bean|@Configuration|@RestController' orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeE6QMissionLinkHistory.java
+          test ! -d orchestrator-service/src/main/resources/db/migration
+          test "$AETHERIS_E6P_MUST_RUN" = ONLY_DISPOSABLE_E6P_PG16
+          ! grep -Eq '@Component|@Service|@Bean|@Configuration|@RestController' orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeE6POwnedPersistenceWriter.java
+          test ! -f orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeE6PHttpController.java
+          test -s orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeE6OScopedResourceRead.java
+          ! grep -Eq '@Component|@Service|@Bean|@Configuration|@RestController' orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeE6OScopedResourceRead.java
+          ! grep -Eq '@Component|@Service|@Bean|@Configuration|@RestController' orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeE6LFunctionSessionAuthority.java
+          test ! -f orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeE6LHttpController.java
+          test ! -f _e6l_platform/identity-service/src/main/java/io/aetheris/identity/RuntimeAudienceTokenController.java
+          grep -Fq 'SC_NOT_FOUND' orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java
+      - name: Create disposable test-only issuer/revoker and independent restricted reader logins
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -w -v ON_ERROR_STOP=1 -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" \
+            -f _e6l_platform/identity-service/src/test/resources/security/e6j_runtime_session_ledger_pg16.sql
+          psql -X -w -v ON_ERROR_STOP=1 -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" <<'SQL'
+          CREATE ROLE e6l_reader_login LOGIN PASSWORD 'e6l_disposable_reader_not_real' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+          CREATE ROLE e6l_revoker_login LOGIN PASSWORD 'e6l_disposable_revoker_not_real' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+          GRANT e6j_reader TO e6l_reader_login;
+          GRANT e6j_revoker TO e6l_revoker_login;
+          SQL
+          psql -X -w -v ON_ERROR_STOP=1 -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" \
+            -f orchestrator-service/src/test/resources/security/e6o_owned_resource_pg16.sql
+          psql -X -w -v ON_ERROR_STOP=1 -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" \
+            -c 'GRANT e6o_object_reader TO e6l_reader_login'
+          psql -X -w -v ON_ERROR_STOP=1 -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" \
+            -f orchestrator-service/src/test/resources/security/e6p_real_shape_owner_migration_pg16.sql
+          psql -X -w -v ON_ERROR_STOP=1 -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" <<'SQL'
+          CREATE ROLE e6p_writer_login LOGIN PASSWORD 'e6p_disposable_writer_not_real' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+          CREATE ROLE e6p_reader_login LOGIN PASSWORD 'e6p_disposable_reader_not_real' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+          GRANT e6p_writer TO e6p_writer_login;
+          GRANT e6p_reader TO e6p_reader_login;
+          SQL
+          test "$(psql -X -w -At -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT has_table_privilege('e6p_writer_login','public.aetheris_tasks','INSERT')")" = f
+          test "$(psql -X -w -At -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT has_function_privilege('e6p_writer_login','e6p_review.create_owned(varchar,varchar,varchar,bigint,bigint,uuid,varchar,varchar,varchar,uuid,varchar,varchar)','EXECUTE')")" = t
+          psql -X -w -v ON_ERROR_STOP=1 -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" \
+            -f orchestrator-service/src/test/resources/security/e6q_owned_mission_link_history_pg16.sql
+          test "$(psql -X -w -At -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT has_table_privilege('e6p_writer_login','e6q_review.mission_task_links','INSERT')")" = f
+          test "$(psql -X -w -At -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT has_table_privilege('e6p_reader_login','public.aetheris_task_events','SELECT')")" = f
+          psql -X -w -v ON_ERROR_STOP=1 -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" \
+            -f orchestrator-service/src/test/resources/security/e6r_canonical_mission_cutover_pg16.sql
+          psql -X -w -v ON_ERROR_STOP=1 -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" <<'SQL'
+          CREATE ROLE e6r_operator_login LOGIN PASSWORD 'e6r_operator_disposable_no_real'
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+          GRANT e6r_operator TO e6r_operator_login;
+          SQL
+          test "$(psql -X -w -At -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT has_table_privilege('e6r_operator_login','public.aetheris_mission_sessions','UPDATE')")" = f
+          test "$(psql -X -w -At -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT has_function_privilege('e6r_operator_login','e6r_review.operator_decide(uuid,uuid,boolean)','EXECUTE')")" = t
+          test "$(psql -X -w -At -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT has_function_privilege('e6p_reader_login','e6r_review.canonical_task_ids(varchar,varchar,varchar,bigint,bigint,uuid,varchar,varchar,integer)','EXECUTE')")" = t
+          test "$(psql -X -w -At -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT has_function_privilege('e6p_writer_login','e6q_review.link_owned(varchar,varchar,varchar,bigint,bigint,uuid,uuid,varchar,varchar)','EXECUTE')")" = t
+          test "$(psql -X -w -At -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT has_function_privilege('e6l_reader_login','e6o_review.read_bound_resource(varchar,varchar,varchar,bigint,bigint,uuid,varchar,varchar,varchar)','EXECUTE')")" = t
+          test "$(psql -X -w -At -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT has_table_privilege('e6l_reader_login','e6o_review.bound_resources','SELECT')")" = f
+          test "$(psql -X -w -At -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT count(*) FROM pg_namespace WHERE nspname='e6j_runtime_auth'")" = 1
+      - name: Create strictly local ephemeral token fixture directory (no token artifacts)
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$(mktemp -d /tmp/aetheris-e6l-platform-runtime.XXXXXXXX)"
+          chmod 700 "$d"
+          echo "AETHERIS_E6L_FIXTURE_DIR=$d" >> "$GITHUB_ENV"
+      - name: Compile and run ACTUAL pinned Platform issuer and transactional E6K enrollment
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp docs/security/ci/S0E6LPlatformSessionProducerTest.java \
+            _e6l_platform/identity-service/src/test/java/io/aetheris/identity/S0E6LPlatformSessionProducerTest.java
+          cmp docs/security/ci/S0E6LPlatformSessionProducerTest.java \
+            _e6l_platform/identity-service/src/test/java/io/aetheris/identity/S0E6LPlatformSessionProducerTest.java
+          ./_e6l_platform/mvnw -B -ntp -f _e6l_platform/identity-service/pom.xml \
+            -Dtest=S0E6LPlatformSessionProducerTest test
+          for f in e6l-platform-public.pem user-a.jwt user-b.jwt unregistered.jwt legacy-hs.jwt expected-uid-a expected-uid-b; do
+            test -s "$AETHERIS_E6L_FIXTURE_DIR/$f"
+            test "$(stat -c '%a' "$AETHERIS_E6L_FIXTURE_DIR/$f")" = 600
+          done
+          test "$(stat -c '%a' "$AETHERIS_E6L_FIXTURE_DIR")" = 700
+          test ! -f "$AETHERIS_E6L_FIXTURE_DIR/private.pem"
+      - name: Source-pinned Platform owners to canonical Mission CSV cutover and freeze
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./mvnw -B -ntp -f orchestrator-service/pom.xml \
+            -Dtest=RuntimeE6RCanonicalMissionCutoverPg16IT test
+      - name: Require original Platform JWT producer plus nine cutover/race security cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+          reports=(
+            (Path('_e6l_platform/identity-service/target/surefire-reports/TEST-io.aetheris.identity.S0E6LPlatformSessionProducerTest.xml'),1),
+            (Path('orchestrator-service/target/surefire-reports/TEST-io.aetheris.orchestrator.security.RuntimeE6RCanonicalMissionCutoverPg16IT.xml'),9)
+          )
+          for p,min_count in reports:
+              assert p.is_file(),p
+              x=ET.parse(p).getroot()
+              assert int(x.attrib['tests'])>=min_count,(p,x.attrib)
+              assert all(int(x.attrib.get(k,'0'))==0
+                         for k in ('failures','errors','skipped')),(p,x.attrib)
+          print('S0_E6R_CANONICAL_MISSION_CSV_QUARANTINE_FENCE_NINE_REAL_PG16_TESTS_PASS')
+          PY
+          echo S0_E6R_NO_CSV_AUTH_FALLBACK_NO_PRODUCT_HTTP_STAGE45_NO_GO
+
+      - name: Always destroy disposable token files, schema, logins and cloned Java test
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [[ -n "${AETHERIS_E6L_FIXTURE_DIR:-}" && -d "$AETHERIS_E6L_FIXTURE_DIR" ]]; then
+            find "$AETHERIS_E6L_FIXTURE_DIR" -maxdepth 1 -type f -delete
+            rmdir "$AETHERIS_E6L_FIXTURE_DIR"
+          fi
+          rm -f _e6l_platform/identity-service/src/test/java/io/aetheris/identity/S0E6LPlatformSessionProducerTest.java
+          if command -v psql >/dev/null 2>&1; then
+            psql -X -w -v ON_ERROR_STOP=1 -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" <<'SQL'
+          DROP SCHEMA IF EXISTS e6r_review CASCADE;
+          DROP ROLE IF EXISTS e6r_operator_login;
+          DROP ROLE IF EXISTS e6r_operator;
+          DROP SCHEMA IF EXISTS e6q_review CASCADE;
+          DROP TABLE IF EXISTS public.aetheris_task_events CASCADE;
+          DROP SCHEMA IF EXISTS e6p_review CASCADE;
+          DROP TABLE IF EXISTS public.aetheris_mission_sessions CASCADE;
+          DROP TABLE IF EXISTS public.aetheris_tasks CASCADE;
+          DROP SCHEMA IF EXISTS e6o_review CASCADE;
+          DROP ROLE IF EXISTS e6p_writer_login;
+          DROP ROLE IF EXISTS e6p_reader_login;
+          DROP ROLE IF EXISTS e6p_writer;
+          DROP ROLE IF EXISTS e6p_reader;
+          DROP ROLE IF EXISTS e6p_exec_owner;
+          DROP ROLE IF EXISTS e6o_object_reader;
+          DROP ROLE IF EXISTS e6o_exec_owner;
+          DROP SCHEMA IF EXISTS e6j_runtime_auth CASCADE;
+          DROP ROLE IF EXISTS e6l_reader_login;
+          DROP ROLE IF EXISTS e6l_revoker_login;
+          DROP ROLE IF EXISTS e6j_reader;
+          DROP ROLE IF EXISTS e6j_revoker;
+          DROP ROLE IF EXISTS e6j_issuer;
+          DROP ROLE IF EXISTS e6j_outsider;
+          DROP ROLE IF EXISTS e6j_exec_owner;
+          SQL
+          fi
+
+  java21-runtime-regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12'
+          cache: maven
+      - name: Full Runtime orchestrator regression, no production auth activation
+        run: ./mvnw -B -ntp -f orchestrator-service/pom.xml test
+      - name: Preserve prior direct-port signed bearer test count and lockdown
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+          p=Path('orchestrator-service/target/surefire-reports/TEST-io.aetheris.orchestrator.security.RuntimeDirectPortBearerSocketTest.xml')
+          x=ET.parse(p).getroot()
+          assert int(x.attrib['tests'])>=5,x.attrib
+          assert all(int(x.attrib.get(k,'0'))==0 for k in ('failures','errors','skipped')),x.attrib
+          print('S0_E6R_EXISTING_DIRECT_PORT_SECURITY_FIVE_TESTS_NO_SKIPS_PASS')
+          PY
+          grep -Fq 'SC_NOT_FOUND' orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java

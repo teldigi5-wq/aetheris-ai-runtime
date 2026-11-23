@@ -1,0 +1,110 @@
+name: Runtime #23 signed session fenced task creation (disposable PG16)
+on:
+  push:
+    branches: [security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109, security/task-session-owner-reads-20261109, security/runtime-direct-http-admission-20261109, security/runtime-postgres-http-session-authority-20261109, ci/runtime-s0-e6t-stack-verify-20261114]
+  pull_request:
+    branches: [security/verified-task-creation-jdbc-20261108, security/task-session-fence-creation-20261108, security/task-authority-row-revocation-20261109, security/task-session-owner-reads-20261109]
+permissions:
+  contents: read
+jobs:
+  full-java-and-http-quarantine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with: {distribution: temurin, java-version: '21.0.12', cache: maven}
+      - name: Verify source boundary stays unactivated
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          grep -Fq 'SC_NOT_FOUND' orchestrator-service/src/main/java/io/aetheris/orchestrator/api/OwnerlessTaskMissionHttpFilter.java
+          for file in RuntimeVerifiedTaskCreationProbe RuntimeVerifiedTaskSessionCreationProbe RuntimeVerifiedTaskReadProbe RuntimePinnedLocalFenceLeaseVerifier RuntimePinnedWorkloadIdentityVerifier; do
+            ! grep -Eq '@Component|@Service|@RestController|@Bean' "orchestrator-service/src/main/java/io/aetheris/orchestrator/security/${file}.java"
+          done
+          ! grep -q 'subscribeAll(' orchestrator-service/src/main/java/io/aetheris/orchestrator/task/TaskEventStreamService.java
+          # An unregistered filter is only a reviewable HTTP transport seam.
+          # No auto-registered authentication or public task-route activation.
+          ! grep -Eq '@Component|@Service|@RestController|@Bean|@Configuration' \
+            orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimeSignedIdentityHttpFilter.java
+          ! grep -Eq '@Component|@Service|@RestController|@Bean|@Configuration' \
+            orchestrator-service/src/main/java/io/aetheris/orchestrator/security/RuntimePg16ReviewSessionAuthority.java
+      - name: Full orchestrator Maven Java 21 tests
+        run: ./mvnw -B -f orchestrator-service/pom.xml test
+      - name: Require actual direct-port bearer socket tests without skips
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+          report=Path('orchestrator-service/target/surefire-reports/TEST-io.aetheris.orchestrator.security.RuntimeDirectPortBearerSocketTest.xml')
+          root=ET.parse(report).getroot()
+          assert int(root.attrib['tests']) >= 5,root.attrib
+          assert all(int(root.attrib.get(k,'0'))==0 for k in ('errors','failures','skipped')),root.attrib
+          print('RUNTIME_DIRECT_SOCKET_SIGNED_BEARER_FIVE_TESTS_NO_SKIPS_PASS')
+          PY
+  real-disposable-session-fence-revocation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ownerlab_ci
+          POSTGRES_PASSWORD: disposable_ci_only_not_a_real_secret
+          POSTGRES_DB: ownerlab_disposable
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ownerlab_ci -d ownerlab_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      AETHERIS_SESSION_CREATE_JDBC_MUST_RUN: 'yes'
+      PGHOST: '127.0.0.1'
+      PGDATABASE: ownerlab_disposable
+      PGUSER: ownerlab_ci
+      PGPASSWORD: disposable_ci_only_not_a_real_secret
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with: {persist-credentials: false}
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with: {distribution: temurin, java-version: '21.0.12', cache: maven}
+      - name: Check local disposable database and exact head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$GITHUB_ACTIONS" = true
+          test "$PGHOST" = '127.0.0.1'
+          test "$PGDATABASE" = ownerlab_disposable
+          test "$PGUSER" = ownerlab_ci
+          test "$AETHERIS_SESSION_CREATE_JDBC_MUST_RUN" = yes
+      - name: Test real signed JWTs and PostgreSQL16 session/fence row locks
+        run: ./mvnw -B -f orchestrator-service/pom.xml -Dtest=RuntimeVerifiedTaskSessionCreationJdbcTest,RuntimePg16ReviewSessionAuthoritySocketJdbcIT test
+      - name: Verify no-skip and schema cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree as ET
+          path=Path('orchestrator-service/target/surefire-reports/TEST-io.aetheris.orchestrator.security.RuntimeVerifiedTaskSessionCreationJdbcTest.xml')
+          root=ET.parse(path).getroot()
+          # Eight completed task-create tests plus three new mandatory
+          # owner-read/event-history isolation and concurrent revoke tests.
+          assert int(root.attrib['tests']) >= 11,root.attrib
+          assert all(int(root.attrib.get(k,'0')) == 0 for k in ('errors','failures','skipped')),root.attrib
+          print('RUNTIME_OWNER_TASK_READ_HISTORY_ELEVEN_TESTS_NO_SKIPS_PASS')
+          # This second report MUST exist, and MUST contain real TCP/PG16 tests.
+          http=Path('orchestrator-service/target/surefire-reports/TEST-io.aetheris.orchestrator.security.RuntimePg16ReviewSessionAuthoritySocketJdbcIT.xml')
+          assert http.exists(), 'Missing real HTTP/PG16 integration report'
+          h=ET.parse(http).getroot()
+          assert int(h.attrib['tests']) >= 5,h.attrib
+          assert all(int(h.attrib.get(k,'0'))==0 for k in ('errors','failures','skipped')),h.attrib
+          print('RUNTIME_POSTGRES_HTTP_SIGNED_SESSION_FIVE_TESTS_NO_SKIPS_PASS')
+          PY
+          echo 'REVIEW_ONLY_NO_HTTP_OR_DEPLOYMENT_STAGE45_NO_GO'

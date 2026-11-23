@@ -42,6 +42,27 @@ public class TaskEntity {
     @Column(nullable = false)
     private Instant updatedAt;
 
+    /**
+     * Database-origin ownership metadata only. Legacy and internal tasks
+     * remain NULL/unbound. No HTTP caller or unverified service path may
+     * assign or reassign these fields; an independently authenticated write
+     * transaction and approved migration are required in a future change.
+     *
+     * No public owner getters: serializing TaskEntity must not expose the
+     * ownership tuple while task/mission HTTP endpoints remain quarantined.
+     */
+    @Column(name = "owner_identity_uid", insertable = false, updatable = false)
+    private Long ownerIdentityUid;
+
+    @Column(name = "owner_tenant_key", length = 96, insertable = false, updatable = false)
+    private String ownerTenantKey;
+
+    @Column(name = "owner_project_key", length = 96, insertable = false, updatable = false)
+    private String ownerProjectKey;
+
+    @Column(name = "owner_verified_at", insertable = false, updatable = false)
+    private Instant ownerVerifiedAt;
+
     @Version
     private long version;
 
