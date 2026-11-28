@@ -83,4 +83,23 @@
       </plugin>
     </plugins>
   </build>
+
+  <!-- GCS copy of Maven Central, tried before Central (kept as automatic fallback).
+       Shared CI runners are rate-limited by Central (HTTP 429). Not a mirrorOf. -->
+  <repositories>
+    <repository>
+      <id>gcs-maven-central</id>
+      <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
+      <releases><enabled>true</enabled></releases>
+      <snapshots><enabled>false</enabled></snapshots>
+    </repository>
+  </repositories>
+  <pluginRepositories>
+    <pluginRepository>
+      <id>gcs-maven-central</id>
+      <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
+      <releases><enabled>true</enabled></releases>
+      <snapshots><enabled>false</enabled></snapshots>
+    </pluginRepository>
+  </pluginRepositories>
 </project>
